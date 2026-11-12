@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>MiaoWu.Tests</AssemblyName>
+    <RootNamespace>MiaoWu.Tests</RootNamespace>
+    <!-- 会话存储的 Task 接口内部同步完成，测试用同步断言不会死锁；关闭 xUnit1031 噪音。 -->
+    <NoWarn>$(NoWarn);xUnit1031</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.console" Version="2.9.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MiaoWu.Core\MiaoWu.Core.csproj" />
+    <ProjectReference Include="..\..\src\MiaoWu.Infrastructure\MiaoWu.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

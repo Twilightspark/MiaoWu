@@ -1,0 +1,31 @@
+<UserControl x:Class="MiaoWu.App.Views.MarkdownDocumentView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:res="clr-namespace:MiaoWu.App.Resources"
+             mc:Ignorable="d"
+             d:DesignWidth="648"
+             d:DesignHeight="800"
+             x:Name="Root"
+             Focusable="False"
+             Background="Transparent"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True">
+
+    <ScrollViewer x:Name="Scroller"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  Focusable="False"
+                  AutomationProperties.AutomationId="DocumentScroll"
+                  AutomationProperties.Name="{x:Static res:Strings.DocumentScrollAutomation}">
+        <Grid Margin="{StaticResource Pad.Document}">
+            <ItemsControl x:Name="BlocksHost"
+                          ItemsSource="{Binding Blocks}"
+                          MaxWidth="{StaticResource Metric.Doc.Width}"
+                          HorizontalAlignment="Left"
+                          Focusable="False"
+                          Tag="DocumentRoot" />
+        </Grid>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,454 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppName" xml:space="preserve">
+    <value>喵悟</value>
+  </data>
+  <data name="WindowMinimize" xml:space="preserve">
+    <value>最小化</value>
+  </data>
+  <data name="WindowMaximize" xml:space="preserve">
+    <value>最大化</value>
+  </data>
+  <data name="WindowRestore" xml:space="preserve">
+    <value>还原</value>
+  </data>
+  <data name="WindowClose" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="ToggleRightPaneCollapse" xml:space="preserve">
+    <value>折叠右栏</value>
+  </data>
+  <data name="ToggleRightPaneExpand" xml:space="preserve">
+    <value>展开右栏</value>
+  </data>
+  <data name="ToggleRightPaneHint" xml:space="preserve">
+    <value>折叠或展开右栏 (Ctrl+J)</value>
+  </data>
+  <data name="Workspace" xml:space="preserve">
+    <value>工作区</value>
+  </data>
+  <data name="Sessions" xml:space="preserve">
+    <value>会话</value>
+  </data>
+  <data name="Files" xml:space="preserve">
+    <value>文件</value>
+  </data>
+  <data name="Pinned" xml:space="preserve">
+    <value>置顶</value>
+  </data>
+  <data name="Today" xml:space="preserve">
+    <value>今天</value>
+  </data>
+  <data name="Yesterday" xml:space="preserve">
+    <value>昨天</value>
+  </data>
+  <data name="Earlier" xml:space="preserve">
+    <value>更早</value>
+  </data>
+  <data name="CapabilityMarket" xml:space="preserve">
+    <value>能力市场</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>功能设置</value>
+  </data>
+  <data name="Refresh" xml:space="preserve">
+    <value>刷新</value>
+  </data>
+  <data name="Find" xml:space="preserve">
+    <value>查找</value>
+  </data>
+  <data name="AddToConversation" xml:space="preserve">
+    <value>加入对话</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>搜索</value>
+  </data>
+  <data name="AddWorkspace" xml:space="preserve">
+    <value>添加工作区</value>
+  </data>
+  <data name="NewSession" xml:space="preserve">
+    <value>新建会话</value>
+  </data>
+  <data name="More" xml:space="preserve">
+    <value>更多</value>
+  </data>
+  <data name="Pin" xml:space="preserve">
+    <value>置顶</value>
+  </data>
+  <data name="CloseTab" xml:space="preserve">
+    <value>关闭标签</value>
+  </data>
+  <data name="PendingApproval" xml:space="preserve">
+    <value>有未处理审批</value>
+  </data>
+  <data name="LeftPaneAutomation" xml:space="preserve">
+    <value>工作区导航</value>
+  </data>
+  <data name="MiddlePaneAutomation" xml:space="preserve">
+    <value>预览画布</value>
+  </data>
+  <data name="RightPaneAutomation" xml:space="preserve">
+    <value>对话区</value>
+  </data>
+  <data name="TopBarAutomation" xml:space="preserve">
+    <value>窗口顶栏</value>
+  </data>
+  <data name="LeftSplitterAutomation" xml:space="preserve">
+    <value>调整左栏宽度</value>
+  </data>
+  <data name="RightSplitterAutomation" xml:space="preserve">
+    <value>调整右栏宽度</value>
+  </data>
+  <data name="PlaceholderWorkspaceName" xml:space="preserve">
+    <value>MiaoWu</value>
+  </data>
+  <data name="PlaceholderSecondaryWorkspace" xml:space="preserve">
+    <value>reports</value>
+  </data>
+  <data name="PlaceholderThirdWorkspace" xml:space="preserve">
+    <value>scratch</value>
+  </data>
+  <data name="PlaceholderSessionPinned" xml:space="preserve">
+    <value>Win7 安装包签名排查</value>
+  </data>
+  <data name="PlaceholderSessionPinnedTime" xml:space="preserve">
+    <value>周一</value>
+  </data>
+  <data name="PlaceholderSession1" xml:space="preserve">
+    <value>旧机报告整理</value>
+  </data>
+  <data name="PlaceholderSession1Time" xml:space="preserve">
+    <value>10:39</value>
+  </data>
+  <data name="PlaceholderSession2" xml:space="preserve">
+    <value>把 docs 里的 md 总括成一页</value>
+  </data>
+  <data name="PlaceholderSession2Time" xml:space="preserve">
+    <value>09:12</value>
+  </data>
+  <data name="PlaceholderSession3" xml:space="preserve">
+    <value>netstat 端口占用怎么看</value>
+  </data>
+  <data name="PlaceholderSession3Time" xml:space="preserve">
+    <value>08:40</value>
+  </data>
+  <data name="PlaceholderSession4" xml:space="preserve">
+    <value>批量重命名截图</value>
+  </data>
+  <data name="PlaceholderSession4Time" xml:space="preserve">
+    <value>昨天</value>
+  </data>
+  <data name="PlaceholderSession5" xml:space="preserve">
+    <value>清理 attachments 目录</value>
+  </data>
+  <data name="PlaceholderSession5Time" xml:space="preserve">
+    <value>昨天</value>
+  </data>
+  <data name="PlaceholderDocumentTitle" xml:space="preserve">
+    <value>README.md</value>
+  </data>
+  <data name="PlaceholderDocumentMeta" xml:space="preserve">
+    <value>UTF-8 · LF · 4.1 KB · 128 行</value>
+  </data>
+  <data name="PlaceholderDocumentSubtitle" xml:space="preserve">
+    <value>MiaoWu 是一个面向 Windows 7 SP1 的本地桌面智能体工作台。技术基线为 WPF + .NET Framework 4.8，当前处于基础框架阶段。</value>
+  </data>
+  <data name="PlaceholderDocumentHeading" xml:space="preserve">
+    <value>当前进度</value>
+  </data>
+  <data name="PlaceholderDocumentBullet1" xml:space="preserve">
+    <value>已建立 MiaoWu.App / MiaoWu.Core / MiaoWu.Infrastructure 三层结构。</value>
+  </data>
+  <data name="PlaceholderDocumentBullet2" xml:space="preserve">
+    <value>已实现启动入口、未处理异常提示与主窗体骨架。</value>
+  </data>
+  <data name="PlaceholderDocumentBullet3" xml:space="preserve">
+    <value>尚未接入模型、对话、文件、命令等业务功能。</value>
+  </data>
+  <data name="PlaceholderDocumentCodeHeading" xml:space="preserve">
+    <value>构建与运行</value>
+  </data>
+  <data name="PlaceholderDocumentCode1" xml:space="preserve">
+    <value>dotnet build MiaoWu.sln -c Debug</value>
+  </data>
+  <data name="PlaceholderDocumentCode2" xml:space="preserve">
+    <value>dotnet run --project src/MiaoWu.App/MiaoWu.App.csproj -c Debug</value>
+  </data>
+  <data name="PlaceholderDocumentTableHeading" xml:space="preserve">
+    <value>架构约定</value>
+  </data>
+  <data name="PlaceholderDocumentTableColumn1" xml:space="preserve">
+    <value>项目</value>
+  </data>
+  <data name="PlaceholderDocumentTableColumn2" xml:space="preserve">
+    <value>职责</value>
+  </data>
+  <data name="PlaceholderDocumentTableRow1" xml:space="preserve">
+    <value>启动、视图与 UI 编排，不直接处理本地路径</value>
+  </data>
+  <data name="PlaceholderDocumentTableRow2" xml:space="preserve">
+    <value>领域模型与应用接口，不引用 WPF</value>
+  </data>
+  <data name="PlaceholderDocumentTableRow3" xml:space="preserve">
+    <value>文件系统、存储、网络等外部能力实现</value>
+  </data>
+  <data name="PlaceholderDocumentFooter" xml:space="preserve">
+    <value>修改于 10:42 · 4.1 KB · 128 行</value>
+  </data>
+  <data name="PlaceholderTabDiff" xml:space="preserve">
+    <value>diff: MainWindow.xaml</value>
+  </data>
+  <data name="PlaceholderTabCommand" xml:space="preserve">
+    <value>命令输出</value>
+  </data>
+  <data name="PlaceholderConversationTitle" xml:space="preserve">
+    <value>旧机报告整理</value>
+  </data>
+  <data name="PlaceholderMessageUser" xml:space="preserve">
+    <value>把 docs 里那几份旧报告整理成一页，顺便看看 README 有没有过期的地方。</value>
+  </data>
+  <data name="PlaceholderMessageAssistant" xml:space="preserve">
+    <value>我先扫一遍 docs，再对照 README 的现状。预计改动集中在「当前进度」和「构建与运行」两节。</value>
+  </data>
+  <data name="PlaceholderMessageMeta" xml:space="preserve">
+    <value>10:38 · gpt-4o</value>
+  </data>
+  <data name="PlaceholderModel" xml:space="preserve">
+    <value>gpt-4o</value>
+  </data>
+  <data name="PlaceholderUsage" xml:space="preserve">
+    <value>12.4k / 128k</value>
+  </data>
+  <data name="PlaceholderInput" xml:space="preserve">
+    <value>把「当前进度」更新成三栏工作台</value>
+  </data>
+  <data name="PlaceholderSendHint" xml:space="preserve">
+    <value>Enter 发送 · Shift+Enter 换行</value>
+  </data>
+  <data name="AttachFile" xml:space="preserve">
+    <value>添加附件</value>
+  </data>
+  <data name="AttachImage" xml:space="preserve">
+    <value>添加图片</value>
+  </data>
+  <data name="Send" xml:space="preserve">
+    <value>发送</value>
+  </data>
+  <data name="PlaceholderConversationEmpty" xml:space="preserve">
+    <value>对话区将在 P3 接入</value>
+  </data>
+  <data name="UserInitial" xml:space="preserve">
+    <value>你</value>
+  </data>
+  <data name="AssistantInitial" xml:space="preserve">
+    <value>悟</value>
+  </data>
+  <data name="PlaceholderImageName" xml:space="preserve">
+    <value>screenshot.png</value>
+  </data>
+  <data name="PlaceholderProjectApp" xml:space="preserve">
+    <value>MiaoWu.App</value>
+  </data>
+  <data name="PlaceholderProjectCore" xml:space="preserve">
+    <value>MiaoWu.Core</value>
+  </data>
+  <data name="PlaceholderProjectInfrastructure" xml:space="preserve">
+    <value>MiaoWu.Infrastructure</value>
+  </data>
+  <data name="PlaceholderSessionAudit" xml:space="preserve">
+    <value>审计日志导出格式</value>
+  </data>
+  <data name="PlaceholderSessionAuditTime" xml:space="preserve">
+    <value>11-07</value>
+  </data>
+  <data name="PlaceholderSessionContext" xml:space="preserve">
+    <value>上下文超限如何截断</value>
+  </data>
+  <data name="PlaceholderSessionContextTime" xml:space="preserve">
+    <value>11-02</value>
+  </data>
+
+  <!-- ===== P2：左栏导航 ===== -->
+  <data name="AddWorkspaceTooltip" xml:space="preserve">
+    <value>添加工作区</value>
+  </data>
+  <data name="RemoveWorkspace" xml:space="preserve">
+    <value>移除工作区</value>
+  </data>
+  <data name="RemoveWorkspaceTooltip" xml:space="preserve">
+    <value>从列表移除，不删除磁盘文件</value>
+  </data>
+  <data name="RemoveWorkspaceConfirmTitle" xml:space="preserve">
+    <value>移除工作区</value>
+  </data>
+  <data name="RemoveWorkspaceConfirmBody" xml:space="preserve">
+    <value>只从工作区列表移除，不会删除磁盘上的任何文件。</value>
+  </data>
+  <data name="Remove" xml:space="preserve">
+    <value>移除</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="WorkspaceListEmptyTitle" xml:space="preserve">
+    <value>还没有工作区</value>
+  </data>
+  <data name="WorkspaceListEmptyBody" xml:space="preserve">
+    <value>添加一个文件夹作为工作区，在左侧浏览会话与文件。</value>
+  </data>
+  <data name="AddWorkspacePrimary" xml:space="preserve">
+    <value>添加工作区</value>
+  </data>
+  <data name="SessionsEmptyTitle" xml:space="preserve">
+    <value>还没有会话</value>
+  </data>
+  <data name="SessionsEmptyBody" xml:space="preserve">
+    <value>新建会话后，消息与工具记录会出现在右栏。</value>
+  </data>
+  <data name="NewSessionPendingHint" xml:space="preserve">
+    <value>新建会话将在 P3 接入</value>
+  </data>
+  <data name="SearchPendingHint" xml:space="preserve">
+    <value>搜索将在 P3 接入</value>
+  </data>
+  <data name="OpenFileTooltip" xml:space="preserve">
+    <value>打开文件…</value>
+  </data>
+  <data name="OpenFileDialogTitle" xml:space="preserve">
+    <value>打开文件</value>
+  </data>
+  <data name="FilesEmptyTitle" xml:space="preserve">
+    <value>没有可显示的文件</value>
+  </data>
+  <data name="FilesEmptyBody" xml:space="preserve">
+    <value>这个文件夹是空的，或内容无法读取。</value>
+  </data>
+  <data name="MarketplaceComingSoon" xml:space="preserve">
+    <value>即将推出</value>
+  </data>
+  <data name="CapabilityMarketPendingTitle" xml:space="preserve">
+    <value>能力市场</value>
+  </data>
+  <data name="CapabilityMarketPendingBody" xml:space="preserve">
+    <value>能力市场将在 V1.1 提供。当前版本只保留入口，不连接在线市场，也不显示数量。</value>
+  </data>
+  <data name="SettingsPendingTitle" xml:space="preserve">
+    <value>功能设置</value>
+  </data>
+  <data name="SettingsPendingBody" xml:space="preserve">
+    <value>设置界面将在 P5 提供。当前版本先保留入口与浮层结构，不新开窗口。</value>
+  </data>
+  <data name="OverlayClose" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+
+  <!-- ===== P2：中栏画布 ===== -->
+  <data name="DocumentEmptyTitle" xml:space="preserve">
+    <value>打开一个文件开始预览</value>
+  </data>
+  <data name="DocumentEmptyBody" xml:space="preserve">
+    <value>从左栏文件树选择文件，或用标签行右端的 ＋ 打开文件。</value>
+  </data>
+  <data name="OpenFilePrimary" xml:space="preserve">
+    <value>打开文件</value>
+  </data>
+  <data name="AddToConversationPendingHint" xml:space="preserve">
+    <value>加入对话将在 P3 接入</value>
+  </data>
+  <data name="FindPlaceholder" xml:space="preserve">
+    <value>在当前文档中查找</value>
+  </data>
+  <data name="FindNoMatches" xml:space="preserve">
+    <value>无匹配</value>
+  </data>
+  <data name="FindCountFormat" xml:space="preserve">
+    <value>{0} 处</value>
+  </data>
+  <data name="FindPositionFormat" xml:space="preserve">
+    <value>第 {0} / {1} 处</value>
+  </data>
+  <data name="FindPrev" xml:space="preserve">
+    <value>上一处</value>
+  </data>
+  <data name="FindNext" xml:space="preserve">
+    <value>下一处</value>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>正在读取…</value>
+  </data>
+  <data name="Truncated" xml:space="preserve">
+    <value>已截断</value>
+  </data>
+  <data name="BinaryPreviewTitle" xml:space="preserve">
+    <value>无法预览此文件</value>
+  </data>
+  <data name="BinaryPreviewBody" xml:space="preserve">
+    <value>这是二进制文件，文本预览已跳过。可以用系统默认程序打开。</value>
+  </data>
+  <data name="DocumentErrorTitle" xml:space="preserve">
+    <value>打开失败</value>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>重试</value>
+  </data>
+  <data name="CopyCode" xml:space="preserve">
+    <value>复制代码</value>
+  </data>
+  <data name="Copied" xml:space="preserve">
+    <value>已复制</value>
+  </data>
+  <data name="DiffTabTitle" xml:space="preserve">
+    <value>diff</value>
+  </data>
+  <data name="CommandOutputTabTitle" xml:space="preserve">
+    <value>命令输出</value>
+  </data>
+  <data name="ToolTabTitle" xml:space="preserve">
+    <value>工具</value>
+  </data>
+  <data name="DiffEmpty" xml:space="preserve">
+    <value>没有可显示的差异</value>
+  </data>
+  <data name="ExitCodeFormat" xml:space="preserve">
+    <value>退出码 {0}</value>
+  </data>
+  <data name="DurationFormat" xml:space="preserve">
+    <value>耗时 {0}</value>
+  </data>
+  <data name="CommandPrompt" xml:space="preserve">
+    <value>$</value>
+  </data>
+  <data name="SessionsListAutomation" xml:space="preserve">
+    <value>会话列表</value>
+  </data>
+  <data name="FileTreeAutomation" xml:space="preserve">
+    <value>文件树</value>
+  </data>
+  <data name="TabsAutomation" xml:space="preserve">
+    <value>文档标签行</value>
+  </data>
+  <data name="CanvasAutomation" xml:space="preserve">
+    <value>预览画布</value>
+  </data>
+  <data name="AddTabTooltip" xml:space="preserve">
+    <value>打开文件</value>
+  </data>
+  <data name="FileMissingError" xml:space="preserve">
+    <value>文件不存在或已被移动。</value>
+  </data>
+  <data name="DocumentScrollAutomation" xml:space="preserve">
+    <value>文档正文</value>
+  </data>
+</root>

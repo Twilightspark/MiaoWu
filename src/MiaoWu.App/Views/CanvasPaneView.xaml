@@ -1,0 +1,367 @@
+<UserControl x:Class="MiaoWu.App.Views.CanvasPaneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:res="clr-namespace:MiaoWu.App.Resources"
+             xmlns:vm="clr-namespace:MiaoWu.App.ViewModels"
+             xmlns:documents="clr-namespace:MiaoWu.Core.Documents;assembly=MiaoWu.Core"
+             xmlns:conv="clr-namespace:MiaoWu.App.Converters"
+             mc:Ignorable="d"
+             d:DesignWidth="742"
+             d:DesignHeight="856"
+             x:Name="CanvasRoot"
+             Focusable="False"
+             Background="{DynamicResource Brush.Canvas}"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True"
+             AutomationProperties.AutomationId="MiddlePane"
+             AutomationProperties.Name="{x:Static res:Strings.MiddlePaneAutomation}">
+
+    <UserControl.InputBindings>
+        <KeyBinding Key="F" Modifiers="Control" Command="{Binding FindCommand}" />
+        <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseSelectedTabCommand}" />
+        <KeyBinding Key="Escape" Command="{Binding CloseFindCommand}" />
+    </UserControl.InputBindings>
+
+    <UserControl.Resources>
+        <conv:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibility" />
+
+        <DataTemplate x:Key="DocumentTabTemplate">
+            <Border x:Name="TabCard"
+                    Width="{StaticResource Metric.Tab.Width}"
+                    Height="{StaticResource Metric.Tab.Height}"
+                    Margin="0,0,6,0"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Tab}"
+                    Focusable="True"
+                    Cursor="Hand"
+                    Tag="DocumentTabCard"
+                    KeyboardNavigation.TabIndex="10"
+                    ToolTip="{Binding ToolTip}"
+                    AutomationProperties.AutomationId="DocumentTab"
+                    AutomationProperties.Name="{Binding AutomationName}">
+                <Border.InputBindings>
+                    <MouseBinding MouseAction="LeftClick" Command="{Binding ActivateCommand}" />
+                    <MouseBinding MouseAction="MiddleClick" Command="{Binding CloseCommand}" />
+                </Border.InputBindings>
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{DynamicResource Brush.Tab}" />
+                        <Setter Property="BorderBrush" Value="Transparent" />
+                        <Style.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
+                <Grid Margin="9,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Width="14" Height="14" VerticalAlignment="Center">
+                        <Path x:Name="TabIcon"
+                              Style="{StaticResource Icon}"
+                              VerticalAlignment="Center"
+                              Fill="{DynamicResource Brush.Text3}"
+                              Data="{StaticResource Ico.File}"
+                              IsHitTestVisible="False" />
+
+                        <!-- 过渡：terminal.svg 画的是「代码 + AI」，先保留旧终端符号 -->
+                        <Path x:Name="TabTerminalIcon"
+                              Style="{StaticResource Icon.Stroke}"
+                              VerticalAlignment="Center"
+                              Stroke="{DynamicResource Brush.Text3}"
+                              Data="{StaticResource Ico.Terminal}"
+                              Visibility="Collapsed"
+                              IsHitTestVisible="False" />
+                    </Grid>
+
+                    <TextBlock x:Name="TabTitle"
+                               Grid.Column="1"
+                               Margin="6,0,4,0"
+                               VerticalAlignment="Center"
+                               Text="{Binding Title}"
+                               Style="{StaticResource Text.Tab}"
+                               Foreground="{DynamicResource Brush.Text2}" />
+
+                    <Button Grid.Column="2"
+                            Style="{StaticResource Button.TabClose}"
+                            Command="{Binding CloseCommand}"
+                            Focusable="False"
+                            IsTabStop="False"
+                            ToolTip="{Binding CloseToolTip}"
+                            AutomationProperties.Name="{x:Static res:Strings.CloseTab}">
+                        <Path Width="11"
+                              Height="11"
+                              Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Close}"
+                              Fill="{DynamicResource Brush.Text3}" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="TabCard" Property="Background" Value="{DynamicResource Brush.Canvas}" />
+                    <Setter TargetName="TabCard" Property="BorderBrush" Value="{DynamicResource Brush.TabBorder}" />
+                    <Setter TargetName="TabIcon" Property="Fill" Value="{DynamicResource Brush.Accent}" />
+                    <Setter TargetName="TabTerminalIcon" Property="Stroke" Value="{DynamicResource Brush.Accent}" />
+                    <Setter TargetName="TabTitle" Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                    <Setter TargetName="TabTitle" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="{x:Static documents:DocumentTabKind.CommandOutput}">
+                    <Setter TargetName="TabIcon" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="TabTerminalIcon" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Background="{DynamicResource Brush.Canvas}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 标签行 -->
+        <Grid Grid.Row="0" Height="{StaticResource Metric.TabRow.Height}" Margin="10,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer x:Name="TabScroller"
+                          Grid.Column="0"
+                          VerticalAlignment="Center"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled"
+                          PreviewMouseWheel="OnTabScrollerMouseWheel"
+                          AutomationProperties.AutomationId="TabScroller"
+                          AutomationProperties.Name="{x:Static res:Strings.TabsAutomation}">
+                <ItemsControl x:Name="TabItems"
+                              ItemsSource="{Binding Tabs}"
+                              ItemTemplate="{StaticResource DocumentTabTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Button x:Name="AddTabButton"
+                    Grid.Column="1"
+                    Width="24"
+                    Height="24"
+                    Margin="4,0,0,0"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource Button.Icon}"
+                    Command="{Binding AddTabCommand}"
+                    ToolTip="{x:Static res:Strings.AddTabTooltip}"
+                    AutomationProperties.AutomationId="AddTab"
+                    AutomationProperties.Name="{x:Static res:Strings.AddTabTooltip}"
+                    KeyboardNavigation.TabIndex="30">
+                <Path Style="{StaticResource Icon}"
+                      Data="{StaticResource Ico.Plus}"
+                      Fill="{DynamicResource Brush.Text3}" />            </Button>
+        </Grid>
+
+        <!-- 操作栏 -->
+        <Grid Grid.Row="1"
+              Height="{StaticResource Metric.ActionBar.Height}"
+              Margin="{StaticResource Pad.ActionBar}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource Button.Toolbar}"
+                        Margin="0,0,10,0"
+                        Command="{Binding RefreshCommand}"
+                        KeyboardNavigation.TabIndex="31"
+                        ToolTip="{x:Static res:Strings.Refresh}"
+                        AutomationProperties.AutomationId="RefreshDocument">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Refresh}"
+                              Fill="{DynamicResource Brush.Text2}" />
+                        <TextBlock Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{x:Static res:Strings.Refresh}"
+                                   Style="{StaticResource Text.Chip}" />
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource Button.Toolbar}"
+                        Margin="0,0,10,0"
+                        Command="{Binding FindCommand}"
+                        KeyboardNavigation.TabIndex="32"
+                        ToolTip="{x:Static res:Strings.FindPlaceholder}"
+                        AutomationProperties.AutomationId="FindDocument">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Search}"
+                              Fill="{DynamicResource Brush.Text2}" />
+                        <TextBlock Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{x:Static res:Strings.Find}"
+                                   Style="{StaticResource Text.Chip}" />
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource Button.Toolbar}"
+                        Command="{Binding AddToConversationCommand}"
+                        KeyboardNavigation.TabIndex="33"
+                        ToolTip="{x:Static res:Strings.AddToConversation}"
+                        AutomationProperties.AutomationId="AddToConversation">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Plus}"
+                              Fill="{DynamicResource Brush.Text2}" />
+                        <TextBlock Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{x:Static res:Strings.AddToConversation}"
+                                   Style="{StaticResource Text.Chip}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <TextBlock Grid.Column="1"
+                       MaxWidth="280"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       Text="{Binding SelectedTab.MetaText}"
+                       Style="{StaticResource Text.Meta}"
+                       TextTrimming="CharacterEllipsis"
+                       AutomationProperties.AutomationId="DocumentMeta" />
+        </Grid>
+
+        <!-- 查找条 -->
+        <Border Grid.Row="2"
+                Height="{StaticResource Metric.FindBar.Height}"
+                Background="{DynamicResource Brush.Side}"
+                BorderBrush="{DynamicResource Brush.Line2}"
+                BorderThickness="0,0,0,1"
+                Visibility="{Binding IsFindOpen, Converter={StaticResource BoolToVisibility}}">
+            <Grid Margin="{StaticResource Pad.FindBar}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" Width="220" Height="24" VerticalAlignment="Center">
+                    <TextBox x:Name="FindBox"
+                             Height="24"
+                             Padding="8,0"
+                             VerticalContentAlignment="Center"
+                             FontSize="{StaticResource Font.Button.Size}"
+                             KeyboardNavigation.TabIndex="34"
+                             Text="{Binding FindQuery, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.AutomationId="FindBox"
+                             AutomationProperties.Name="{x:Static res:Strings.FindPlaceholder}" />
+                    <TextBlock Margin="9,0,0,0"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False"
+                               Text="{x:Static res:Strings.FindPlaceholder}"
+                               Style="{StaticResource Text.Time}"
+                               Visibility="{Binding FindQuery, Converter={StaticResource EmptyStringToVisibility}}" />
+                </Grid>
+
+                <TextBlock Grid.Column="1"
+                           Margin="10,0"
+                           VerticalAlignment="Center"
+                           Text="{Binding FindSummary}"
+                           Style="{StaticResource Text.Meta}" />
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource Button.Icon}"
+                            Width="24"
+                            Height="24"
+                            Command="{Binding PreviousMatchCommand}"
+                            KeyboardNavigation.TabIndex="35"
+                            ToolTip="{x:Static res:Strings.FindPrev}"
+                            AutomationProperties.Name="{x:Static res:Strings.FindPrev}">
+                        <Path Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.ChevronUp}"
+                              Fill="{DynamicResource Brush.Text2}" />
+                    </Button>
+                    <Button Style="{StaticResource Button.Icon}"
+                            Width="24"
+                            Height="24"
+                            Command="{Binding NextMatchCommand}"
+                            KeyboardNavigation.TabIndex="36"
+                            ToolTip="{x:Static res:Strings.FindNext}"
+                            AutomationProperties.Name="{x:Static res:Strings.FindNext}">
+                        <Path Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.ChevronDown}"
+                              Fill="{DynamicResource Brush.Text2}" />
+                    </Button>
+                    <Button Style="{StaticResource Button.Icon}"
+                            Width="24"
+                            Height="24"
+                            Command="{Binding CloseFindCommand}"
+                            KeyboardNavigation.TabIndex="37"
+                            ToolTip="{x:Static res:Strings.OverlayClose}"
+                            AutomationProperties.Name="{x:Static res:Strings.OverlayClose}">
+                        <Path Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Close}"
+                              Fill="{DynamicResource Brush.Text2}" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 截断提示 -->
+        <Border Grid.Row="3"
+                Height="24"
+                Padding="14,0"
+                Background="{DynamicResource Brush.WarningSoft}"
+                Visibility="{Binding ShowTruncationNotice, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock VerticalAlignment="Center"
+                       Text="{Binding TruncationText}"
+                       Style="{StaticResource Text.Meta}"
+                       Foreground="{DynamicResource Brush.Warning}"
+                       AutomationProperties.AutomationId="TruncationNotice" />
+        </Border>
+
+        <!-- 文档内容 -->
+        <Grid Grid.Row="4">
+            <ContentControl Content="{Binding SelectedTab}"
+                            Focusable="False"
+                            AutomationProperties.AutomationId="DocumentHost" />
+
+            <Grid Background="{DynamicResource Brush.Canvas}"
+                  Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel MaxWidth="380"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{x:Static res:Strings.DocumentEmptyTitle}"
+                               Style="{StaticResource Text.H2}"
+                               TextAlignment="Center" />
+                    <TextBlock Margin="0,6,0,0"
+                               Text="{x:Static res:Strings.DocumentEmptyBody}"
+                               Style="{StaticResource Text.Empty}" />
+                    <Button Margin="0,14,0,0"
+                            HorizontalAlignment="Center"
+                            Content="{x:Static res:Strings.OpenFilePrimary}"
+                            Style="{StaticResource Button.Primary}"
+                            Command="{Binding AddTabCommand}"
+                            KeyboardNavigation.TabIndex="38"
+                            AutomationProperties.AutomationId="EmptyOpenFile" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

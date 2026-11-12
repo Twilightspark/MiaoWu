@@ -1,0 +1,294 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:res="clr-namespace:MiaoWu.App.Resources"
+                    xmlns:vm="clr-namespace:MiaoWu.App.ViewModels"
+                    xmlns:views="clr-namespace:MiaoWu.App.Views"
+                    xmlns:controls="clr-namespace:MiaoWu.App.Controls"
+                    xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework">
+
+    <!-- ============================================================
+         中栏文档模板：文本 / Markdown / diff / 命令输出 / 图片 / 错误。
+         Markdown 为块级渲染，不使用 FlowDocument。
+         ============================================================ -->
+
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+    <!-- 标签内容宿主 -->
+    <DataTemplate DataType="{x:Type vm:DocumentTabViewModel}">
+        <Grid>
+            <ContentControl Content="{Binding Content}" Focusable="False" />
+            <TextBlock HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Text="{x:Static res:Strings.Loading}"
+                       Style="{StaticResource Text.Empty}"
+                       Visibility="{Binding Content.IsLoading, Converter={StaticResource BoolToVisibility}}" />
+        </Grid>
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:LoadingDocumentContent}">
+        <Border Background="Transparent" />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MarkdownDocumentViewModel}">
+        <views:MarkdownDocumentView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:LineDocumentViewModel}">
+        <views:LineDocumentView />
+    </DataTemplate>
+
+    <!-- 错误卡 -->
+    <DataTemplate DataType="{x:Type vm:ErrorDocumentContent}">
+        <Grid Margin="{StaticResource Pad.Document}">
+            <Border MaxWidth="520"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Style="{StaticResource Panel.Card}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Path Width="16"
+                              Height="16"
+                              VerticalAlignment="Center"
+                              Style="{StaticResource Icon}"
+                              Fill="{DynamicResource Brush.Danger}"
+                              Data="{StaticResource Ico.Warning}" />
+                        <TextBlock Margin="8,0,0,0"
+                                   Text="{x:Static res:Strings.DocumentErrorTitle}"
+                                   Style="{StaticResource Text.H2}" />
+                    </StackPanel>
+                    <TextBlock Margin="0,8,0,0"
+                               Text="{Binding ErrorMessage}"
+                               Style="{StaticResource Text.Body}"
+                               Foreground="{DynamicResource Brush.Text2}" />
+                    <Button Margin="0,14,0,0"
+                            HorizontalAlignment="Left"
+                            Content="{x:Static res:Strings.Retry}"
+                            Style="{StaticResource Button.Primary}"
+                            Command="{Binding DataContext.RefreshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </DataTemplate>
+
+    <!-- 二进制拒绝 -->
+    <DataTemplate DataType="{x:Type vm:BinaryDocumentContent}">
+        <Grid Margin="{StaticResource Pad.Document}">
+            <Border MaxWidth="520"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Style="{StaticResource Panel.Card}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Path Width="16"
+                              Height="16"
+                              VerticalAlignment="Center"
+                              Style="{StaticResource Icon}"
+                              Fill="{DynamicResource Brush.Text3}"
+                              Data="{StaticResource Ico.Lock}" />
+                        <TextBlock Margin="8,0,0,0"
+                                   Text="{x:Static res:Strings.BinaryPreviewTitle}"
+                                   Style="{StaticResource Text.H2}" />
+                    </StackPanel>
+                    <TextBlock Margin="0,8,0,0"
+                               Text="{x:Static res:Strings.BinaryPreviewBody}"
+                               Style="{StaticResource Text.Body}"
+                               Foreground="{DynamicResource Brush.Text2}" />
+                    <TextBlock Margin="0,10,0,0"
+                               Text="{Binding FileName}"
+                               Style="{StaticResource Text.Code}"
+                               Foreground="{DynamicResource Brush.Text2}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Margin="0,2,0,0"
+                               Text="{Binding SizeText}"
+                               Style="{StaticResource Text.Meta}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </DataTemplate>
+
+    <!-- 图片预览 -->
+    <DataTemplate DataType="{x:Type vm:ImageDocumentViewModel}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Auto"
+                      Focusable="False">
+            <StackPanel MaxWidth="{StaticResource Metric.Image.MaxWidth}"
+                        Margin="{StaticResource Pad.Document}"
+                        HorizontalAlignment="Left">
+                <TextBlock Text="{Binding ImageInfo}"
+                           Style="{StaticResource Text.Meta}"
+                           Margin="0,0,0,8" />
+                <Image Source="{Binding Image}"
+                       Stretch="Uniform"
+                       MaxWidth="{StaticResource Metric.Image.MaxWidth}"
+                       HorizontalAlignment="Left" />
+            </StackPanel>
+        </ScrollViewer>
+    </DataTemplate>
+
+    <!-- ===== Markdown 块 ===== -->
+
+    <DataTemplate DataType="{x:Type vm:MarkdownHeadingViewModel}">
+        <Border x:Name="BlockRoot" Background="Transparent" Margin="{Binding Margin}">
+            <Grid>
+                <controls:MarkdownTextBlock x:Name="H1Text"
+                                            InlinesSource="{Binding Inlines}"
+                                            Style="{StaticResource Text.H1}"
+                                            Visibility="Collapsed" />
+                <controls:MarkdownTextBlock x:Name="H2Text"
+                                            InlinesSource="{Binding Inlines}"
+                                            Style="{StaticResource Text.H2}"
+                                            Visibility="Collapsed" />
+                <controls:MarkdownTextBlock x:Name="H3Text"
+                                            InlinesSource="{Binding Inlines}"
+                                            Style="{StaticResource Text.H3}" />
+            </Grid>
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding Level}" Value="1">
+                <Setter TargetName="H1Text" Property="Visibility" Value="Visible" />
+                <Setter TargetName="H2Text" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="H3Text" Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Level}" Value="2">
+                <Setter TargetName="H1Text" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="H2Text" Property="Visibility" Value="Visible" />
+                <Setter TargetName="H3Text" Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsFindMatch}" Value="True">
+                <Setter TargetName="BlockRoot" Property="Background" Value="{DynamicResource Brush.FindMatch}" />
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MarkdownParagraphViewModel}">
+        <Border x:Name="BlockRoot" Background="Transparent" Margin="{Binding Margin}">
+            <controls:MarkdownTextBlock InlinesSource="{Binding Inlines}"
+                                        Style="{StaticResource Text.Body}" />
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding IsFindMatch}" Value="True">
+                <Setter TargetName="BlockRoot" Property="Background" Value="{DynamicResource Brush.FindMatch}" />
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MarkdownListViewModel}">
+        <Border Background="Transparent" Margin="{Binding Margin}">
+            <ItemsControl ItemsSource="{Binding Items}" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid MinHeight="22" Margin="{Binding Indent}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Marker}"
+                                       Style="{StaticResource Text.Body}"
+                                       Foreground="{DynamicResource Brush.Text2}" />
+                            <controls:MarkdownTextBlock Grid.Column="1"
+                                                        InlinesSource="{Binding Inlines}"
+                                                        Style="{StaticResource Text.Body}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MarkdownQuoteViewModel}">
+        <Border Margin="{Binding Margin}"
+                Padding="{StaticResource Pad.Quote}"
+                BorderBrush="{DynamicResource Brush.Line2}"
+                BorderThickness="2,0,0,0">
+            <ItemsControl ItemsSource="{Binding Blocks}" Focusable="False" />
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MarkdownCodeViewModel}">
+        <Border Margin="{Binding Margin}"
+                Padding="{StaticResource Pad.MarkdownCode}"
+                Background="{DynamicResource Brush.CodeBackground}"
+                CornerRadius="{StaticResource Radius.Code}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" MinHeight="24">
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding Language}"
+                               Style="{StaticResource Text.Meta}"
+                               Visibility="{Binding HasLanguage, Converter={StaticResource BoolToVisibility}}" />
+                    <Button HorizontalAlignment="Right"
+                            Style="{StaticResource Button.Toolbar}"
+                            Command="{Binding CopyCommand}"
+                            ToolTip="{x:Static res:Strings.CopyCode}"
+                            AutomationProperties.Name="{x:Static res:Strings.CopyCode}">
+                        <StackPanel Orientation="Horizontal">
+                            <!-- 过渡：copy.svg 是「复制 + 新增」，先保留旧几何 -->
+                            <Path Style="{StaticResource Icon.Stroke}"
+                                  Data="{StaticResource Ico.Copy}"
+                                  Stroke="{DynamicResource Brush.Text3}" />
+                            <TextBlock Margin="4,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding CopyLabel}"
+                                       Style="{StaticResource Text.Chip}" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1"
+                              Margin="0,6,0,0"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled"
+                              Focusable="False">
+                    <TextBlock Text="{Binding Text}"
+                               Style="{StaticResource Text.Code}"
+                               TextWrapping="NoWrap" />
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MarkdownTableViewModel}">
+        <Border Margin="{Binding Margin}"
+                BorderBrush="{DynamicResource Brush.Line}"
+                BorderThickness="1,1,0,0">
+            <ItemsControl ItemsSource="{Binding Cells}" Focusable="False">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <primitives:UniformGrid Columns="{Binding ColumnCount}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="{StaticResource Pad.TableCell}"
+                                BorderBrush="{DynamicResource Brush.Line}"
+                                BorderThickness="0,0,1,1"
+                                Background="Transparent">
+                            <TextBlock x:Name="CellText"
+                                       Text="{Binding Text}"
+                                       Style="{StaticResource Text.Body}"
+                                       TextWrapping="Wrap" />
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                                <Setter TargetName="CellText" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                                <Setter TargetName="CellText" Property="FontSize" Value="{StaticResource Font.Meta.Size}" />
+                                <Setter TargetName="CellText" Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MarkdownRuleViewModel}">
+        <Border Height="1"
+                Margin="{Binding Margin}"
+                Background="{DynamicResource Brush.Line2}" />
+    </DataTemplate>
+
+</ResourceDictionary>

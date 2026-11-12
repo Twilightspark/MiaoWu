@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>MiaoWu.Infrastructure</RootNamespace>
+    <AssemblyName>MiaoWu.Infrastructure</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DPAPI（secrets.dat）与 HTTP 流式请求都是框架程序集，不引入 NuGet。 -->
+    <Reference Include="System.Security" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MiaoWu.Core\MiaoWu.Core.csproj" />
+  </ItemGroup>
+
+</Project>

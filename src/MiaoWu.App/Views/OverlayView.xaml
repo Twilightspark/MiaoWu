@@ -1,0 +1,78 @@
+<UserControl x:Class="MiaoWu.App.Views.OverlayView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:res="clr-namespace:MiaoWu.App.Resources"
+             mc:Ignorable="d"
+             d:DesignWidth="1440"
+             d:DesignHeight="900"
+             x:Name="Root"
+             Focusable="False"
+             Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}}"
+             AutomationProperties.AutomationId="Overlay"
+             AutomationProperties.Name="{Binding Title}">
+
+    <Grid Background="{DynamicResource Brush.Scrim}">
+        <Border Width="760"
+                Height="560"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource Brush.Canvas}"
+                BorderBrush="{DynamicResource Brush.Line2}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource Radius.Notification}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="44" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="20,0,10,0">
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding Title}"
+                               Style="{StaticResource Text.Section}" />
+                    <Button x:Name="CloseButton"
+                            Width="24"
+                            Height="24"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource Button.Icon}"
+                            Command="{Binding CloseCommand}"
+                            ToolTip="{x:Static res:Strings.OverlayClose}"
+                            AutomationProperties.AutomationId="OverlayClose"
+                            AutomationProperties.Name="{x:Static res:Strings.OverlayClose}">
+                        <Path Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Close}"
+                              Fill="{DynamicResource Brush.Text3}" />
+                    </Button>
+                </Grid>
+
+                <Border Grid.Row="1"
+                        Margin="20,8,20,0"
+                        BorderBrush="{DynamicResource Brush.Line}"
+                        BorderThickness="0,1,0,0" />
+
+                <TextBlock Grid.Row="1"
+                           MaxWidth="560"
+                           Margin="20,28,20,20"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Top"
+                           Text="{Binding Body}"
+                           Style="{StaticResource Text.Body}"
+                           Foreground="{DynamicResource Brush.Text2}" />
+
+                <StackPanel Grid.Row="2"
+                            Margin="20,0,20,20"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                    <Button Content="{x:Static res:Strings.OverlayClose}"
+                            Style="{StaticResource Button.Primary}"
+                            Command="{Binding CloseCommand}"
+                            AutomationProperties.AutomationId="OverlayDone" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

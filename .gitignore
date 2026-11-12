@@ -1,0 +1,47 @@
+# ---- Build output ----
+bin/
+obj/
+artifacts/
+.artifacts/
+*.binlog
+
+# ---- Local SDK / package / build caches ----
+.dotnet/
+.nuget/
+.build-home/
+
+# ---- Internal docs, design assets & agent notes (local only, never published) ----
+/docs/
+/assets/
+/scripts/internal/
+/tools/internal/
+AGENTS.md
+
+# ---- Agent runtime & local tooling ----
+.agent/
+.agents/
+
+# ---- Test output ----
+TestResults/
+coverage/
+
+# ---- IDE ----
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# ---- Python helper caches ----
+__pycache__/
+*.pyc
+
+# ---- Logs and diagnostics ----
+*.log
+
+# ---- OS files ----
+Thumbs.db
+Desktop.ini
+.DS_Store

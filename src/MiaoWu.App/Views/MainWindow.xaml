@@ -1,0 +1,64 @@
+<Window x:Class="MiaoWu.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:views="clr-namespace:MiaoWu.App.Views"
+        xmlns:res="clr-namespace:MiaoWu.App.Resources"
+        mc:Ignorable="d"
+        d:DesignWidth="1440"
+        d:DesignHeight="900"
+        Title="{x:Static res:Strings.AppName}"
+        Icon="pack://application:,,,/MiaoWu;component/Assets/Branding/MiaoWu.ico"
+        Width="{StaticResource Metric.Default.Window.Width}"
+        Height="{StaticResource Metric.Default.Window.Height}"
+        MinWidth="{StaticResource Metric.Window.Min.Width}"
+        MinHeight="{StaticResource Metric.Window.Min.Height}"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        AllowsTransparency="False"
+        WindowStartupLocation="Manual"
+        Background="{DynamicResource Brush.Side}"
+        FontFamily="{StaticResource Font.Family}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <!-- GlassFrameThickness 的 0 是 Win10/7 基线：保留 8px region 圆角。
+         Win11 由 WindowChromeController.ConfigureSystemFrame 在 Show 之前改为 0,0,0,1，
+         让 DWM 画系统圆角与窗口外投影。 -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="44"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Grid>
+        <views:ShellView x:Name="Shell" />
+
+        <Border x:Name="WindowFrame"
+                Panel.ZIndex="100"
+                BorderThickness="{StaticResource Thickness.WindowBorder}"
+                IsHitTestVisible="False"
+                SnapsToDevicePixels="True">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="CornerRadius" Value="{StaticResource Radius.Window}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Transparent}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsActive, RelativeSource={RelativeSource AncestorType=Window}}"
+                                     Value="True">
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.WindowBorderActive}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsMaximized}" Value="True">
+                            <Setter Property="CornerRadius" Value="0" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
+    </Grid>
+</Window>
