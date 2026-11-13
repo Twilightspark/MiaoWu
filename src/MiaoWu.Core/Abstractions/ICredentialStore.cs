@@ -4,7 +4,7 @@ namespace MiaoWu.Core.Abstractions
 {
     /// <summary>
     /// API Key 存储。实现必须使用 DPAPI（CurrentUser），
-    /// 并且不得把明文写入 settings.json、日志或导出。
+    /// 并且不得把明文写入 config.json、日志或导出。
     /// </summary>
     public interface ICredentialStore
     {

@@ -38,7 +38,40 @@ namespace MiaoWu.Tests.Storage
 
             Assert.Equal(AppSettings.CurrentSchemaVersion, settings.SchemaVersion);
             Assert.Equal(1440, settings.Ui.WindowWidth);
+            Assert.False(settings.Ui.WindowPlacementSaved);
             Assert.Empty(settings.Ui.OpenTabs);
+            Assert.True(settings.FirstLaunch);
+        }
+
+        [Fact]
+        public void FirstLaunchRoundTripsAndSyncsLegacyFlag()
+        {
+            var store = new SettingsStore(_path);
+            AppSettings settings = store.Load();
+            settings.FirstLaunch = false;
+
+            store.Save(settings);
+
+            JsonValue root = JsonParser.Parse(File.ReadAllText(_path));
+            Assert.False(root.Get("firstLaunch").AsBoolean());
+            Assert.True(root.Get("agent").Get("onboardingCompleted").AsBoolean());
+
+            AppSettings reloaded = new SettingsStore(_path).Load();
+            Assert.False(reloaded.FirstLaunch);
+            Assert.True(reloaded.Agent.OnboardingCompleted);
+        }
+
+        [Fact]
+        public void LegacyOnboardingCompletedMapsToFirstLaunchFalse()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"agent\":{\"onboardingCompleted\":true}}");
+
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.False(settings.FirstLaunch);
+            Assert.True(settings.Agent.OnboardingCompleted);
         }
 
         [Fact]
@@ -51,6 +84,7 @@ namespace MiaoWu.Tests.Storage
             settings.Ui.LeftPaneWidth = 280;
             settings.Ui.RightPaneWidth = 460;
             settings.Ui.IsRightPaneCollapsed = true;
+            settings.Ui.WindowPlacementSaved = true;
             settings.Ui.WindowMaximized = true;
             settings.Ui.ActiveWorkspaceId = "w1";
             settings.Ui.SelectedTabId = "tab-diff";
@@ -69,12 +103,39 @@ namespace MiaoWu.Tests.Storage
             Assert.Equal(280, reloaded.Ui.LeftPaneWidth);
             Assert.Equal(460, reloaded.Ui.RightPaneWidth);
             Assert.True(reloaded.Ui.IsRightPaneCollapsed);
+            Assert.True(reloaded.Ui.WindowPlacementSaved);
             Assert.True(reloaded.Ui.WindowMaximized);
             Assert.Equal("w1", reloaded.Ui.ActiveWorkspaceId);
             Assert.Equal("tab-diff", reloaded.Ui.SelectedTabId);
             Assert.Equal(2, reloaded.Ui.OpenTabs.Count);
             Assert.Equal(DocumentTabKind.Diff, reloaded.Ui.OpenTabs[0].Kind);
             Assert.Equal(120, reloaded.Ui.OpenTabs[1].ScrollOffset);
+        }
+
+        [Fact]
+        public void LegacyWindowSizeWithoutFlagIsTreatedAsSaved()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"ui\":{\"windowWidth\":1280,\"windowHeight\":800}}");
+
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.Equal(1280, settings.Ui.WindowWidth);
+            Assert.Equal(800, settings.Ui.WindowHeight);
+            Assert.True(settings.Ui.WindowPlacementSaved);
+        }
+
+        [Fact]
+        public void ExplicitUnsavedWindowSizeIsRespected()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"ui\":{\"windowWidth\":1280,\"windowHeight\":800,\"windowPlacementSaved\":false}}");
+
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.False(settings.Ui.WindowPlacementSaved);
         }
 
         [Fact]

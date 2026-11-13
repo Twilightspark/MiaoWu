@@ -57,6 +57,14 @@ namespace MiaoWu.Tests.Layout
             Assert.Equal(208, layout.Left, 3);
             Assert.Equal(480, layout.Middle, 3);
             Assert.Equal(384, layout.Right, 3);
+            Assert.False(layout.Degraded);
+        }
+
+        [Fact]
+        public void MinimumWindowSizeComesFromPaneContent()
+        {
+            Assert.Equal(1080, _policy.MinimumWindowWidth, 3);
+            Assert.Equal(760, _policy.MinimumWindowHeight, 3);
         }
 
         [Fact]

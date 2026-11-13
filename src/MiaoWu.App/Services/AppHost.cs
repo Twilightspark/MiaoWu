@@ -66,7 +66,8 @@ namespace MiaoWu.App.Services
             _services.CleanupToolOutputCache();
             CreateTray();
 
-            if (_services.Settings.Agent.StartMinimized)
+            // 首次启动即使配置了“只显示托盘”也先显示主窗口的引导页。
+            if (!_services.Settings.FirstLaunch && _services.Settings.Agent.StartMinimized)
             {
                 _tray.ShowBalloon("MiaoWu 正在后台运行", "双击托盘图标打开主窗口。");
             }

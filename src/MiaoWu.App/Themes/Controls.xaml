@@ -125,6 +125,15 @@
         <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
     </Style>
 
+    <Style x:Key="Text.Brand" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource Font.Brand.Size}" />
+        <Setter Property="LineHeight" Value="{StaticResource Font.Brand.Line}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+        <Setter Property="TextAlignment" Value="Left" />
+    </Style>
+
     <Style x:Key="Text.Section" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{StaticResource Font.Section.Size}" />
         <Setter Property="LineHeight" Value="{StaticResource Font.Section.Line}" />

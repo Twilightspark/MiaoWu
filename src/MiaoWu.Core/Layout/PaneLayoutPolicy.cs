@@ -3,7 +3,7 @@ using System;
 namespace MiaoWu.Core.Layout
 {
     /// <summary>
-    /// 三栏布局的尺寸约束。数值来自 docs/02-ui-design.md 第 4 节。
+    /// 三栏布局的尺寸约束。数值来自 docs/03-ui-design.md 第 4 节。
     /// </summary>
     public sealed class PaneMetrics
     {
@@ -22,6 +22,9 @@ namespace MiaoWu.Core.Layout
         public double MiddleMin { get; set; } = 480;
 
         public double Splitter { get; set; } = 4;
+
+        /// <summary>三栏内容设计的最小高度，窗口高度不得低于该值。</summary>
+        public double MinimumHeight { get; set; } = 760;
 
         /// <summary>设计基准窗口宽度：1440 时是 262 / 742 / 428。</summary>
         public double ReferenceWidth { get; set; } = 1440;
@@ -71,6 +74,27 @@ namespace MiaoWu.Core.Layout
         public double LeftPreferred { get; private set; }
 
         public double RightPreferred { get; private set; }
+
+        /// <summary>
+        /// 三栏展开时内容区的最小宽度：左栏、中栏、右栏的最小宽度加两条分隔条。
+        /// 窗口最小宽度由这个值决定，不再单独写死。
+        /// </summary>
+        public double MinimumWindowWidth
+        {
+            get
+            {
+                return _metrics.LeftMin
+                    + _metrics.MiddleMin
+                    + _metrics.RightMin
+                    + (_metrics.Splitter * 2);
+            }
+        }
+
+        /// <summary>三栏内容设计的最小高度。</summary>
+        public double MinimumWindowHeight
+        {
+            get { return _metrics.MinimumHeight; }
+        }
 
         public PaneLayout Compute(double windowWidth, bool rightCollapsed)
         {

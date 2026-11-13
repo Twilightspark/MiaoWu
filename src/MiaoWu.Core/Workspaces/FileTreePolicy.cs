@@ -95,7 +95,7 @@ namespace MiaoWu.Core.Workspaces
     }
 
     /// <summary>
-    /// 文件树的排序、可见行展开与缩进规则。数值来自 docs/02-ui-design.md 第 4、6 节：
+    /// 文件树的排序、可见行展开与缩进规则。数值来自 docs/03-ui-design.md 第 4、6 节：
     /// 25px 行、13px/层缩进、超过 8 层横向滚动。
     /// </summary>
     public static class FileTreePolicy

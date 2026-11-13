@@ -1,17 +1,17 @@
-﻿; MiaoWu v0.1.0 — Inno Setup 6 脚本
+; MiaoWu v0.1.1 — Inno Setup 6 脚本
 ; 目标：每用户安装（不需要管理员）、.NET Framework 4.8 检测、开始菜单、
-; 卸载时询问是否保留 %LocalAppData%\MiaoWu 数据。
+; 卸载时询问是否保留用户目录\.miaowu 数据。
 ;
 ; 构建：
 ;   1. scripts\publish.ps1 -Configuration Release
 ;   2. 安装 Inno Setup 6，运行 ISCC.exe installer\MiaoWu.iss
-; 产物：.artifacts\installer\MiaoWu-0.1.0-setup.exe
+; 产物：.artifacts\installer\MiaoWu-0.1.1-setup.exe
 
 #define MyAppName "MiaoWu"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.1"
 #define MyAppPublisher "MiaoWu"
 #define MyAppExeName "MiaoWu.exe"
-#define MyAppDataDir "{localappdata}\MiaoWu"
+#define MyAppDataDir "{userprofile}\.miaowu"
 
 [Setup]
 AppId={{6C1E4A2B-3D77-4B7E-9A3C-2F5B0D8E1A44}
@@ -104,7 +104,7 @@ begin
     if DirExists(DataDir) then
     begin
       if MsgBox('是否保留 MiaoWu 的本地数据？' + #13#10 + #13#10 +
-        '包括：settings.json、workspaces.json、providers.json、secrets.dat、日志与导出。' + #13#10 +
+        '包括：config.json、workspaces.json、providers.json、secrets.dat、日志与导出。' + #13#10 +
         '选择“否”会删除这些数据，且无法恢复。',
         mbConfirmation, MB_YESNO) = IDNO then
       begin

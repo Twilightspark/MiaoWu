@@ -1,16 +1,16 @@
 using System;
 using System.IO;
-using MiaoWu.Core;
 using MiaoWu.Core.Abstractions;
 
 namespace MiaoWu.Infrastructure
 {
     /// <summary>
-    /// 默认本地数据目录：%LocalAppData%\MiaoWu。
+    /// 默认本地配置目录：用户目录\.miaowu。
+    /// 应用配置（config.json / workspaces.json / providers.json / secrets.dat）
+    /// 与日志、缓存、导出都放在这里。
     /// </summary>
     public sealed class AppPaths : IAppPaths
     {
-        private const string DataFolderName = "data";
         private const string AttachmentsFolderName = "attachments";
         private const string BackupsFolderName = "backups";
         private const string LogsFolderName = "logs";
@@ -25,13 +25,13 @@ namespace MiaoWu.Infrastructure
             }
 
             RootDirectory = Path.GetFullPath(rootDirectory);
-            DataDirectory = Path.Combine(RootDirectory, DataFolderName);
+            DataDirectory = RootDirectory;
             AttachmentsDirectory = Path.Combine(RootDirectory, AttachmentsFolderName);
             BackupsDirectory = Path.Combine(RootDirectory, BackupsFolderName);
             LogsDirectory = Path.Combine(RootDirectory, LogsFolderName);
             CacheDirectory = Path.Combine(RootDirectory, CacheFolderName);
             ExportsDirectory = Path.Combine(RootDirectory, ExportsFolderName);
-            SettingsFilePath = Path.Combine(DataDirectory, "settings.json");
+            SettingsFilePath = Path.Combine(DataDirectory, "config.json");
             DatabaseFilePath = Path.Combine(DataDirectory, "miaowu.db");
             ProvidersFilePath = Path.Combine(DataDirectory, "providers.json");
             SecretsFilePath = Path.Combine(DataDirectory, "secrets.dat");
@@ -77,10 +77,16 @@ namespace MiaoWu.Infrastructure
                 return new AppPaths(overrideDirectory);
             }
 
-            string localAppData = Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData);
+            string userProfile = Environment.GetFolderPath(
+                Environment.SpecialFolder.UserProfile);
 
-            return new AppPaths(Path.Combine(localAppData, AppInfo.Name));
+            if (string.IsNullOrWhiteSpace(userProfile))
+            {
+                userProfile = Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData);
+            }
+
+            return new AppPaths(Path.Combine(userProfile, ".miaowu"));
         }
 
         public void EnsureCreated()

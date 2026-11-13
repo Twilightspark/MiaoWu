@@ -41,10 +41,12 @@ namespace MiaoWu.App.ViewModels
         private PaneLayout _layout;
         private double _windowWidth = 1440;
         private double _windowHeight = 900;
+        private double _layoutWidth = 1440;
         private double _rightExpandedWidth = 428;
         private double _rightPaneVisualWidth = 428;
         private bool _isRightPaneCollapsed;
         private bool _isMaximized;
+        private bool _isOnboarding;
         private bool _hasPendingApproval;
         private bool _isExiting;
         private string _lastSaveError;
@@ -106,8 +108,11 @@ namespace MiaoWu.App.ViewModels
                 services != null ? services.Settings : (_settingsStore.Load() ?? new AppSettings()),
                 new UiLimits());
 
+            _isOnboarding = services != null && _settings.FirstLaunch;
+
             _windowWidth = _settings.Ui.WindowWidth;
             _windowHeight = _settings.Ui.WindowHeight;
+            _layoutWidth = _windowWidth;
 
             // 数值与 Themes/Tokens.xaml 中的 Metric.* 保持一致。
             _layoutPolicy = new PaneLayoutPolicy(new PaneMetrics());
@@ -140,7 +145,6 @@ namespace MiaoWu.App.ViewModels
             OpenSettingsCommand = new RelayCommand(ShowSettings);
             CloseSettingsCommand = new RelayCommand(CloseSettings);
             NewSessionCommand = new RelayCommand(RequestNewSession);
-            OpenWizardCommand = new RelayCommand(ShowWizard);
             ExportSessionCommand = new RelayCommand(() => ConversationCommand("export"));
             ShowLogsCommand = new RelayCommand(ShowLogs);
             ExitCommand = new RelayCommand(RequestExit);
@@ -174,7 +178,9 @@ namespace MiaoWu.App.ViewModels
                     now);
 
                 Settings = new SettingsViewModel(services);
-                Wizard = new WizardViewModel(services, folderPicker, ReloadWorkspacesFromDisk);
+                Onboarding = new OnboardingViewModel(services, folderPicker);
+                Onboarding.Completed += OnOnboardingCompleted;
+                Onboarding.CloseRequested += OnOnboardingCloseRequested;
 
                 Conversation.SessionListChanged += OnConversationSessionListChanged;
                 Conversation.SettingsRequested += (sender, args) => ShowSettings();
@@ -196,20 +202,16 @@ namespace MiaoWu.App.ViewModels
                 }
 
                 OnSessionSelectionChanged(this, EventArgs.Empty);
-
-                if (!services.Settings.Agent.OnboardingCompleted)
-                {
-                    Wizard.Open();
-                }
             }
 
-            ApplyLayout(_windowWidth);
+            ApplyLayout(_layoutWidth);
             OnPropertyChanged(nameof(Left));
             OnPropertyChanged(nameof(Canvas));
             OnPropertyChanged(nameof(Overlay));
             OnPropertyChanged(nameof(Conversation));
             OnPropertyChanged(nameof(Settings));
-            OnPropertyChanged(nameof(Wizard));
+            OnPropertyChanged(nameof(Onboarding));
+            OnPropertyChanged(nameof(IsOnboarding));
             OnPropertyChanged(nameof(Notifications));
         }
 
@@ -237,7 +239,13 @@ namespace MiaoWu.App.ViewModels
 
         public SettingsViewModel Settings { get; }
 
-        public WizardViewModel Wizard { get; }
+        public OnboardingViewModel Onboarding { get; }
+
+        /// <summary>首次启动时主窗口客户区只显示引导页，完成后切换为三栏工作台。</summary>
+        public bool IsOnboarding
+        {
+            get { return _isOnboarding; }
+        }
 
         public ObservableCollection<NotificationViewModel> Notifications { get; }
 
@@ -248,8 +256,6 @@ namespace MiaoWu.App.ViewModels
         public RelayCommand CloseSettingsCommand { get; }
 
         public RelayCommand NewSessionCommand { get; }
-
-        public RelayCommand OpenWizardCommand { get; }
 
         public RelayCommand ExportSessionCommand { get; }
 
@@ -292,7 +298,7 @@ namespace MiaoWu.App.ViewModels
             {
                 if (SetProperty(ref _isRightPaneCollapsed, value))
                 {
-                    ApplyLayout(_windowWidth);
+                    ApplyLayout(_layoutWidth);
                     OnPropertyChanged(nameof(ToggleRightPaneToolTip));
                     RaiseStateChanged();
                 }
@@ -374,9 +380,25 @@ namespace MiaoWu.App.ViewModels
             get { return _windowHeight; }
         }
 
-        public bool PreferredWindowMaximized
+        /// <summary>三栏内容设计决定的最小窗口宽度。</summary>
+        public double MinimumWindowWidth
         {
-            get { return _settings.Ui.WindowMaximized; }
+            get { return _layoutPolicy.MinimumWindowWidth; }
+        }
+
+        /// <summary>三栏内容设计决定的最小窗口高度。</summary>
+        public double MinimumWindowHeight
+        {
+            get { return _layoutPolicy.MinimumWindowHeight; }
+        }
+
+        /// <summary>
+        /// 上次退出时是否已记录窗口尺寸。首次启动按默认尺寸收敛；
+        /// 之后启动恢复记住的尺寸，并始终居中到主屏幕工作区。
+        /// </summary>
+        public bool HasSavedWindowPlacement
+        {
+            get { return _settings.Ui.WindowPlacementSaved; }
         }
 
         public string LastSaveError
@@ -384,21 +406,23 @@ namespace MiaoWu.App.ViewModels
             get { return _lastSaveError; }
         }
 
-        public void ApplyLayout(double windowWidth)
+        public void ApplyLayout(double contentWidth)
         {
-            if (windowWidth <= 0)
+            if (contentWidth <= 0)
             {
                 return;
             }
 
-            _windowWidth = windowWidth;
+            // 这是 Shell 客户区宽度；启动或引导切换时它可能与窗口实际宽度短暂不一致，
+            // 不能写回 _windowWidth，否则持久化的窗口尺寸会被错误改写。
+            _layoutWidth = contentWidth;
 
-            PaneLayout expanded = _layoutPolicy.Compute(windowWidth, false);
-            PaneLayout actual = _layoutPolicy.Compute(windowWidth, _isRightPaneCollapsed);
+            PaneLayout expanded = _layoutPolicy.Compute(contentWidth, false);
+            PaneLayout actual = _layoutPolicy.Compute(contentWidth, _isRightPaneCollapsed);
             _layout = actual;
             _rightExpandedWidth = expanded.Right;
-            LeftPaneMax = _layoutPolicy.GetLeftMaximum(windowWidth, actual.Right);
-            RightPaneMax = _layoutPolicy.GetRightMaximum(windowWidth, actual.Left);
+            LeftPaneMax = _layoutPolicy.GetLeftMaximum(contentWidth, actual.Right);
+            RightPaneMax = _layoutPolicy.GetRightMaximum(contentWidth, actual.Left);
 
             UpdateTopBarToggleMargin();
 
@@ -424,23 +448,52 @@ namespace MiaoWu.App.ViewModels
 
         public void UpdateWindowBounds(double width, double height, bool maximized)
         {
-            if (width > 0)
-            {
-                _windowWidth = width;
-            }
-
-            if (height > 0)
-            {
-                _windowHeight = height;
-            }
-
             _isMaximized = maximized;
-            OnPropertyChanged(nameof(PreferredWindowWidth));
-            OnPropertyChanged(nameof(PreferredWindowHeight));
+
+            // 最大化时 ActualWidth/Height 是屏幕尺寸，不能覆盖上次的正常窗口尺寸。
+            if (!maximized)
+            {
+                bool changed = false;
+                if (width > 0 && Math.Abs(width - _windowWidth) > 0.1)
+                {
+                    _windowWidth = width;
+                    changed = true;
+                }
+
+                if (height > 0 && Math.Abs(height - _windowHeight) > 0.1)
+                {
+                    _windowHeight = height;
+                    changed = true;
+                }
+
+                if (width > 0 || height > 0)
+                {
+                    _settings.Ui.WindowPlacementSaved = true;
+                }
+
+                if (changed)
+                {
+                    OnPropertyChanged(nameof(PreferredWindowWidth));
+                    OnPropertyChanged(nameof(PreferredWindowHeight));
+                }
+            }
+
             RaiseStateChanged();
         }
 
-        /// <summary>把当前界面状态写入 settings.json 与 workspaces.json。异常不外抛。</summary>
+        /// <summary>只同步最大化状态，不触碰记忆中的正常窗口尺寸。</summary>
+        public void SetWindowMaximized(bool maximized)
+        {
+            if (_isMaximized == maximized)
+            {
+                return;
+            }
+
+            _isMaximized = maximized;
+            RaiseStateChanged();
+        }
+
+        /// <summary>把当前界面状态写入 config.json 与 workspaces.json。异常不外抛。</summary>
         public bool TrySaveState()
         {
             try
@@ -466,7 +519,6 @@ namespace MiaoWu.App.ViewModels
             }
 
             Overlay.Close();
-            WizardCloseIfOpen();
             Settings.Open();
         }
 
@@ -475,15 +527,6 @@ namespace MiaoWu.App.ViewModels
             if (Settings != null)
             {
                 Settings.IsOpen = false;
-            }
-        }
-
-        public void ShowWizard()
-        {
-            if (Wizard != null)
-            {
-                SettingsCloseIfOpen();
-                Wizard.Open();
             }
         }
 
@@ -652,7 +695,7 @@ namespace MiaoWu.App.ViewModels
         {
             double clamped = Math.Max(0, Math.Min(value, LeftPaneMax));
             _layoutPolicy.SetPreferred(clamped, _layoutPolicy.RightPreferred);
-            ApplyLayout(_windowWidth);
+            ApplyLayout(_layoutWidth);
             RaiseStateChanged();
         }
 
@@ -660,7 +703,7 @@ namespace MiaoWu.App.ViewModels
         {
             double clamped = Math.Max(0, Math.Min(value, RightPaneMax));
             _layoutPolicy.SetPreferred(_layoutPolicy.LeftPreferred, clamped);
-            ApplyLayout(_windowWidth);
+            ApplyLayout(_layoutWidth);
             RaiseStateChanged();
         }
 
@@ -892,20 +935,17 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        private void SettingsCloseIfOpen()
+        private void OnOnboardingCompleted(object sender, EventArgs e)
         {
-            if (Settings != null)
-            {
-                Settings.IsOpen = false;
-            }
+            _isOnboarding = false;
+            OnPropertyChanged(nameof(IsOnboarding));
+            ReloadWorkspacesFromDisk();
+            ApplyLayout(_layoutWidth);
         }
 
-        private void WizardCloseIfOpen()
+        private void OnOnboardingCloseRequested(object sender, EventArgs e)
         {
-            if (Wizard != null)
-            {
-                Wizard.IsOpen = false;
-            }
+            RequestExit();
         }
 
         private void FireAndForget(System.Threading.Tasks.Task task)

@@ -21,7 +21,7 @@ namespace MiaoWu.Core.Settings
     }
 
     /// <summary>
-    /// settings.json 的 agent 段。与 Provider/密钥分开，避免把端点与凭据混进界面状态。
+    /// config.json 的 agent 段。与 Provider/密钥分开，避免把端点与凭据混进界面状态。
     /// </summary>
     public sealed class AgentSettings
     {

@@ -5,6 +5,7 @@ namespace MiaoWu.Core.Layout
     /// <summary>
     /// 启动窗口尺寸的收敛策略：默认 1440x900，工作区不足时按 90% 收敛，
     /// 并保证窗口至少能显示到设计最小尺寸或整个工作区。
+    /// 恢复上次窗口尺寸时不再套用 90%，只做工作区上限收敛。
     /// </summary>
     public sealed class WindowPlacementMetrics
     {
@@ -12,12 +13,18 @@ namespace MiaoWu.Core.Layout
 
         public double DefaultHeight { get; set; } = 900;
 
-        public double MinimumWidth { get; set; } = 1180;
+        public double MinimumWidth { get; set; } = 1080;
 
         public double MinimumHeight { get; set; } = 760;
 
         /// <summary>工作区不足时使用的比例。</summary>
         public double WorkAreaRatio { get; set; } = 0.9;
+
+        /// <summary>
+        /// true 表示 <see cref="DefaultWidth"/> / <see cref="DefaultHeight"/> 来自上次退出时
+        /// 记录的窗口尺寸，直接收敛到工作区，不再按 <see cref="WorkAreaRatio"/> 缩小。
+        /// </summary>
+        public bool RestoreSavedSize { get; set; }
     }
 
     public struct WindowPlacement
@@ -73,8 +80,9 @@ namespace MiaoWu.Core.Layout
                     metrics.MinimumHeight);
             }
 
-            double width = Math.Min(metrics.DefaultWidth, workWidth * metrics.WorkAreaRatio);
-            double height = Math.Min(metrics.DefaultHeight, workHeight * metrics.WorkAreaRatio);
+            double ratio = metrics.RestoreSavedSize ? 1.0 : metrics.WorkAreaRatio;
+            double width = Math.Min(metrics.DefaultWidth, workWidth * ratio);
+            double height = Math.Min(metrics.DefaultHeight, workHeight * ratio);
 
             double minimumWidth = Math.Min(metrics.MinimumWidth, workWidth);
             double minimumHeight = Math.Min(metrics.MinimumHeight, workHeight);

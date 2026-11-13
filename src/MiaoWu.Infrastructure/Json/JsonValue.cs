@@ -28,7 +28,7 @@ namespace MiaoWu.Infrastructure.Json
     }
 
     /// <summary>
-    /// 手写 JSON DOM 节点，供 settings.json / workspaces.json 等配置文件读写使用。
+    /// 手写 JSON DOM 节点，供 config.json / workspaces.json 等配置文件读写使用。
     /// </summary>
     /// <remarks>
     /// <para>解析后的对象保留全部字段（包括当前版本不认识的字段），写回时不会静默丢弃。</para>

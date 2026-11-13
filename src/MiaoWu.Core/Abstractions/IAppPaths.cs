@@ -20,6 +20,7 @@ namespace MiaoWu.Core.Abstractions
 
         string ExportsDirectory { get; }
 
+        /// <summary>config.json：应用设置与 firstLaunch 首启项。</summary>
         string SettingsFilePath { get; }
 
         string DatabaseFilePath { get; }

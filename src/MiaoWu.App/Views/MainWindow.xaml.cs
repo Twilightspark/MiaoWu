@@ -27,6 +27,8 @@ namespace MiaoWu.App.Views
 
             ApplyStartupPlacement();
 
+            // 首次引导不再强制最大化：窗口按主屏幕工作区居中，尺寸沿用上次退出时的值。
+
             // 必须在 Show 之前设置：Win11 用 DWM 画窗口圆角与系统投影。
             WindowChromeController.ConfigureSystemFrame(this);
 
@@ -51,7 +53,10 @@ namespace MiaoWu.App.Views
             var metrics = new WindowPlacementMetrics
             {
                 DefaultWidth = _viewModel.PreferredWindowWidth,
-                DefaultHeight = _viewModel.PreferredWindowHeight
+                DefaultHeight = _viewModel.PreferredWindowHeight,
+                MinimumWidth = _viewModel.MinimumWindowWidth,
+                MinimumHeight = _viewModel.MinimumWindowHeight,
+                RestoreSavedSize = _viewModel.HasSavedWindowPlacement
             };
 
             WindowPlacement placement = WindowPlacementPolicy.Compute(
@@ -67,11 +72,6 @@ namespace MiaoWu.App.Views
             Top = placement.Top;
             MinWidth = placement.MinimumWidth;
             MinHeight = placement.MinimumHeight;
-
-            if (_viewModel.PreferredWindowMaximized)
-            {
-                WindowState = WindowState.Maximized;
-            }
         }
 
         private void OnSourceInitialized(object sender, EventArgs e)
@@ -81,9 +81,24 @@ namespace MiaoWu.App.Views
         }
 
         private void OnWindowStateChanged(object sender, EventArgs e)
-        {            bool maximized = WindowState == WindowState.Maximized;
-            _viewModel.IsMaximized = maximized;
-            _viewModel.UpdateWindowBounds(ActualWidth, ActualHeight, maximized);
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                ScheduleSave();
+                return;
+            }
+
+            if (WindowState == WindowState.Maximized)
+            {
+                _viewModel.SetWindowMaximized(true);
+            }
+            else
+            {
+                // 尺寸只由正常状态下的 SizeChanged 记录；这里只同步最大化标记，
+                // 避免 WindowChrome/系统还原边界把窗口尺寸改写。
+                _viewModel.SetWindowMaximized(false);
+            }
+
             ScheduleSave();
         }
 
@@ -94,7 +109,14 @@ namespace MiaoWu.App.Views
                 return;
             }
 
-            _viewModel.UpdateWindowBounds(e.NewSize.Width, e.NewSize.Height, WindowState == WindowState.Maximized);
+            if (WindowState == WindowState.Maximized)
+            {
+                _viewModel.SetWindowMaximized(true);
+                ScheduleSave();
+                return;
+            }
+
+            _viewModel.UpdateWindowBounds(e.NewSize.Width, e.NewSize.Height, false);
             ScheduleSave();
         }
 
@@ -135,7 +157,8 @@ namespace MiaoWu.App.Views
             if (_viewModel != null)
             {
                 _viewModel.StateChanged -= OnViewModelStateChanged;
-                _viewModel.UpdateWindowBounds(ActualWidth, ActualHeight, WindowState == WindowState.Maximized);
+
+                // 尺寸已由正常状态下的 SizeChanged 记录；关闭时只保存，不再回写窗口边界。
                 _viewModel.TrySaveState();
             }
 
@@ -150,6 +173,14 @@ namespace MiaoWu.App.Views
         {
             if (_viewModel == null || _viewModel.IsExiting)
             {
+                return;
+            }
+
+            // 首次引导阶段关闭窗口等于退出应用，不隐藏到托盘。
+            if (_viewModel.IsOnboarding)
+            {
+                e.Cancel = true;
+                _viewModel.RequestExit();
                 return;
             }
 
@@ -173,7 +204,14 @@ namespace MiaoWu.App.Views
             {
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _viewModel.ApplyLayout(ActualWidth);
+                    if (_viewModel.IsOnboarding)
+                    {
+                        return;
+                    }
+
+                    _viewModel.ApplyLayout(Shell != null && Shell.ActualWidth > 0
+                        ? Shell.ActualWidth
+                        : ActualWidth);
                     _viewModel.ResumeConversation();
                 }));
             }

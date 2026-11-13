@@ -420,16 +420,11 @@
             </controls:CollapsiblePane>
         </Grid>
 
-        <!-- 浮层：设置 / 向导 / 应用内通知 -->
+        <!-- 浮层：设置 / 应用内通知 -->
         <views:SettingsView Grid.RowSpan="2"
                             Panel.ZIndex="200"
                             DataContext="{Binding Settings}"
                             Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
-
-        <views:WizardView Grid.RowSpan="2"
-                          Panel.ZIndex="210"
-                          DataContext="{Binding Wizard}"
-                          Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
 
         <views:NotificationHost Grid.Row="1"
                                 Panel.ZIndex="130"

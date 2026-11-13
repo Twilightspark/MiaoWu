@@ -57,7 +57,6 @@ namespace MiaoWu.App.Views
             if (viewModel != null)
             {
                 viewModel.ApplyLayout(e.NewSize.Width);
-                viewModel.UpdateWindowBounds(e.NewSize.Width, e.NewSize.Height, viewModel.IsMaximized);
             }
         }
 

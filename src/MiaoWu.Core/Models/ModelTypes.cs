@@ -251,47 +251,36 @@ namespace MiaoWu.Core.Models
     }
 
     /// <summary>
-    /// 首次启动时可用的 Provider 预设。只提供目录与端点，不包含任何密钥；
+    /// 首次启动与设置页可用的 Provider 预设。只提供目录与端点，不包含任何密钥；
     /// 用户可以在设置页删除或改 baseUrl。
     /// </summary>
     public static class ProviderPresets
     {
+        /// <summary>
+        /// 首次引导支持的六个供应商，顺序即下拉顺序。
+        /// 返回新的可变对象，调用方可以安全地加入 providers.json。
+        /// </summary>
+        public static IReadOnlyList<ProviderDefinition> CreateOnboardingProviders()
+        {
+            return new List<ProviderDefinition>
+            {
+                CreateDeepSeek(),
+                CreateOpenCodeGo(),
+                CreateMiniMax(),
+                CreateZai(),
+                CreateXiaomi(),
+                CreateKimi()
+            };
+        }
+
         public static ProviderCatalog CreateDefault()
         {
             var catalog = new ProviderCatalog { ActiveProviderId = "deepseek" };
 
-            catalog.Providers.Add(new ProviderDefinition
+            foreach (ProviderDefinition provider in CreateOnboardingProviders())
             {
-                Id = "deepseek",
-                DisplayName = "DeepSeek",
-                Api = "openai-completions",
-                BaseUrl = "https://api.deepseek.com/v1",
-                Compat = new OpenAiCompat
-                {
-                    MaxTokensField = "max_tokens",
-                    SupportsUsageInStreaming = true,
-                    ThinkingFormat = "deepseek",
-                    SystemRole = "system"
-                },
-                Models =
-                {
-                    new ModelDefinition
-                    {
-                        Id = "deepseek-chat",
-                        Name = "DeepSeek Chat",
-                        ContextWindow = 65536,
-                        MaxOutputTokens = 8192
-                    },
-                    new ModelDefinition
-                    {
-                        Id = "deepseek-reasoner",
-                        Name = "DeepSeek Reasoner",
-                        ContextWindow = 65536,
-                        MaxOutputTokens = 8192,
-                        SupportsReasoning = true
-                    }
-                }
-            });
+                catalog.Providers.Add(provider);
+            }
 
             catalog.Providers.Add(new ProviderDefinition
             {
@@ -356,6 +345,195 @@ namespace MiaoWu.Core.Models
             });
 
             return catalog;
+        }
+
+        private static ProviderDefinition CreateDeepSeek()
+        {
+            return new ProviderDefinition
+            {
+                Id = "deepseek",
+                DisplayName = "DeepSeek",
+                Api = "openai-completions",
+                BaseUrl = "https://api.deepseek.com/v1",
+                Compat = new OpenAiCompat
+                {
+                    MaxTokensField = "max_tokens",
+                    SupportsUsageInStreaming = true,
+                    ThinkingFormat = "deepseek",
+                    SystemRole = "system"
+                },
+                Models =
+                {
+                    new ModelDefinition
+                    {
+                        Id = "deepseek-flash",
+                        Name = "DeepSeek Flash",
+                        ContextWindow = 131072,
+                        MaxOutputTokens = 8192
+                    },
+                    new ModelDefinition
+                    {
+                        Id = "deepseek-v4-pro",
+                        Name = "DeepSeek V4 Pro",
+                        ContextWindow = 131072,
+                        MaxOutputTokens = 16384,
+                        SupportsReasoning = true
+                    },
+                    new ModelDefinition
+                    {
+                        Id = "deepseek-chat",
+                        Name = "DeepSeek Chat",
+                        ContextWindow = 65536,
+                        MaxOutputTokens = 8192
+                    },
+                    new ModelDefinition
+                    {
+                        Id = "deepseek-reasoner",
+                        Name = "DeepSeek Reasoner",
+                        ContextWindow = 65536,
+                        MaxOutputTokens = 8192,
+                        SupportsReasoning = true
+                    }
+                }
+            };
+        }
+
+        private static ProviderDefinition CreateOpenCodeGo()
+        {
+            return new ProviderDefinition
+            {
+                Id = "opencode-go",
+                DisplayName = "OpenCode Go",
+                Api = "openai-completions",
+                BaseUrl = "https://opencode.ai/inference/go/openai/v1",
+                Models =
+                {
+                    new ModelDefinition
+                    {
+                        Id = "kimi-k2.7-code",
+                        Name = "Kimi K2.7 Code",
+                        ContextWindow = 262144,
+                        MaxOutputTokens = 32768
+                    },
+                    new ModelDefinition
+                    {
+                        Id = "glm-5.3",
+                        Name = "GLM-5.3",
+                        ContextWindow = 200000,
+                        MaxOutputTokens = 32768,
+                        SupportsReasoning = true
+                    }
+                }
+            };
+        }
+
+        private static ProviderDefinition CreateMiniMax()
+        {
+            return new ProviderDefinition
+            {
+                Id = "minimax",
+                DisplayName = "MiniMax",
+                Api = "openai-completions",
+                BaseUrl = "https://api.minimaxi.com/v1",
+                Models =
+                {
+                    new ModelDefinition
+                    {
+                        Id = "MiniMax-M3",
+                        Name = "MiniMax M3",
+                        ContextWindow = 204800,
+                        MaxOutputTokens = 32768,
+                        SupportsReasoning = true
+                    }
+                }
+            };
+        }
+
+        private static ProviderDefinition CreateZai()
+        {
+            return new ProviderDefinition
+            {
+                Id = "zai",
+                DisplayName = "Z.AI",
+                Api = "openai-completions",
+                BaseUrl = "https://api.z.ai/api/paas/v4",
+                Models =
+                {
+                    new ModelDefinition
+                    {
+                        Id = "glm-5.3",
+                        Name = "GLM-5.3",
+                        ContextWindow = 200000,
+                        MaxOutputTokens = 32768,
+                        SupportsReasoning = true
+                    },
+                    new ModelDefinition
+                    {
+                        Id = "glm-5.3-flash",
+                        Name = "GLM-5.3 Flash",
+                        ContextWindow = 128000,
+                        MaxOutputTokens = 16384
+                    }
+                }
+            };
+        }
+
+        private static ProviderDefinition CreateXiaomi()
+        {
+            return new ProviderDefinition
+            {
+                Id = "xiaomi",
+                DisplayName = "XiaoMi",
+                Api = "openai-completions",
+                BaseUrl = "https://api.xiaomimimo.com/v1",
+                Models =
+                {
+                    new ModelDefinition
+                    {
+                        Id = "mimo-v2.6-flash",
+                        Name = "MiMo V2.6 Flash",
+                        ContextWindow = 131072,
+                        MaxOutputTokens = 16384
+                    },
+                    new ModelDefinition
+                    {
+                        Id = "mimo-v2.6-pro",
+                        Name = "MiMo V2.6 Pro",
+                        ContextWindow = 131072,
+                        MaxOutputTokens = 32768,
+                        SupportsReasoning = true
+                    }
+                }
+            };
+        }
+
+        private static ProviderDefinition CreateKimi()
+        {
+            return new ProviderDefinition
+            {
+                Id = "kimi",
+                DisplayName = "Kimi",
+                Api = "openai-completions",
+                BaseUrl = "https://api.moonshot.cn/v1",
+                Models =
+                {
+                    new ModelDefinition
+                    {
+                        Id = "kimi-k3.1-pro",
+                        Name = "Kimi K3.1 Pro",
+                        ContextWindow = 262144,
+                        MaxOutputTokens = 32768,
+                        SupportsReasoning = true
+                    },
+                    new ModelDefinition
+                    {
+                        Id = "kimi-k3",
+                        Name = "Kimi K3",
+                        ContextWindow = 262144,
+                        MaxOutputTokens = 32768
+                    }
+                }
+            };
         }
     }
 }

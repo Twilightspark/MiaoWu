@@ -75,7 +75,7 @@ namespace MiaoWu.Core.Documents
 
     /// <summary>
     /// 标签行规则：固定 168 宽、6 间距、行尾 ＋；关闭后焦点落到相邻标签。
-    /// 数值来自 docs/02-ui-design.md 第 4、6、8.5 节。
+    /// 数值来自 docs/03-ui-design.md 第 4、6、8.5 节。
     /// </summary>
     public static class TabStripPolicy
     {

@@ -65,6 +65,19 @@ namespace MiaoWu.Tests.Settings
         }
 
         [Fact]
+        public void WindowSizeClampsToContentMinimum()
+        {
+            var settings = new AppSettings();
+            settings.Ui.WindowWidth = 900;
+            settings.Ui.WindowHeight = 600;
+
+            UiSettingsPolicy.Normalize(settings, Limits);
+
+            Assert.Equal(1080, settings.Ui.WindowWidth);
+            Assert.Equal(760, settings.Ui.WindowHeight);
+        }
+
+        [Fact]
         public void DuplicateFileTabsAreRemovedAndTitlesFallback()
         {
             var settings = new AppSettings();

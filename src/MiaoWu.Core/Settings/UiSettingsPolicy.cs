@@ -6,7 +6,7 @@ using MiaoWu.Core.Documents;
 namespace MiaoWu.Core.Settings
 {
     /// <summary>
-    /// settings.json 的强类型模型。schemaVersion 用于后续迁移；
+    /// config.json 的强类型模型。schemaVersion 用于后续迁移；
     /// 未知字段由基础设施层的存储实现原样保留，这里不丢弃。
     /// </summary>
     public sealed class AppSettings
@@ -16,11 +16,18 @@ namespace MiaoWu.Core.Settings
         public AppSettings()
         {
             SchemaVersion = CurrentSchemaVersion;
+            FirstLaunch = true;
             Ui = new UiSettings();
             Agent = new AgentSettings();
         }
 
         public int SchemaVersion { get; set; }
+
+        /// <summary>
+        /// 首次启动配置项。true 时主窗口只显示首次引导；引导完成后写回 false。
+        /// 配置文件为 <c>用户目录\.miaowu\config.json</c>。
+        /// </summary>
+        public bool FirstLaunch { get; set; }
 
         public UiSettings Ui { get; set; }
 
@@ -44,6 +51,12 @@ namespace MiaoWu.Core.Settings
         public double WindowWidth { get; set; }
 
         public double WindowHeight { get; set; }
+
+        /// <summary>
+        /// 是否已经记录过用户窗口尺寸。首次启动为 false，窗口按默认尺寸收敛；
+        /// 之后启动按记住的尺寸恢复，并始终居中到主屏幕工作区。
+        /// </summary>
+        public bool WindowPlacementSaved { get; set; }
 
         public bool WindowMaximized { get; set; }
 
@@ -71,7 +84,7 @@ namespace MiaoWu.Core.Settings
     {
         public UiLimits()
         {
-            MinWindowWidth = 1180;
+            MinWindowWidth = 1080;
             MinWindowHeight = 760;
             MaxWindowWidth = 3840;
             MaxWindowHeight = 2160;
@@ -103,7 +116,7 @@ namespace MiaoWu.Core.Settings
 
     /// <summary>
     /// 设置值的校验与修复：越界值夹紧、NaN/无穷回退默认、标签集合去重与上限。
-    /// 读取损坏或过期的 settings.json 时，界面仍要能启动。
+    /// 读取损坏或过期的 config.json 时，界面仍要能启动。
     /// </summary>
     public static class UiSettingsPolicy
     {

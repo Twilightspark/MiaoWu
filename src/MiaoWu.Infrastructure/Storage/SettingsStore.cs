@@ -9,7 +9,7 @@ using MiaoWu.Infrastructure.Json;
 namespace MiaoWu.Infrastructure.Storage
 {
     /// <summary>
-    /// settings.json 存取：schemaVersion + ui 段；整体原子写。
+    /// config.json 存取：schemaVersion + firstLaunch + ui/agent 段；整体原子写。
     /// 未知字段通过保留原始 JsonValue 根对象继续写回，不静默丢弃。
     /// </summary>
     public sealed class SettingsStore : ISettingsStore
@@ -26,7 +26,7 @@ namespace MiaoWu.Infrastructure.Storage
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
-                throw new ArgumentException("settings.json 路径不能为空。", nameof(filePath));
+                throw new ArgumentException("config.json 路径不能为空。", nameof(filePath));
             }
 
             _filePath = filePath;
@@ -86,6 +86,11 @@ namespace MiaoWu.Infrastructure.Storage
                 UiSettings value = settings.Ui;
                 value.WindowWidth = GetDouble(ui, "windowWidth", value.WindowWidth);
                 value.WindowHeight = GetDouble(ui, "windowHeight", value.WindowHeight);
+                // 旧版本没有显式标记：只要曾经落盘过窗口尺寸，就按“已记住”处理。
+                value.WindowPlacementSaved = GetBool(
+                    ui,
+                    "windowPlacementSaved",
+                    ui.Get("windowWidth") != null && ui.Get("windowHeight") != null);
                 value.WindowMaximized = GetBool(ui, "windowMaximized", false);
                 value.LeftPaneWidth = GetDouble(ui, "leftPaneWidth", value.LeftPaneWidth);
                 value.RightPaneWidth = GetDouble(ui, "rightPaneWidth", value.RightPaneWidth);
@@ -111,6 +116,13 @@ namespace MiaoWu.Infrastructure.Storage
             }
 
             settings.Agent = ReadAgent(root.Get("agent"));
+            settings.FirstLaunch = GetBool(
+                root,
+                "firstLaunch",
+                !settings.Agent.OnboardingCompleted);
+
+            // 两个状态字段同源：firstLaunch 是新的首启配置项，onboardingCompleted 保留兼容。
+            settings.Agent.OnboardingCompleted = !settings.FirstLaunch;
             return settings;
         }
 
@@ -185,8 +197,12 @@ namespace MiaoWu.Infrastructure.Storage
                 throw new ArgumentNullException(nameof(settings));
             }
 
+            settings.Agent = settings.Agent ?? new AgentSettings();
+            settings.Agent.OnboardingCompleted = !settings.FirstLaunch;
+
             JsonValue root = _root ?? JsonValue.NewObject();
             root["schemaVersion"] = JsonValue.From(settings.SchemaVersion);
+            root["firstLaunch"] = JsonValue.From(settings.FirstLaunch);
 
             JsonValue ui = root.Get("ui");
             if (ui == null || ui.Kind != JsonKind.Object)
@@ -198,6 +214,7 @@ namespace MiaoWu.Infrastructure.Storage
             UiSettings value = settings.Ui ?? new UiSettings();
             ui["windowWidth"] = JsonValue.From(value.WindowWidth);
             ui["windowHeight"] = JsonValue.From(value.WindowHeight);
+            ui["windowPlacementSaved"] = JsonValue.From(value.WindowPlacementSaved);
             ui["windowMaximized"] = JsonValue.From(value.WindowMaximized);
             ui["leftPaneWidth"] = JsonValue.From(value.LeftPaneWidth);
             ui["rightPaneWidth"] = JsonValue.From(value.RightPaneWidth);

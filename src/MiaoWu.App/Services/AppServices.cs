@@ -45,6 +45,12 @@ namespace MiaoWu.App.Services
             Paths = paths ?? throw new ArgumentNullException(nameof(paths));
 
             SettingsStore = new SettingsStore(paths);
+            if (!File.Exists(paths.SettingsFilePath))
+            {
+                // 首次启动：在 .miaowu 下初始化 config.json，并写入 firstLaunch=true。
+                SettingsStore.Save(new AppSettings { FirstLaunch = true });
+            }
+
             Settings = UiSettingsPolicy.Normalize(
                 SettingsStore.Load() ?? new AppSettings(),
                 new UiLimits());
@@ -162,7 +168,7 @@ namespace MiaoWu.App.Services
         /// <summary>Provider 或模型目录变化；设置页保存后触发，UI 刷新模型胶囊。</summary>
         public event EventHandler ProvidersChanged;
 
-        /// <summary>把当前设置写回 settings.json。异常向上抛，由调用方提示。</summary>
+        /// <summary>把当前设置写回 config.json。异常向上抛，由调用方提示。</summary>
         public void SaveSettings()
         {
             Settings.Agent = AgentSettings.Normalize(Settings.Agent);

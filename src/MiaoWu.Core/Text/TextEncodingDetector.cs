@@ -45,7 +45,7 @@ namespace MiaoWu.Core.Text
     }
 
     /// <summary>
-    /// 文本编码识别，顺序与 docs/03-development-plan.md 3.3 一致：
+    /// 文本编码识别，顺序与 docs/04-work-plan.md 3.3 一致：
     /// 1. 检测 BOM；
     /// 2. 用最多 <see cref="SampleSize"/> 字节做严格 UTF-8 校验（纯 ASCII 也归到 UTF-8）；
     /// 3. 回退到系统 GBK（936），取不到再退到 <see cref="Encoding.Default"/>。

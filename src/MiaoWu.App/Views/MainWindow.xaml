@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:views="clr-namespace:MiaoWu.App.Views"
+        xmlns:conv="clr-namespace:MiaoWu.App.Converters"
         xmlns:res="clr-namespace:MiaoWu.App.Resources"
         mc:Ignorable="d"
         d:DesignWidth="1440"
@@ -36,8 +37,19 @@
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+    </Window.Resources>
+
     <Grid>
-        <views:ShellView x:Name="Shell" />
+        <views:ShellView x:Name="Shell"
+                         Visibility="{Binding DataContext.IsOnboarding, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVisibility}, FallbackValue=Visible}" />
+
+        <!-- 首次启动：同一主窗口内用引导页替换三栏工作台，不新开窗口。 -->
+        <views:OnboardingView x:Name="Onboarding"
+                              DataContext="{Binding Onboarding}"
+                              Visibility="{Binding DataContext.IsOnboarding, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
 
         <Border x:Name="WindowFrame"
                 Panel.ZIndex="100"

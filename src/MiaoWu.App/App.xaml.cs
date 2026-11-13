@@ -133,7 +133,7 @@ namespace MiaoWu.App
         {
             MessageBox.Show(
                 "初始化本地数据目录失败，应用无法启动。\n\n" +
-                "数据目录：%LocalAppData%\\MiaoWu（或 MIAOWU_DATA_DIR 指定目录）\n" +
+                "数据目录：用户目录\\.miaowu（或 MIAOWU_DATA_DIR 指定目录）\n" +
                 "错误：" + ex.Message + "\n\n" +
                 "请确认当前账户对该目录有写入权限。\n" +
                 "如果运行在受限沙箱中，请将环境变量 MIAOWU_DATA_DIR " +

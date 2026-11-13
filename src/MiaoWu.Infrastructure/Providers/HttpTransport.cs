@@ -15,7 +15,7 @@ namespace MiaoWu.Infrastructure.Providers
             ProxyMode = ProxyModes.System;
             ConnectTimeoutSeconds = 20;
             IdleTimeoutSeconds = 60;
-            UserAgent = "MiaoWu/0.1.0";
+            UserAgent = "MiaoWu/0.1.1";
         }
 
         public string ProxyMode { get; set; }

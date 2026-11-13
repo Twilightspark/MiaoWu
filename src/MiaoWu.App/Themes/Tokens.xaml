@@ -5,7 +5,7 @@
     <!-- ============================================================
          设计令牌：颜色、字体、尺寸、间距、圆角、动效。
          规则：Views / Controls 中不得出现颜色、字号、行高字面量。
-         色值来源：docs/02-ui-design.md 第 5、6、7 节。
+         色值来源：docs/03-ui-design.md 第 5、6、7 节。
          ============================================================ -->
 
     <!-- 中性色 -->
@@ -103,6 +103,7 @@
 
     <!-- 字号 -->
     <sys:Double x:Key="Font.AppName.Size">13</sys:Double>
+    <sys:Double x:Key="Font.Brand.Size">28</sys:Double>
     <sys:Double x:Key="Font.Section.Size">13.5</sys:Double>
     <sys:Double x:Key="Font.H1.Size">22</sys:Double>
     <sys:Double x:Key="Font.H2.Size">14</sys:Double>
@@ -121,6 +122,7 @@
 
     <!-- 行高 -->
     <sys:Double x:Key="Font.AppName.Line">20</sys:Double>
+    <sys:Double x:Key="Font.Brand.Line">38</sys:Double>
     <sys:Double x:Key="Font.Section.Line">20</sys:Double>
     <sys:Double x:Key="Font.H1.Line">32</sys:Double>
     <sys:Double x:Key="Font.H2.Line">22</sys:Double>
@@ -161,7 +163,7 @@
     <sys:Double x:Key="Metric.Input.ToolsRow">27</sys:Double>
     <sys:Double x:Key="Metric.Doc.CodeRadius">6</sys:Double>
     <sys:Double x:Key="Metric.Doc.BulletIndent">16</sys:Double>
-    <sys:Double x:Key="Metric.Window.Min.Width">1180</sys:Double>
+    <sys:Double x:Key="Metric.Window.Min.Width">1080</sys:Double>
     <sys:Double x:Key="Metric.Window.Min.Height">760</sys:Double>
     <sys:Double x:Key="Metric.Window.CornerRadius">8</sys:Double>
     <sys:Double x:Key="Metric.Icon">16</sys:Double>
@@ -206,6 +208,16 @@
     <sys:Double x:Key="Metric.Notification.Bottom">118</sys:Double>
     <sys:Double x:Key="Metric.Notification.BottomCollapsed">18</sys:Double>
     <sys:Double x:Key="Metric.Notification.Gap">9</sys:Double>
+
+    <!-- 首次启动引导：主窗口内两栏，左品牌、右表单 -->
+    <sys:Double x:Key="Metric.Onboarding.Icon">84</sys:Double>
+    <sys:Double x:Key="Metric.Onboarding.Left.Width">320</sys:Double>
+    <sys:Double x:Key="Metric.Onboarding.Form.Width">500</sys:Double>
+    <sys:Double x:Key="Metric.Onboarding.Field.Width">260</sys:Double>
+    <sys:Double x:Key="Metric.Onboarding.Button.Width">360</sys:Double>
+    <sys:Double x:Key="Metric.Onboarding.Button.Height">42</sys:Double>
+    <sys:Double x:Key="Metric.Onboarding.Row.MinHeight">92</sys:Double>
+    <sys:Double x:Key="Metric.Onboarding.Row.Provider.MinHeight">128</sys:Double>
 
     <!-- 圆角 -->
     <CornerRadius x:Key="Radius.Card">8</CornerRadius>

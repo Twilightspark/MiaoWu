@@ -265,6 +265,27 @@ namespace MiaoWu.App.Services
             mmi.ptMaxSize.X = bounds.Width;
             mmi.ptMaxSize.Y = bounds.Height;
 
+            // 自定义处理 WM_GETMINMAXINFO 会跳过 WPF 默认的最小尺寸写入，
+            // 这里按 MinWidth/MinHeight 补回，保证拖动缩放不会小于内容设计下限。
+            DpiScale dpi = VisualTreeHelper.GetDpi(_window);
+            if (_window.MinWidth > 0)
+            {
+                int minimumTrackWidth = (int)Math.Ceiling(_window.MinWidth * dpi.DpiScaleX);
+                if (minimumTrackWidth > mmi.ptMinTrackSize.X)
+                {
+                    mmi.ptMinTrackSize.X = minimumTrackWidth;
+                }
+            }
+
+            if (_window.MinHeight > 0)
+            {
+                int minimumTrackHeight = (int)Math.Ceiling(_window.MinHeight * dpi.DpiScaleY);
+                if (minimumTrackHeight > mmi.ptMinTrackSize.Y)
+                {
+                    mmi.ptMinTrackSize.Y = minimumTrackHeight;
+                }
+            }
+
             Marshal.StructureToPtr(mmi, lParam, true);
         }
 

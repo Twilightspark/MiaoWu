@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\Branding\MiaoWu.ico" />
+    <Resource Include="Assets\Branding\MiaoWu.png" />
   </ItemGroup>
 
   <ItemGroup>
