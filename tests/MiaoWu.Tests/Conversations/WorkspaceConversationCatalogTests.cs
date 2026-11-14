@@ -60,6 +60,24 @@ namespace MiaoWu.Tests.Conversations
         }
 
         [Fact]
+        public void ArchivedFlagIsExposedInSessionSummary()
+        {
+            var catalog = new WorkspaceConversationCatalog();
+            Workspace workspace = WorkspaceOf("w1", _workspaceA);
+            WorkspaceConversationStore store = catalog.GetStore(workspace);
+            store.CreateAsync(
+                    new ConversationDescriptor { SessionId = "s_01", WorkspaceId = "w1", Title = "A" },
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            store.SetArchivedAsync("s_01", true, CancellationToken.None).GetAwaiter().GetResult();
+
+            SessionSummary summary = Assert.Single(catalog.GetSessions(workspace));
+
+            Assert.True(summary.IsArchived);
+        }
+
+        [Fact]
         public void ReadingAWorkspaceCreatesAgentLayout()
         {
             var catalog = new WorkspaceConversationCatalog();

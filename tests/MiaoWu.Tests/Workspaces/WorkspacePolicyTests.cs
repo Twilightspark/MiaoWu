@@ -72,6 +72,22 @@ namespace MiaoWu.Tests.Workspaces
         }
 
         [Fact]
+        public void SortPutsPinnedFirstThenKeepsOrder()
+        {
+            var workspaces = new List<Workspace>
+            {
+                Workspace.Create("a", "A", @"C:\a", 0),
+                Workspace.Create("b", "B", @"C:\b", 1),
+                Workspace.Create("c", "C", @"C:\c", 2)
+            };
+            workspaces[2].IsPinned = true;
+
+            IReadOnlyList<Workspace> ordered = WorkspacePolicy.Sort(workspaces);
+
+            Assert.Equal(new[] { "c", "a", "b" }, new[] { ordered[0].Id, ordered[1].Id, ordered[2].Id });
+        }
+
+        [Fact]
         public void TryAddRejectsMissingFolder()
         {
             var workspaces = new List<Workspace>();

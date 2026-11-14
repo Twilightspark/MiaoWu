@@ -179,8 +179,9 @@ namespace MiaoWu.Core.Workspaces
             }
 
             return workspaces
-                .OrderBy(w => w.Order)
-                .ThenBy(w => w.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(w => w != null && w.IsPinned)
+                .ThenBy(w => w == null ? int.MaxValue : w.Order)
+                .ThenBy(w => w == null ? string.Empty : w.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 

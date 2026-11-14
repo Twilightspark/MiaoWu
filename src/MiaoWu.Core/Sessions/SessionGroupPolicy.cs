@@ -5,13 +5,14 @@ using System.Linq;
 
 namespace MiaoWu.Core.Sessions
 {
-    /// <summary>会话列表的四个平铺分组。</summary>
+    /// <summary>会话列表的五个平铺分组；归档组只在用户展开归档时出现。</summary>
     public enum SessionGroup
     {
         Pinned,
         Today,
         Yesterday,
-        Earlier
+        Earlier,
+        Archived
     }
 
     /// <summary>列表行类型：分组标题与真实会话行平铺进同一个集合，避免关闭虚拟化。</summary>
@@ -75,12 +76,23 @@ namespace MiaoWu.Core.Sessions
             SessionGroup.Pinned,
             SessionGroup.Today,
             SessionGroup.Yesterday,
-            SessionGroup.Earlier
+            SessionGroup.Earlier,
+            SessionGroup.Archived
         };
 
         public static SessionGroup GetGroup(SessionSummary session, DateTime now)
         {
-            if (session == null || session.IsPinned)
+            if (session == null)
+            {
+                return SessionGroup.Pinned;
+            }
+
+            if (session.IsArchived)
+            {
+                return SessionGroup.Archived;
+            }
+
+            if (session.IsPinned)
             {
                 return SessionGroup.Pinned;
             }

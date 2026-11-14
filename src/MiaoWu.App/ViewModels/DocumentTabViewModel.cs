@@ -53,7 +53,7 @@ namespace MiaoWu.App.ViewModels
             get { return Model.IsFileTab; }
         }
 
-        public string ToolTip { get; }
+        public string ToolTip { get; private set; }
 
         public DocumentContentViewModel Content
         {
@@ -104,6 +104,18 @@ namespace MiaoWu.App.ViewModels
         public void NotifyMetaChanged()
         {
             OnPropertyChanged(nameof(MetaText));
+        }
+
+        /// <summary>文件在磁盘上重命名后同步标签路径与标题。</summary>
+        public void ApplyRename(string filePath, string title)
+        {
+            Model.FilePath = filePath;
+            Model.Title = title ?? string.Empty;
+            ToolTip = title ?? string.Empty;
+            OnPropertyChanged(nameof(Title));
+            OnPropertyChanged(nameof(FilePath));
+            OnPropertyChanged(nameof(ToolTip));
+            OnPropertyChanged(nameof(AutomationName));
         }
     }
 }

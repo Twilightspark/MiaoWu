@@ -57,6 +57,9 @@ namespace MiaoWu.Core.Workspaces
 
         public int Order { get; set; }
 
+        /// <summary>置顶的工作区排在列表最前，并显示图钉。</summary>
+        public bool IsPinned { get; set; }
+
         /// <summary>会话数，显示在工作区行右侧。P2 由会话种子数据提供。</summary>
         public int SessionCount { get; set; }
 
@@ -104,6 +107,7 @@ namespace MiaoWu.Core.Workspaces
                 Name = Name,
                 Path = Path,
                 Order = Order,
+                IsPinned = IsPinned,
                 SessionCount = SessionCount
             };
 

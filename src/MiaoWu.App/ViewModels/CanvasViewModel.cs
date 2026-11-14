@@ -358,6 +358,50 @@ namespace MiaoWu.App.ViewModels
             RaiseStateChanged();
         }
 
+        /// <summary>文件被重命名：同步同路径标签，并重新加载预览。</summary>
+        public void HandleFileRenamed(string oldPath, string newPath)
+        {
+            if (string.IsNullOrEmpty(oldPath) || string.IsNullOrEmpty(newPath))
+            {
+                return;
+            }
+
+            foreach (DocumentTabViewModel tab in _tabs.ToList())
+            {
+                if (!tab.IsFileTab
+                    || !string.Equals(tab.FilePath, oldPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                tab.ApplyRename(newPath, Path.GetFileName(newPath));
+                tab.ReplaceContent(new LoadingDocumentContent());
+                StartLoad(tab, tab.Model.ScrollOffset);
+                FileClosed?.Invoke(this, new FileOpenedEventArgs(oldPath));
+                FileOpened?.Invoke(this, new FileOpenedEventArgs(newPath));
+            }
+
+            RaiseStateChanged();
+        }
+
+        /// <summary>文件被删除：关闭所有指向该路径的标签。</summary>
+        public void HandleFileDeleted(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return;
+            }
+
+            foreach (DocumentTabViewModel tab in _tabs.ToList())
+            {
+                if (tab.IsFileTab
+                    && string.Equals(tab.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    CloseTab(tab);
+                }
+            }
+        }
+
         public void Save(UiSettings settings)
         {
             if (settings == null)

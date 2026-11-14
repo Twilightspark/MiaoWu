@@ -54,6 +54,18 @@ namespace MiaoWu.App.Resources
 
         public static string AddWorkspace => Get(nameof(AddWorkspace));
 
+        public static string NewWorkspace => Get(nameof(NewWorkspace));
+
+        public static string NewWorkspaceTooltip => Get(nameof(NewWorkspaceTooltip));
+
+        public static string ScheduledTasks => Get(nameof(ScheduledTasks));
+
+        public static string ScheduledTasksHint => Get(nameof(ScheduledTasksHint));
+
+        public static string ScheduledTasksPendingTitle => Get(nameof(ScheduledTasksPendingTitle));
+
+        public static string ScheduledTasksPendingBody => Get(nameof(ScheduledTasksPendingBody));
+
         public static string NewSession => Get(nameof(NewSession));
 
         public static string More => Get(nameof(More));
@@ -210,9 +222,7 @@ namespace MiaoWu.App.Resources
 
         public static string AddWorkspacePrimary => Get(nameof(AddWorkspacePrimary));
 
-        public static string SessionsEmptyTitle => Get(nameof(SessionsEmptyTitle));
-
-        public static string SessionsEmptyBody => Get(nameof(SessionsEmptyBody));
+        public static string SessionsEmptyHint => Get(nameof(SessionsEmptyHint));
 
         public static string NewSessionPendingHint => Get(nameof(NewSessionPendingHint));
 
@@ -222,9 +232,7 @@ namespace MiaoWu.App.Resources
 
         public static string OpenFileDialogTitle => Get(nameof(OpenFileDialogTitle));
 
-        public static string FilesEmptyTitle => Get(nameof(FilesEmptyTitle));
-
-        public static string FilesEmptyBody => Get(nameof(FilesEmptyBody));
+        public static string FilesEmptyHint => Get(nameof(FilesEmptyHint));
 
         public static string MarketplaceComingSoon => Get(nameof(MarketplaceComingSoon));
 
@@ -237,6 +245,50 @@ namespace MiaoWu.App.Resources
         public static string SettingsPendingBody => Get(nameof(SettingsPendingBody));
 
         public static string OverlayClose => Get(nameof(OverlayClose));
+
+        public static string NewSessionInWorkspaceTooltip => Get(nameof(NewSessionInWorkspaceTooltip));
+
+        public static string WorkspaceActions => Get(nameof(WorkspaceActions));
+
+        public static string SessionActions => Get(nameof(SessionActions));
+
+        public static string FileActions => Get(nameof(FileActions));
+
+        public static string PinWorkspace => Get(nameof(PinWorkspace));
+
+        public static string UnpinWorkspace => Get(nameof(UnpinWorkspace));
+
+        public static string RenameWorkspace => Get(nameof(RenameWorkspace));
+
+        public static string ClearWorkspaceSessions => Get(nameof(ClearWorkspaceSessions));
+
+        public static string DeleteWorkspace => Get(nameof(DeleteWorkspace));
+
+        public static string PinSession => Get(nameof(PinSession));
+
+        public static string UnpinSession => Get(nameof(UnpinSession));
+
+        public static string RenameSessionTitle => Get(nameof(RenameSessionTitle));
+
+        public static string ArchiveSession => Get(nameof(ArchiveSession));
+
+        public static string UnarchiveSession => Get(nameof(UnarchiveSession));
+
+        public static string DeleteSession => Get(nameof(DeleteSession));
+
+        public static string Archived => Get(nameof(Archived));
+
+        public static string RenameFile => Get(nameof(RenameFile));
+
+        public static string DeleteFile => Get(nameof(DeleteFile));
+
+        public static string Delete => Get(nameof(Delete));
+
+        public static string DeleteFileConfirmTitle => Get(nameof(DeleteFileConfirmTitle));
+
+        public static string WorkspaceNameEmptyError => Get(nameof(WorkspaceNameEmptyError));
+
+        public static string SessionTitleEmptyError => Get(nameof(SessionTitleEmptyError));
 
         // ===== P2：中栏画布 =====
 

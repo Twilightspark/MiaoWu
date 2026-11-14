@@ -20,6 +20,8 @@ namespace MiaoWu.App.ViewModels
     {
         private readonly ISessionCatalog _sessionCatalog;
         private readonly IFileCatalog _fileCatalog;
+        private readonly ISessionEditor _sessionEditor;
+        private readonly IFileEditor _fileEditor;
         private readonly IFolderPicker _folderPicker;
         private readonly IFilePicker _filePicker;
         private readonly IDialogService _dialogs;
@@ -33,6 +35,8 @@ namespace MiaoWu.App.ViewModels
         public LeftPaneViewModel(
             ISessionCatalog sessionCatalog,
             IFileCatalog fileCatalog,
+            ISessionEditor sessionEditor,
+            IFileEditor fileEditor,
             IFolderPicker folderPicker,
             IFilePicker filePicker,
             IDialogService dialogs,
@@ -41,6 +45,8 @@ namespace MiaoWu.App.ViewModels
         {
             _sessionCatalog = sessionCatalog ?? throw new ArgumentNullException(nameof(sessionCatalog));
             _fileCatalog = fileCatalog ?? throw new ArgumentNullException(nameof(fileCatalog));
+            _sessionEditor = sessionEditor ?? throw new ArgumentNullException(nameof(sessionEditor));
+            _fileEditor = fileEditor ?? throw new ArgumentNullException(nameof(fileEditor));
             _folderPicker = folderPicker ?? throw new ArgumentNullException(nameof(folderPicker));
             _filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
             _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
@@ -53,6 +59,7 @@ namespace MiaoWu.App.ViewModels
             ToggleViewCommand = new RelayCommand(ToggleViewFromParameter);
             OpenSettingsCommand = new RelayCommand(RaiseSettingsRequested);
             OpenMarketplaceCommand = new RelayCommand(RaiseMarketplaceRequested);
+            OpenScheduledTasksCommand = new RelayCommand(RaiseScheduledTasksRequested);
             NewSessionCommand = new RelayCommand(RaiseNewSessionRequested, () => _activeWorkspace != null);
             SearchCommand = new RelayCommand(() => { }, () => false);
 
@@ -105,11 +112,28 @@ namespace MiaoWu.App.ViewModels
 
         public event EventHandler MarketplaceRequested;
 
+        /// <summary>用户点击“定时任务”。与能力市场一致，先给出即将推出的说明。</summary>
+        public event EventHandler ScheduledTasksRequested;
+
         /// <summary>活动工作区的选中会话变化（含首次加载与新建后选中）。</summary>
         public event EventHandler SessionSelectionChanged;
 
         /// <summary>用户点击“新建会话”。由主窗口创建真实的 .agent 会话。</summary>
         public event EventHandler NewSessionRequested;
+
+        /// <summary>左栏重命名会话成功后通知主窗口同步右栏标题。</summary>
+        public event EventHandler<SessionRenamedEventArgs> SessionRenamed;
+
+        /// <summary>用户要求删除会话；由主窗口先关停运行中的会话再删文件。</summary>
+        public event EventHandler<SessionActionRequestedEventArgs> SessionDeleteRequested;
+
+        /// <summary>用户要求清空工作区会话；由主窗口统一关停并删除。</summary>
+        public event EventHandler<WorkspaceActionRequestedEventArgs> ClearSessionsRequested;
+
+        /// <summary>文件重命名/删除后通知主窗口同步中栏标签。</summary>
+        public event EventHandler<FileRenamedEventArgs> FileRenamed;
+
+        public event EventHandler<FileDeletedEventArgs> FileDeleted;
 
         public DateTime Now { get; }
 
@@ -197,6 +221,8 @@ namespace MiaoWu.App.ViewModels
 
         public RelayCommand OpenMarketplaceCommand { get; }
 
+        public RelayCommand OpenScheduledTasksCommand { get; }
+
         public RelayCommand NewSessionCommand { get; }
 
         public RelayCommand SearchCommand { get; }
@@ -232,6 +258,31 @@ namespace MiaoWu.App.ViewModels
             RaiseSessionSelectionChanged();
         }
 
+        /// <summary>单击工作区行：已展开的收起，其余展开（保持手风琴单选）。</summary>
+        public void ToggleWorkspace(WorkspaceItemViewModel workspace)
+        {
+            if (workspace == null || !_workspaces.Contains(workspace))
+            {
+                return;
+            }
+
+            bool collapsedHere = ReferenceEquals(workspace, _activeWorkspace) && workspace.Model.IsExpanded;
+            if (!collapsedHere)
+            {
+                ActivateWorkspace(workspace);
+                return;
+            }
+
+            WorkspacePolicy.ExpandOnly(_workspaces.Select(w => w.Model), null);
+            foreach (WorkspaceItemViewModel item in _workspaces)
+            {
+                item.RefreshExpansion();
+            }
+
+            InlineError = null;
+            RaiseStateChanged();
+        }
+
         public void SetActiveView(WorkspaceView view)
         {
             if (_activeWorkspace == null)
@@ -256,6 +307,205 @@ namespace MiaoWu.App.ViewModels
         public void NotifyWorkspaceStateChanged()
         {
             RaiseStateChanged();
+        }
+
+        /// <summary>内联错误：一次只显示一条，下一次成功操作时清除。</summary>
+        public void ReportError(string message)
+        {
+            InlineError = message;
+        }
+
+        /// <summary>在指定工作区新建会话：先激活该工作区，再走统一的 NewSessionRequested。</summary>
+        public void NewSessionFor(WorkspaceItemViewModel workspace)
+        {
+            if (workspace == null || !_workspaces.Contains(workspace))
+            {
+                return;
+            }
+
+            ActivateWorkspace(workspace);
+            RaiseNewSessionRequested();
+        }
+
+        /// <summary>按置顶优先刷新工作区行顺序；活动工作区引用不变。</summary>
+        public void SortWorkspaceItems()
+        {
+            IReadOnlyList<Workspace> orderedModels = WorkspacePolicy.Sort(
+                _workspaces.Select(w => w.Model));
+            var orderedItems = new List<WorkspaceItemViewModel>(orderedModels.Count);
+
+            foreach (Workspace model in orderedModels)
+            {
+                WorkspaceItemViewModel match = _workspaces.FirstOrDefault(
+                    w => ReferenceEquals(w.Model, model));
+                if (match != null)
+                {
+                    orderedItems.Add(match);
+                }
+            }
+
+            for (int index = 0; index < orderedItems.Count; index++)
+            {
+                int current = _workspaces.IndexOf(orderedItems[index]);
+                if (current != index)
+                {
+                    _workspaces.Move(current, index);
+                }
+            }
+        }
+
+        public void RenameSession(WorkspaceItemViewModel workspace, string sessionId, string title)
+        {
+            if (workspace == null || string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            try
+            {
+                _sessionEditor
+                    .RenameAsync(workspace.Model, sessionId, title, System.Threading.CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+
+                InlineError = null;
+                workspace.RefreshSessions();
+                workspace.SelectSessionById(sessionId);
+                SessionRenamed?.Invoke(this, new SessionRenamedEventArgs(workspace, sessionId, title));
+            }
+            catch (Exception exception)
+            {
+                ReportError(exception.Message);
+            }
+        }
+
+        public void SetSessionPinned(WorkspaceItemViewModel workspace, string sessionId, bool pinned)
+        {
+            if (workspace == null || string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            try
+            {
+                _sessionEditor
+                    .SetPinnedAsync(
+                        workspace.Model,
+                        sessionId,
+                        pinned,
+                        System.Threading.CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+
+                InlineError = null;
+                workspace.RefreshSessions();
+                workspace.SelectSessionById(sessionId);
+            }
+            catch (Exception exception)
+            {
+                ReportError(exception.Message);
+            }
+        }
+
+        public void SetSessionArchived(WorkspaceItemViewModel workspace, string sessionId, bool archived)
+        {
+            if (workspace == null || string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            try
+            {
+                _sessionEditor
+                    .SetArchivedAsync(
+                        workspace.Model,
+                        sessionId,
+                        archived,
+                        System.Threading.CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+
+                InlineError = null;
+                workspace.RefreshSessions();
+                if (!archived)
+                {
+                    workspace.SelectSessionById(sessionId);
+                }
+            }
+            catch (Exception exception)
+            {
+                ReportError(exception.Message);
+            }
+        }
+
+        public void RequestDeleteSession(
+            WorkspaceItemViewModel workspace,
+            string sessionId,
+            string title)
+        {
+            if (workspace == null || string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            SessionDeleteRequested?.Invoke(
+                this,
+                new SessionActionRequestedEventArgs(workspace, sessionId, title));
+        }
+
+        public void RequestClearSessions(WorkspaceItemViewModel workspace)
+        {
+            if (workspace == null)
+            {
+                return;
+            }
+
+            ClearSessionsRequested?.Invoke(
+                this,
+                new WorkspaceActionRequestedEventArgs(workspace));
+        }
+
+        /// <summary>重命名文件；成功后在已打开集合里同步旧路径，并通知中栏。</summary>
+        public string RenameFile(string filePath, string newName)
+        {
+            string oldPath = System.IO.Path.GetFullPath(filePath);
+            string newPath = System.IO.Path.GetFullPath(_fileEditor.Rename(oldPath, newName));
+            InlineError = null;
+
+            if (_openedFiles.Remove(oldPath))
+            {
+                _openedFiles.Add(newPath);
+            }
+
+            FileRenamed?.Invoke(this, new FileRenamedEventArgs(oldPath, newPath));
+            return newPath;
+        }
+
+        /// <summary>删除文件（回收站），并从已打开集合移除。</summary>
+        public void DeleteFile(string filePath)
+        {
+            string path = System.IO.Path.GetFullPath(filePath);
+            _fileEditor.Delete(path);
+            InlineError = null;
+
+            if (_openedFiles.Remove(path))
+            {
+                foreach (WorkspaceItemViewModel workspace in _workspaces)
+                {
+                    ApplyOpenedState(workspace);
+                }
+            }
+
+            FileDeleted?.Invoke(this, new FileDeletedEventArgs(path));
+        }
+
+        public bool ConfirmFileDelete(string fileName)
+        {
+            return _dialogs.Confirm(
+                Strings.DeleteFileConfirmTitle,
+                "“" + (fileName ?? string.Empty) + "”将被移到回收站，可从回收站恢复。",
+                Strings.Delete,
+                Strings.Cancel);
         }
 
         /// <summary>用磁盘上的最新工作区列表重建左栏（首次向导完成后调用）。</summary>
@@ -474,6 +724,8 @@ namespace MiaoWu.App.ViewModels
                     return Strings.Today;
                 case SessionGroup.Yesterday:
                     return Strings.Yesterday;
+                case SessionGroup.Archived:
+                    return Strings.Archived;
                 default:
                     return Strings.Earlier;
             }
@@ -601,10 +853,83 @@ namespace MiaoWu.App.ViewModels
             MarketplaceRequested?.Invoke(this, EventArgs.Empty);
         }
 
+        private void RaiseScheduledTasksRequested()
+        {
+            ScheduledTasksRequested?.Invoke(this, EventArgs.Empty);
+        }
+
         private void RaiseStateChanged()
         {
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    public sealed class SessionRenamedEventArgs : EventArgs
+    {
+        public SessionRenamedEventArgs(WorkspaceItemViewModel workspace, string sessionId, string title)
+        {
+            Workspace = workspace;
+            SessionId = sessionId;
+            Title = title;
+        }
+
+        public WorkspaceItemViewModel Workspace { get; }
+
+        public string SessionId { get; }
+
+        public string Title { get; }
+    }
+
+    public sealed class SessionActionRequestedEventArgs : EventArgs
+    {
+        public SessionActionRequestedEventArgs(
+            WorkspaceItemViewModel workspace,
+            string sessionId,
+            string title)
+        {
+            Workspace = workspace;
+            SessionId = sessionId;
+            Title = title;
+        }
+
+        public WorkspaceItemViewModel Workspace { get; }
+
+        public string SessionId { get; }
+
+        public string Title { get; }
+    }
+
+    public sealed class WorkspaceActionRequestedEventArgs : EventArgs
+    {
+        public WorkspaceActionRequestedEventArgs(WorkspaceItemViewModel workspace)
+        {
+            Workspace = workspace;
+        }
+
+        public WorkspaceItemViewModel Workspace { get; }
+    }
+
+    public sealed class FileRenamedEventArgs : EventArgs
+    {
+        public FileRenamedEventArgs(string oldPath, string newPath)
+        {
+            OldPath = oldPath;
+            NewPath = newPath;
+        }
+
+        public string OldPath { get; }
+
+        public string NewPath { get; }
+    }
+
+    public sealed class FileDeletedEventArgs : EventArgs
+    {
+        public FileDeletedEventArgs(string filePath)
+        {
+            FilePath = filePath;
+        }
+
+        public string FilePath { get; }
     }
 
     public sealed class FileOpenRequestedEventArgs : EventArgs

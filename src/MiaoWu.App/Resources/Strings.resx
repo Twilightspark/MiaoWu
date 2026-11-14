@@ -78,6 +78,24 @@
   <data name="AddWorkspace" xml:space="preserve">
     <value>添加工作区</value>
   </data>
+  <data name="NewWorkspace" xml:space="preserve">
+    <value>新建工作区</value>
+  </data>
+  <data name="NewWorkspaceTooltip" xml:space="preserve">
+    <value>选择一个文件夹作为新工作区</value>
+  </data>
+  <data name="ScheduledTasks" xml:space="preserve">
+    <value>定时任务</value>
+  </data>
+  <data name="ScheduledTasksHint" xml:space="preserve">
+    <value>定时任务即将推出</value>
+  </data>
+  <data name="ScheduledTasksPendingTitle" xml:space="preserve">
+    <value>定时任务</value>
+  </data>
+  <data name="ScheduledTasksPendingBody" xml:space="preserve">
+    <value>定时任务将在后续版本提供：按计划自动运行指定的会话与工具，当前版本只保留入口。</value>
+  </data>
   <data name="NewSession" xml:space="preserve">
     <value>新建会话</value>
   </data>
@@ -311,11 +329,8 @@
   <data name="AddWorkspacePrimary" xml:space="preserve">
     <value>添加工作区</value>
   </data>
-  <data name="SessionsEmptyTitle" xml:space="preserve">
-    <value>还没有会话</value>
-  </data>
-  <data name="SessionsEmptyBody" xml:space="preserve">
-    <value>新建会话后，消息与工具记录会出现在右栏。</value>
+  <data name="SessionsEmptyHint" xml:space="preserve">
+    <value>工作区下还没有会话</value>
   </data>
   <data name="NewSessionPendingHint" xml:space="preserve">
     <value>新建会话将在 P3 接入</value>
@@ -329,11 +344,8 @@
   <data name="OpenFileDialogTitle" xml:space="preserve">
     <value>打开文件</value>
   </data>
-  <data name="FilesEmptyTitle" xml:space="preserve">
-    <value>没有可显示的文件</value>
-  </data>
-  <data name="FilesEmptyBody" xml:space="preserve">
-    <value>这个文件夹是空的，或内容无法读取。</value>
+  <data name="FilesEmptyHint" xml:space="preserve">
+    <value>工作区下还没有文件</value>
   </data>
   <data name="MarketplaceComingSoon" xml:space="preserve">
     <value>即将推出</value>
@@ -352,6 +364,74 @@
   </data>
   <data name="OverlayClose" xml:space="preserve">
     <value>关闭</value>
+  </data>
+
+  <!-- ===== 左栏行操作：hover 入口与悬浮菜单 ===== -->
+  <data name="NewSessionInWorkspaceTooltip" xml:space="preserve">
+    <value>在此工作区新建会话</value>
+  </data>
+  <data name="WorkspaceActions" xml:space="preserve">
+    <value>工作区操作</value>
+  </data>
+  <data name="SessionActions" xml:space="preserve">
+    <value>会话操作</value>
+  </data>
+  <data name="FileActions" xml:space="preserve">
+    <value>文件操作</value>
+  </data>
+  <data name="PinWorkspace" xml:space="preserve">
+    <value>置顶工作</value>
+  </data>
+  <data name="UnpinWorkspace" xml:space="preserve">
+    <value>取消置顶</value>
+  </data>
+  <data name="RenameWorkspace" xml:space="preserve">
+    <value>修改名称</value>
+  </data>
+  <data name="ClearWorkspaceSessions" xml:space="preserve">
+    <value>清除会话</value>
+  </data>
+  <data name="DeleteWorkspace" xml:space="preserve">
+    <value>删除工作区</value>
+  </data>
+  <data name="PinSession" xml:space="preserve">
+    <value>置顶会话</value>
+  </data>
+  <data name="UnpinSession" xml:space="preserve">
+    <value>取消置顶</value>
+  </data>
+  <data name="RenameSessionTitle" xml:space="preserve">
+    <value>修改题目</value>
+  </data>
+  <data name="ArchiveSession" xml:space="preserve">
+    <value>归档</value>
+  </data>
+  <data name="UnarchiveSession" xml:space="preserve">
+    <value>取消归档</value>
+  </data>
+  <data name="DeleteSession" xml:space="preserve">
+    <value>删除会话</value>
+  </data>
+  <data name="Archived" xml:space="preserve">
+    <value>已归档</value>
+  </data>
+  <data name="RenameFile" xml:space="preserve">
+    <value>重命名</value>
+  </data>
+  <data name="DeleteFile" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="DeleteFileConfirmTitle" xml:space="preserve">
+    <value>删除文件</value>
+  </data>
+  <data name="WorkspaceNameEmptyError" xml:space="preserve">
+    <value>工作区名称不能为空。</value>
+  </data>
+  <data name="SessionTitleEmptyError" xml:space="preserve">
+    <value>会话题目不能为空。</value>
   </data>
 
   <!-- ===== P2：中栏画布 ===== -->

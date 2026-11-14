@@ -126,6 +126,27 @@ namespace MiaoWu.Tests.Agents
         }
 
         [Fact]
+        public async Task UserRenameIsNotOverwrittenByFirstMessageAutoTitle()
+        {
+            _api.EnqueueText("收到。");
+
+            IAgentSession session = await CreateSessionAsync("s_rename");
+            await session.RenameAsync("我的标题", CancellationToken.None);
+
+            AgentRun run = await session.SendAsync(
+                TextInput("这是一条很长的用户消息，不应该覆盖标题"),
+                AgentSendMode.Queue,
+                CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            Assert.Equal("我的标题", session.Snapshot().Title);
+            MiaoWu.Core.Conversations.ConversationTranscript transcript =
+                await _store.LoadAsync("s_rename", CancellationToken.None);
+            Assert.Equal("我的标题", transcript.Title);
+        }
+
+        [Fact]
         public async Task FailureIsReportedAsEventAndMessageStatus()
         {
             _api.EnqueueFailure(new AgentError

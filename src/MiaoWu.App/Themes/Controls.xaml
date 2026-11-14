@@ -141,6 +141,15 @@
         <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
     </Style>
 
+    <Style x:Key="Text.LeftSection" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource Font.LeftSection.Size}" />
+        <Setter Property="LineHeight" Value="{StaticResource Font.LeftSection.Line}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
     <Style x:Key="Text.H1" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{StaticResource Font.H1.Size}" />
         <Setter Property="LineHeight" Value="{StaticResource Font.H1.Line}" />
@@ -332,7 +341,7 @@
         <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
         <Setter Property="FontSize" Value="{StaticResource Font.Button.Size}" />
         <Setter Property="FontWeight" Value="{StaticResource Font.Weight.Medium}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.White}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
         <Setter Property="Padding" Value="{StaticResource Pad.Button.Primary}" />
         <Setter Property="Height" Value="{StaticResource Metric.Button.Primary.Height}" />
         <Setter Property="Cursor" Value="Hand" />
@@ -387,6 +396,15 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- 左栏主操作：主题色表面 + 白字白图标（深色主题沿用同一组令牌） -->
+    <Style x:Key="Button.NavAccent" TargetType="Button" BasedOn="{StaticResource Button.Primary}">
+        <Setter Property="Height" Value="{StaticResource Metric.Row.Workspace}" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource Pad.Button.NavAccent}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
     <Style x:Key="Button.Window" TargetType="Button">
@@ -646,6 +664,10 @@
                 <Setter Property="IsEnabled" Value="False" />
                 <Setter Property="Focusable" Value="False" />
                 <Setter Property="Opacity" Value="1" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Setter Property="Focusable" Value="False" />
             </DataTrigger>
         </Style.Triggers>
     </Style>

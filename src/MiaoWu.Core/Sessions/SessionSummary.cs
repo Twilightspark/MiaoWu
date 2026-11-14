@@ -19,6 +19,9 @@ namespace MiaoWu.Core.Sessions
 
         public bool IsPinned { get; set; }
 
+        /// <summary>已归档的会话默认不出现在最近会话里，可在列表底部展开。</summary>
+        public bool IsArchived { get; set; }
+
         public bool IsUnread { get; set; }
 
         public bool HasPendingApproval { get; set; }
@@ -32,6 +35,7 @@ namespace MiaoWu.Core.Sessions
                 Title = Title,
                 UpdatedAt = UpdatedAt,
                 IsPinned = IsPinned,
+                IsArchived = IsArchived,
                 IsUnread = IsUnread,
                 HasPendingApproval = HasPendingApproval
             };

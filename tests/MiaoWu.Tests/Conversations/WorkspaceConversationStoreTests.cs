@@ -258,6 +258,45 @@ namespace MiaoWu.Tests.Conversations
         }
 
         [Fact]
+        public void PinAndArchiveSurviveIndexRebuild()
+        {
+            WorkspaceConversationStore store = NewStore();
+            store.CreateAsync(Descriptor("s_01", "标题"), None).GetAwaiter().GetResult();
+
+            store.SetPinnedAsync("s_01", true, None).GetAwaiter().GetResult();
+            store.SetArchivedAsync("s_01", true, None).GetAwaiter().GetResult();
+
+            Assert.True(Load(store).Sessions[0].IsPinned);
+            Assert.True(Load(store).Sessions[0].IsArchived);
+
+            // 删除派生索引，强制从 JSONL 重放：置顶与归档不能丢。
+            File.Delete(AgentWorkspaceLayout.GetIndexFilePath(_workspace));
+            ConversationIndex rebuilt = Load(NewStore());
+
+            Assert.True(rebuilt.Sessions[0].IsPinned);
+            Assert.True(rebuilt.Sessions[0].IsArchived);
+            Assert.True(LoadTranscript(NewStore(), "s_01").IsPinned);
+            Assert.True(LoadTranscript(NewStore(), "s_01").IsArchived);
+        }
+
+        [Fact]
+        public void ClearRemovesAllSessionsButKeepsWorkspaceFiles()
+        {
+            WorkspaceConversationStore store = NewStore();
+            store.CreateAsync(Descriptor("s_01", "A"), None).GetAwaiter().GetResult();
+            store.CreateAsync(Descriptor("s_02", "B"), None).GetAwaiter().GetResult();
+            string keep = Path.Combine(_workspace, "notes.txt");
+            File.WriteAllText(keep, "keep");
+
+            store.ClearAsync(None).GetAwaiter().GetResult();
+
+            Assert.Empty(Load(store).Sessions);
+            Assert.False(File.Exists(SessionFile("s_01")));
+            Assert.False(File.Exists(SessionFile("s_02")));
+            Assert.True(File.Exists(keep));
+        }
+
+        [Fact]
         public void RenameWithBlankTitleFallsBackToDefault()
         {
             WorkspaceConversationStore store = NewStore();

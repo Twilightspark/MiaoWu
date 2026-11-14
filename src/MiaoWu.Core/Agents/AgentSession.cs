@@ -466,6 +466,8 @@ namespace MiaoWu.Core.Agents
             lock (_gate)
             {
                 _title = normalized;
+                // 用户显式改过标题后，首条消息不再自动覆盖。
+                _firstMessage = false;
             }
 
             Publish(new SessionTitleChangedEvent { Title = normalized });

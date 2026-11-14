@@ -127,6 +127,7 @@ namespace MiaoWu.Infrastructure.Storage
                 item["name"] = StringValue(workspace.Name);
                 item["path"] = StringValue(workspace.Path);
                 item["order"] = JsonValue.From(order++);
+                item["pinned"] = JsonValue.From(workspace.IsPinned);
                 item["expanded"] = JsonValue.From(workspace.IsExpanded);
                 item["view"] = JsonValue.From(workspace.View.ToString());
                 item["scrollOffset"] = JsonValue.From(workspace.ScrollOffset);
@@ -183,6 +184,7 @@ namespace MiaoWu.Infrastructure.Storage
                 Name = GetString(value, "name") ?? WorkspacePolicy.GetDisplayName(normalized),
                 Path = normalized,
                 Order = GetInt(value, "order", 0),
+                IsPinned = GetBool(value, "pinned", false),
                 IsExpanded = GetBool(value, "expanded", false),
                 View = view,
                 ScrollOffset = Math.Max(0, GetDouble(value, "scrollOffset", 0)),

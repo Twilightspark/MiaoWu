@@ -8,13 +8,34 @@ using MiaoWu.Core.Workspaces;
 
 namespace MiaoWu.App.ViewModels
 {
-    /// <summary>会话列表的一行：分组标题或会话。标题行不参与选中。</summary>
-    public sealed class SessionRowViewModel : ObservableObject
+    /// <summary>行内重命名的公共形状，供视图在失焦时统一提交。</summary>
+    public interface IInlineRenameRow
     {
-        private readonly DateTime _now;
+        bool IsRenaming { get; }
 
-        public SessionRowViewModel(SessionListRow row, string headerText, DateTime now)
+        string RenameDraft { get; set; }
+
+        void CommitRename();
+
+        void CancelRename();
+    }
+
+    /// <summary>会话列表的一行：分组标题或会话。标题行不参与选中。</summary>
+    public sealed class SessionRowViewModel : ObservableObject, IInlineRenameRow
+    {
+        private readonly WorkspaceItemViewModel _owner;
+        private readonly DateTime _now;
+        private bool _isHidden;
+        private bool _isRenaming;
+        private string _renameDraft;
+
+        public SessionRowViewModel(
+            WorkspaceItemViewModel owner,
+            SessionListRow row,
+            string headerText,
+            DateTime now)
         {
+            _owner = owner ?? throw new ArgumentNullException(nameof(owner));
             if (row == null)
             {
                 throw new ArgumentNullException(nameof(row));
@@ -25,9 +46,32 @@ namespace MiaoWu.App.ViewModels
             HeaderText = headerText ?? string.Empty;
             Session = row.Session;
             Group = row.Group;
+
+            BeginRenameCommand = new RelayCommand(BeginRename, () => !IsHeader);
+            CommitRenameCommand = new RelayCommand(CommitRename, () => _isRenaming);
+            CancelRenameCommand = new RelayCommand(CancelRename, () => _isRenaming);
+            TogglePinCommand = new RelayCommand(TogglePin, () => !IsHeader);
+            ToggleArchiveCommand = new RelayCommand(ToggleArchive, () => !IsHeader);
+            DeleteCommand = new RelayCommand(Delete, () => !IsHeader);
         }
 
         public bool IsHeader { get; }
+
+        /// <summary>超出“最近几条”时折叠该行；保留显示集合以免丢失选中项。</summary>
+        public bool IsHidden
+        {
+            get { return _isHidden; }
+            set
+            {
+                if (_isHidden == value)
+                {
+                    return;
+                }
+
+                _isHidden = value;
+                OnPropertyChanged();
+            }
+        }
 
         public SessionGroup Group { get; }
 
@@ -38,6 +82,11 @@ namespace MiaoWu.App.ViewModels
         public bool IsPinned
         {
             get { return Session != null && Session.IsPinned; }
+        }
+
+        public bool IsArchived
+        {
+            get { return Session != null && Session.IsArchived; }
         }
 
         public bool IsUnread
@@ -60,6 +109,38 @@ namespace MiaoWu.App.ViewModels
             get { return Session == null ? string.Empty : SessionGroupPolicy.FormatTime(Session, _now); }
         }
 
+        /// <summary>菜单文案随当前状态切换：置顶/取消置顶、归档/取消归档。</summary>
+        public string PinActionText
+        {
+            get { return IsPinned ? Strings.UnpinSession : Strings.PinSession; }
+        }
+
+        public string ArchiveActionText
+        {
+            get { return IsArchived ? Strings.UnarchiveSession : Strings.ArchiveSession; }
+        }
+
+        public bool IsRenaming
+        {
+            get { return _isRenaming; }
+            private set
+            {
+                if (_isRenaming == value)
+                {
+                    return;
+                }
+
+                _isRenaming = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string RenameDraft
+        {
+            get { return _renameDraft; }
+            set { SetProperty(ref _renameDraft, value); }
+        }
+
         public string ToolTip
         {
             get
@@ -78,19 +159,87 @@ namespace MiaoWu.App.ViewModels
             get { return IsHeader ? HeaderText : Title; }
         }
 
+        public RelayCommand BeginRenameCommand { get; }
+
+        public RelayCommand CommitRenameCommand { get; }
+
+        public RelayCommand CancelRenameCommand { get; }
+
+        public RelayCommand TogglePinCommand { get; }
+
+        public RelayCommand ToggleArchiveCommand { get; }
+
+        public RelayCommand DeleteCommand { get; }
+
         public void Refresh()
         {
             OnPropertyChanged(nameof(IsPinned));
+            OnPropertyChanged(nameof(IsArchived));
             OnPropertyChanged(nameof(IsUnread));
             OnPropertyChanged(nameof(HasPendingApproval));
             OnPropertyChanged(nameof(TimeText));
+            OnPropertyChanged(nameof(PinActionText));
+            OnPropertyChanged(nameof(ArchiveActionText));
+        }
+
+        public void BeginRename()
+        {
+            if (IsHeader || Session == null)
+            {
+                return;
+            }
+
+            RenameDraft = Title;
+            IsRenaming = true;
+        }
+
+        public void CommitRename()
+        {
+            if (!IsRenaming)
+            {
+                return;
+            }
+
+            IsRenaming = false;
+            _owner.CommitSessionRename(this);
+        }
+
+        public void CancelRename()
+        {
+            IsRenaming = false;
+        }
+
+        private void TogglePin()
+        {
+            if (!IsHeader)
+            {
+                _owner.ToggleSessionPin(this);
+            }
+        }
+
+        private void ToggleArchive()
+        {
+            if (!IsHeader)
+            {
+                _owner.ToggleSessionArchive(this);
+            }
+        }
+
+        private void Delete()
+        {
+            if (!IsHeader)
+            {
+                _owner.RequestDeleteSession(this);
+            }
         }
     }
 
     /// <summary>文件树的一行。缩进与最小宽度来自 <see cref="FileTreePolicy"/>。</summary>
-    public sealed class FileTreeRowViewModel : ObservableObject
+    public sealed class FileTreeRowViewModel : ObservableObject, IInlineRenameRow
     {
         private readonly WorkspaceItemViewModel _owner;
+        private bool _isRenaming;
+        private string _renameDraft;
 
         public FileTreeRowViewModel(WorkspaceItemViewModel owner, FileNode node)
         {
@@ -99,6 +248,10 @@ namespace MiaoWu.App.ViewModels
             Indent = new Thickness(FileTreePolicy.GetIndent(node.Depth), 0, 0, 0);
             ToggleCommand = new RelayCommand(Toggle);
             OpenCommand = new RelayCommand(Open);
+            BeginRenameCommand = new RelayCommand(BeginRename, () => CanManage);
+            CommitRenameCommand = new RelayCommand(CommitRename, () => _isRenaming);
+            CancelRenameCommand = new RelayCommand(CancelRename, () => _isRenaming);
+            DeleteCommand = new RelayCommand(Delete, () => CanManage);
         }
 
         public FileNode Node { get; }
@@ -138,6 +291,12 @@ namespace MiaoWu.App.ViewModels
             get { return Node.IsDirectory; }
         }
 
+        /// <summary>只有普通文件支持重命名 / 删除，目录与错误行不显示更多按钮。</summary>
+        public bool CanManage
+        {
+            get { return !Node.IsDirectory && !Node.IsReparsePoint && !Node.IsErrorRow; }
+        }
+
         public bool IsExpanded
         {
             get { return Node.IsExpanded; }
@@ -168,9 +327,38 @@ namespace MiaoWu.App.ViewModels
             get { return Node.State == FileNodeState.Loaded; }
         }
 
+        public bool IsRenaming
+        {
+            get { return _isRenaming; }
+            private set
+            {
+                if (_isRenaming == value)
+                {
+                    return;
+                }
+
+                _isRenaming = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string RenameDraft
+        {
+            get { return _renameDraft; }
+            set { SetProperty(ref _renameDraft, value); }
+        }
+
         public RelayCommand ToggleCommand { get; }
 
         public RelayCommand OpenCommand { get; }
+
+        public RelayCommand BeginRenameCommand { get; }
+
+        public RelayCommand CommitRenameCommand { get; }
+
+        public RelayCommand CancelRenameCommand { get; }
+
+        public RelayCommand DeleteCommand { get; }
 
         public string AutomationName
         {
@@ -191,6 +379,37 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(IsOpened));
             OnPropertyChanged(nameof(IsError));
             OnPropertyChanged(nameof(IsLoaded));
+            OnPropertyChanged(nameof(Name));
+            OnPropertyChanged(nameof(ToolTip));
+            OnPropertyChanged(nameof(AutomationName));
+            OnPropertyChanged(nameof(CanManage));
+        }
+
+        public void BeginRename()
+        {
+            if (!CanManage)
+            {
+                return;
+            }
+
+            RenameDraft = Name;
+            IsRenaming = true;
+        }
+
+        public void CommitRename()
+        {
+            if (!IsRenaming)
+            {
+                return;
+            }
+
+            IsRenaming = false;
+            _owner.CommitFileRename(this);
+        }
+
+        public void CancelRename()
+        {
+            IsRenaming = false;
         }
 
         private void Toggle()
@@ -201,6 +420,14 @@ namespace MiaoWu.App.ViewModels
         private void Open()
         {
             _owner.OpenNode(this);
+        }
+
+        private void Delete()
+        {
+            if (CanManage)
+            {
+                _owner.RequestDeleteFile(this);
+            }
         }
     }
 }

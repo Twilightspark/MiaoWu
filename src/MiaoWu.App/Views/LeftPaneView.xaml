@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="clr-namespace:MiaoWu.App.Converters"
              xmlns:res="clr-namespace:MiaoWu.App.Resources"
              mc:Ignorable="d"
              d:DesignWidth="262"
@@ -16,9 +17,44 @@
              AutomationProperties.Name="{x:Static res:Strings.LeftPaneAutomation}">
 
     <UserControl.Resources>
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+
+        <!-- 行菜单同时供 hover 按钮左键与整行右键使用；x:Shared=False 让每个宿主拿到独立实例。 -->
+        <ContextMenu x:Key="WorkspaceRowMenu" x:Shared="False">
+            <MenuItem Header="{Binding PlacementTarget.DataContext.PinActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="{x:Static res:Strings.RenameWorkspace}"
+                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="{x:Static res:Strings.ClearWorkspaceSessions}"
+                      Command="{Binding PlacementTarget.DataContext.ClearSessionsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="{x:Static res:Strings.DeleteWorkspace}"
+                      Command="{Binding PlacementTarget.DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="SessionRowMenu" x:Shared="False">
+            <MenuItem Header="{Binding PlacementTarget.DataContext.PinActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="{x:Static res:Strings.RenameSessionTitle}"
+                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="{Binding PlacementTarget.DataContext.ArchiveActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      Command="{Binding PlacementTarget.DataContext.ToggleArchiveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="{x:Static res:Strings.DeleteSession}"
+                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="FileRowMenu" x:Shared="False">
+            <MenuItem Header="{x:Static res:Strings.RenameFile}"
+                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="{x:Static res:Strings.DeleteFile}"
+                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
         <Style x:Key="WorkspaceRowBorder" TargetType="Border">
             <Setter Property="Height" Value="{StaticResource Metric.Row.Workspace}" />
-            <Setter Property="Margin" Value="8,0" />
+            <Setter Property="Margin" Value="{StaticResource Margin.Left.WorkspaceRow}" />
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Row}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
@@ -35,6 +71,8 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- 工作区下方的内容随页面一起滚动，不再有独立高度与内部滚动条。 -->
     </UserControl.Resources>
 
     <Grid>
@@ -42,114 +80,103 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 区块标题：工作区 + 添加 -->
-        <Grid Grid.Row="0" Height="30" Margin="{StaticResource Pad.LeftHeader}">
-            <TextBlock VerticalAlignment="Center"
-                       Text="{x:Static res:Strings.Workspace}"
-                       Style="{StaticResource Text.Group}" />
+        <!-- 工作区上方的功能入口：新建工作区（主题色主操作）、定时任务（即将推出） -->
+        <StackPanel Grid.Row="0" Margin="{StaticResource Pad.Left.Actions}">
             <Button x:Name="AddWorkspaceButton"
-                    Width="24"
-                    Height="24"
+                    Style="{StaticResource Button.NavAccent}"
+                    Command="{Binding AddWorkspaceCommand}"
+                    ToolTip="{x:Static res:Strings.NewWorkspaceTooltip}"
+                    AutomationProperties.AutomationId="AddWorkspace"
+                    AutomationProperties.Name="{x:Static res:Strings.NewWorkspace}"
+                    KeyboardNavigation.TabIndex="0">
+                <!-- 图标 + 文字作为一组居中，不贴左 -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <Path Style="{StaticResource Icon}"
+                          Data="{StaticResource Ico.FolderPlus}"
+                          Fill="{DynamicResource Brush.OnAccent}" />
+                    <TextBlock Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Text="{x:Static res:Strings.NewWorkspace}"
+                               Style="{StaticResource Text.ListRow}"
+                               Foreground="{DynamicResource Brush.OnAccent}" />
+                </StackPanel>
+            </Button>
+
+            <Button Style="{StaticResource Button.NavItem}"
+                    Margin="0,4,0,0"
+                    Command="{Binding OpenScheduledTasksCommand}"
+                    ToolTip="{x:Static res:Strings.ScheduledTasksHint}"
+                    AutomationProperties.AutomationId="ScheduledTasks"
+                    AutomationProperties.Name="{x:Static res:Strings.ScheduledTasksHint}"
+                    KeyboardNavigation.TabIndex="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Path Style="{StaticResource Icon}"
+                          Data="{StaticResource Ico.Refresh}"
+                          Fill="{DynamicResource Brush.Text3}" />
+                    <TextBlock Grid.Column="1"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Text="{x:Static res:Strings.ScheduledTasks}"
+                               Style="{StaticResource Text.ListRow}" />
+                    <TextBlock Grid.Column="2"
+                               VerticalAlignment="Center"
+                               Text="{x:Static res:Strings.MarketplaceComingSoon}"
+                               Style="{StaticResource Text.Time}"
+                               Foreground="{DynamicResource Brush.Text3}" />
+                </Grid>
+            </Button>
+        </StackPanel>
+
+        <!-- 工作区标题栏：左侧图标与标题，右侧会话/文件切换 -->
+        <Grid Grid.Row="1"
+              Height="{StaticResource Metric.Left.Section.Height}"
+              Margin="{StaticResource Pad.LeftHeader}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Path Style="{StaticResource Icon}"
+                      Data="{StaticResource Ico.FolderTree}"
+                      Fill="{DynamicResource Brush.Text3}" />
+                <TextBlock Margin="8,0,0,0"
+                           Text="{x:Static res:Strings.Workspace}"
+                           Style="{StaticResource Text.LeftSection}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+
+            <Border Padding="1"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center"
-                    Style="{StaticResource Button.Icon}"
-                    Command="{Binding AddWorkspaceCommand}"
-                    ToolTip="{x:Static res:Strings.AddWorkspaceTooltip}"
-                    AutomationProperties.AutomationId="AddWorkspace"
-                    AutomationProperties.Name="{x:Static res:Strings.AddWorkspaceTooltip}"
-                    KeyboardNavigation.TabIndex="0">
-                <Path Style="{StaticResource Icon}"
-                      Data="{StaticResource Ico.Plus}"
-                      Fill="{DynamicResource Brush.Text3}" />
-            </Button>
+                    Background="{DynamicResource Brush.Sel}"
+                    CornerRadius="{StaticResource Radius.Segment}"
+                    Visibility="{Binding HasActiveWorkspace, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton Style="{StaticResource ToggleButton.Segment}"
+                                  Content="{x:Static res:Strings.Sessions}"
+                                  IsChecked="{Binding ActiveWorkspace.IsSessionsView, Mode=TwoWay}"
+                                  KeyboardNavigation.TabIndex="2"
+                                  AutomationProperties.AutomationId="SessionsSegment" />
+                    <ToggleButton Style="{StaticResource ToggleButton.Segment}"
+                                  Content="{x:Static res:Strings.Files}"
+                                  IsChecked="{Binding ActiveWorkspace.IsFilesView, Mode=TwoWay}"
+                                  KeyboardNavigation.TabIndex="3"
+                                  AutomationProperties.AutomationId="FilesSegment" />
+                </StackPanel>
+            </Border>
         </Grid>
-
-        <!-- 工作区手风琴（行固定在上方，内容在下方独立滚动） -->
-        <ItemsControl Grid.Row="1"
-                      x:Name="WorkspaceList"
-                      Focusable="False"
-                      IsTabStop="False"
-                      ItemsSource="{Binding Workspaces}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Border x:Name="WorkspaceRow"
-                            Style="{StaticResource WorkspaceRowBorder}"
-                            KeyboardNavigation.TabIndex="0"
-                            AutomationProperties.AutomationId="WorkspaceRow"
-                            AutomationProperties.Name="{Binding AutomationName}">
-                        <Border.InputBindings>
-                            <MouseBinding MouseAction="LeftClick" Command="{Binding ActivateCommand}" />
-                            <KeyBinding Key="Enter" Command="{Binding ActivateCommand}" />
-                            <KeyBinding Key="Space" Command="{Binding ActivateCommand}" />
-                        </Border.InputBindings>
-                        <Border.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{x:Static res:Strings.RemoveWorkspace}"
-                                          ToolTip="{x:Static res:Strings.RemoveWorkspaceTooltip}"
-                                          Command="{Binding PlacementTarget.DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                            </ContextMenu>
-                        </Border.ContextMenu>
-
-                        <Grid Margin="{StaticResource Pad.WorkspaceRow}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="16" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <Path x:Name="WorkspaceChevron"
-                                  Grid.Column="0"
-                                  Style="{StaticResource Icon}"
-                                  Data="{StaticResource Ico.ChevronRight}"
-                                  Fill="{DynamicResource Brush.Text3}" />
-
-                            <Path x:Name="WorkspaceIcon"
-                                  Grid.Column="1"
-                                  Margin="4,0,0,0"
-                                  Style="{StaticResource Icon}"
-                                  Data="{StaticResource Ico.Folder}"
-                                  Fill="{DynamicResource Brush.Text3}" />
-
-                            <TextBlock x:Name="WorkspaceName"
-                                       Grid.Column="2"
-                                       Margin="6,0,0,0"
-                                       VerticalAlignment="Center"
-                                       Text="{Binding Name}"
-                                       ToolTip="{Binding Path}"
-                                       Style="{StaticResource Text.ListRow}"
-                                       TextTrimming="CharacterEllipsis"
-                                       Foreground="{DynamicResource Brush.Text2}" />
-
-                            <TextBlock Grid.Column="3"
-                                       VerticalAlignment="Center"
-                                       Text="{Binding SessionCountText}"
-                                       Style="{StaticResource Text.Time}" />
-                        </Grid>
-                    </Border>
-
-                    <DataTemplate.Triggers>
-                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                            <Setter TargetName="WorkspaceRow" Property="Background" Value="{DynamicResource Brush.Sel}" />
-                            <Setter TargetName="WorkspaceChevron" Property="Data" Value="{StaticResource Ico.ChevronDown}" />
-                            <Setter TargetName="WorkspaceIcon" Property="Fill" Value="{DynamicResource Brush.Accent}" />
-                            <Setter TargetName="WorkspaceName" Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                            <Setter TargetName="WorkspaceName" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
-                        </DataTrigger>
-                    </DataTemplate.Triggers>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
 
         <!-- 添加工作区内联错误 -->
         <Border Grid.Row="2"
                 Height="{StaticResource Metric.Left.InlineError.Height}"
-                Margin="8,2,8,0"
+                Margin="12,2,12,0"
                 Padding="8,0"
                 Background="{DynamicResource Brush.WarningSoft}"
                 CornerRadius="{StaticResource Radius.Button}"
@@ -161,310 +188,468 @@
                        TextTrimming="CharacterEllipsis" />
         </Border>
 
-        <!-- 会话 / 文件 分段；搜索与新建 -->
-        <Grid Grid.Row="3"
-              Height="{StaticResource Metric.Left.Segment.RowHeight}"
-              Margin="8,4,8,0">
-            <Border HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    Background="{DynamicResource Brush.Sel}"
-                    CornerRadius="{StaticResource Radius.Segment}"
-                    Padding="1">
-                <StackPanel Orientation="Horizontal">
-                    <ToggleButton Style="{StaticResource ToggleButton.Segment}"
-                                  Content="{x:Static res:Strings.Sessions}"
-                                  IsChecked="{Binding ActiveWorkspace.IsSessionsView, Mode=TwoWay}"
-                                  KeyboardNavigation.TabIndex="1"
-                                  AutomationProperties.AutomationId="SessionsSegment" />
-                    <ToggleButton Style="{StaticResource ToggleButton.Segment}"
-                                  Content="{x:Static res:Strings.Files}"
-                                  IsChecked="{Binding ActiveWorkspace.IsFilesView, Mode=TwoWay}"
-                                  KeyboardNavigation.TabIndex="2"
-                                  AutomationProperties.AutomationId="FilesSegment" />
-                </StackPanel>
-            </Border>
+        <!-- 工作区列表 + 每个工作区自己的会话/文件面板（外层可滚动） -->
+        <Grid Grid.Row="3">
+            <ScrollViewer x:Name="WorkspaceScroll"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          PreviewMouseWheel="OnWorkspacePreviewMouseWheel"
+                          Focusable="False"
+                          Padding="0,0,0,8">
+                <ItemsControl x:Name="WorkspaceList"
+                              Focusable="False"
+                              IsTabStop="False"
+                              ItemsSource="{Binding Workspaces}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <Border x:Name="WorkspaceRow"
+                                        Style="{StaticResource WorkspaceRowBorder}"
+                                        ContextMenu="{StaticResource WorkspaceRowMenu}"
+                                        PreviewMouseLeftButtonUp="OnWorkspaceRowClick"
+                                        KeyboardNavigation.TabIndex="4"
+                                        AutomationProperties.AutomationId="WorkspaceRow"
+                                        AutomationProperties.Name="{Binding AutomationName}">
+                                    <Border.InputBindings>
+                                        <KeyBinding Key="Enter" Command="{Binding ToggleExpandedCommand}" />
+                                        <KeyBinding Key="Space" Command="{Binding ToggleExpandedCommand}" />
+                                    </Border.InputBindings>
+                                    <Grid Margin="{StaticResource Pad.WorkspaceRow}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="12" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="56" />
+                                        </Grid.ColumnDefinitions>
 
-            <StackPanel HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Orientation="Horizontal">
-                <Button Style="{StaticResource Button.Icon}"
-                        Width="24"
-                        Height="24"
-                        Margin="0,0,4,0"
-                        IsEnabled="False"
-                        ToolTip="{Binding SearchToolTip}"
-                        AutomationProperties.Name="{Binding SearchToolTip}">
-                    <Path Style="{StaticResource Icon}"
-                          Data="{StaticResource Ico.Search}"
-                          Fill="{DynamicResource Brush.Text3}" />
-                </Button>
-
-                <Button Style="{StaticResource Button.Icon}"
-                        Width="24"
-                        Height="24"
-                        Command="{Binding ActiveWorkspace.OpenFileCommand}"
-                        ToolTip="{x:Static res:Strings.OpenFileTooltip}"
-                        AutomationProperties.Name="{x:Static res:Strings.OpenFileTooltip}"
-                        Visibility="{Binding ActiveWorkspace.IsFilesView, Converter={StaticResource BoolToVisibility}}">
-                    <Path Style="{StaticResource Icon}"
-                          Data="{StaticResource Ico.Plus}"
-                          Fill="{DynamicResource Brush.Text3}" />
-                </Button>
-
-                <Button Style="{StaticResource Button.Icon}"
-                        Width="24"
-                        Height="24"
-                        IsEnabled="{Binding CanCreateSession}"
-                        ToolTip="{Binding NewSessionToolTip}"
-                        AutomationProperties.Name="{Binding NewSessionToolTip}"
-                        Visibility="{Binding ActiveWorkspace.IsSessionsView, Converter={StaticResource BoolToVisibility}}">
-                    <Path Style="{StaticResource Icon}"
-                          Data="{StaticResource Ico.Plus}"
-                          Fill="{DynamicResource Brush.Text3}" />
-                </Button>
-            </StackPanel>
-        </Grid>
-
-        <!-- 活动工作区内容 -->
-        <Grid Grid.Row="4" Margin="0,4,0,0">
-
-            <!-- 会话列表 -->
-            <ListBox x:Name="SessionsList"
-                     ItemsSource="{Binding ActiveWorkspace.SessionRows}"
-                     SelectedItem="{Binding ActiveWorkspace.SelectedSession, Mode=TwoWay}"
-                     Visibility="{Binding ActiveWorkspace.ShowSessionList, Converter={StaticResource BoolToVisibility}}"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     Padding="0,0,0,8"
-                     ItemContainerStyle="{StaticResource ListBoxItem.Session}"
-                     ScrollViewer.CanContentScroll="True"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     VirtualizingStackPanel.IsVirtualizing="True"
-                     VirtualizingStackPanel.VirtualizationMode="Recycling"
-                     VirtualizingStackPanel.ScrollUnit="Pixel"
-                     KeyboardNavigation.DirectionalNavigation="Contained"
-                     KeyboardNavigation.TabIndex="3"
-                     KeyboardNavigation.IsTabStop="True"
-                     FocusVisualStyle="{StaticResource FocusVisual.Card}"
-                     AutomationProperties.AutomationId="SessionsList"
-                     AutomationProperties.Name="{x:Static res:Strings.SessionsListAutomation}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Grid>
-                            <TextBlock x:Name="GroupHeader"
-                                       Height="{StaticResource Metric.Row.Group}"
-                                       Margin="0,0,0,0"
-                                       VerticalAlignment="Center"
-                                       Text="{Binding HeaderText}"
-                                       Style="{StaticResource Text.Group}"
-                                       Visibility="Collapsed" />
-
-                            <Grid x:Name="SessionContent" Margin="{StaticResource Pad.SessionRow}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <Path Grid.Column="0"
-                                      Width="14"
-                                      Height="14"
-                                      Margin="0,0,2,0"
-                                      Style="{StaticResource Icon}"
-                                      Data="{StaticResource Ico.Pin}"
-                                      Fill="{DynamicResource Brush.Text3}"
-                                      Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
-
-                                <TextBlock x:Name="SessionTitle"
-                                           Grid.Column="1"
-                                           VerticalAlignment="Center"
-                                           Text="{Binding Title}"
-                                           ToolTip="{Binding ToolTip}"
-                                           Style="{StaticResource Text.ListRow}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource Brush.Text2}" />
-
-                                <StackPanel Grid.Column="2"
-                                            Orientation="Horizontal"
-                                            VerticalAlignment="Center">
-                                    <Ellipse Width="6"
-                                             Height="6"
-                                             Margin="4,0,0,0"
-                                             Fill="{DynamicResource Brush.Warning}"
-                                             Visibility="{Binding HasPendingApproval, Converter={StaticResource BoolToVisibility}}"
-                                             ToolTip="{x:Static res:Strings.PendingApproval}" />
-                                    <Ellipse Width="6"
-                                             Height="6"
-                                             Margin="4,0,0,0"
-                                             Fill="{DynamicResource Brush.Accent}"
-                                             Visibility="{Binding IsUnread, Converter={StaticResource BoolToVisibility}}" />
-                                </StackPanel>
-
-                                <TextBlock Grid.Column="3"
-                                           Margin="8,0,0,0"
-                                           VerticalAlignment="Center"
-                                           Text="{Binding TimeText}"
-                                           Style="{StaticResource Text.Time}" />
-                            </Grid>
-                        </Grid>
-
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IsHeader}" Value="True">
-                                <Setter TargetName="GroupHeader" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="SessionContent" Property="Visibility" Value="Collapsed" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                <Setter TargetName="SessionTitle" Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                <Setter TargetName="SessionTitle" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-
-            <!-- 文件树 -->
-            <ListBox x:Name="TreeList"
-                     ItemsSource="{Binding ActiveWorkspace.TreeRows}"
-                     SelectedItem="{Binding ActiveWorkspace.SelectedFile, Mode=TwoWay}"
-                     Visibility="{Binding ActiveWorkspace.ShowFileTree, Converter={StaticResource BoolToVisibility}}"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     Padding="0,0,0,8"
-                     ItemContainerStyle="{StaticResource ListBoxItem.Tree}"
-                     ScrollViewer.CanContentScroll="True"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ScrollViewer.HorizontalScrollBarVisibility="{Binding ActiveWorkspace.TreeNeedsHorizontalScroll, Converter={StaticResource BoolToScrollBarVisibility}}"
-                     VirtualizingStackPanel.IsVirtualizing="True"
-                     VirtualizingStackPanel.VirtualizationMode="Recycling"
-                     VirtualizingStackPanel.ScrollUnit="Pixel"
-                     PreviewKeyDown="OnTreePreviewKeyDown"
-                     MouseDoubleClick="OnTreeMouseDoubleClick"
-                     KeyboardNavigation.TabIndex="3"
-                     KeyboardNavigation.IsTabStop="True"
-                     FocusVisualStyle="{StaticResource FocusVisual.Card}"
-                     AutomationProperties.AutomationId="FileTree"
-                     AutomationProperties.Name="{x:Static res:Strings.FileTreeAutomation}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Border x:Name="RowRoot"
-                                Background="Transparent">
-                            <Grid MinWidth="{Binding MinRowWidth}" Margin="{StaticResource Pad.TreeRow}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <Border Grid.Column="0" Margin="{Binding Indent}">
-                                    <Button x:Name="ChevronButton"
-                                            Style="{StaticResource Button.TreeChevron}"
-                                            Command="{Binding ToggleCommand}"
-                                            Visibility="{Binding CanExpand, Converter={StaticResource BoolToVisibility}}">
-                                        <Path x:Name="Chevron"
-                                              Width="16"
-                                              Height="16"
+                                        <Path x:Name="WorkspaceChevron"
+                                              Grid.Column="0"
+                                              Width="12"
+                                              Height="12"
                                               Style="{StaticResource Icon}"
                                               Data="{StaticResource Ico.ChevronRight}"
                                               Fill="{DynamicResource Brush.Text3}" />
-                                    </Button>
+
+                                        <Path x:Name="WorkspaceIcon"
+                                              Grid.Column="1"
+                                              Margin="10,0,0,0"
+                                              Style="{StaticResource Icon}"
+                                              Data="{StaticResource Ico.Folder}"
+                                              Fill="{DynamicResource Brush.Text3}" />
+
+                                        <TextBlock x:Name="WorkspaceName"
+                                                   Grid.Column="2"
+                                                   Margin="8,0,8,0"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding Name}"
+                                                   ToolTip="{Binding Path}"
+                                                   Style="{StaticResource Text.ListRow}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource Brush.Text2}"
+                                                   Visibility="{Binding IsRenaming, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                                        <TextBox x:Name="WorkspaceNameBox"
+                                                 Grid.Column="2"
+                                                 Height="24"
+                                                 Margin="6,0,8,0"
+                                                 Padding="{StaticResource Pad.Button.Toolbar}"
+                                                 VerticalAlignment="Center"
+                                                 Text="{Binding RenameDraft, UpdateSourceTrigger=PropertyChanged}"
+                                                 Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}}"
+                                                 IsVisibleChanged="OnInlineRenameBoxVisibleChanged"
+                                                 KeyDown="OnInlineRenameKeyDown"
+                                                 LostFocus="OnInlineRenameLostFocus"
+                                                 AutomationProperties.Name="{x:Static res:Strings.RenameWorkspace}" />
+
+                                        <Grid Grid.Column="3"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Center">
+                                            <StackPanel x:Name="WorkspaceMeta"
+                                                        Orientation="Horizontal"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center">
+                                                <Path Width="12"
+                                                      Height="12"
+                                                      Margin="0,0,4,0"
+                                                      Style="{StaticResource Icon}"
+                                                      Data="{StaticResource Ico.Pin}"
+                                                      Fill="{DynamicResource Brush.Text3}"
+                                                      Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Text="{Binding SessionCountText}"
+                                                           Style="{StaticResource Text.Time}" />
+                                            </StackPanel>
+
+                                            <StackPanel x:Name="WorkspaceActions"
+                                                        Orientation="Horizontal"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="Collapsed">
+                                                <Button Style="{StaticResource Button.Icon}"
+                                                        Command="{Binding NewSessionCommand}"
+                                                        ToolTip="{x:Static res:Strings.NewSessionInWorkspaceTooltip}"
+                                                        AutomationProperties.AutomationId="WorkspaceNewSession"
+                                                        AutomationProperties.Name="{x:Static res:Strings.NewSessionInWorkspaceTooltip}">
+                                                    <Path Style="{StaticResource Icon}"
+                                                          Data="{StaticResource Ico.MessagePlus}"
+                                                          Fill="{DynamicResource Brush.Text3}" />
+                                                </Button>
+
+                                                <Button Style="{StaticResource Button.Icon}"
+                                                        ToolTip="{x:Static res:Strings.WorkspaceActions}"
+                                                        AutomationProperties.AutomationId="WorkspaceMore"
+                                                        AutomationProperties.Name="{x:Static res:Strings.WorkspaceActions}"
+                                                        ContextMenu="{StaticResource WorkspaceRowMenu}"
+                                                        Click="OnMoreButtonClick">
+                                                    <Path Style="{StaticResource Icon.Solid}"
+                                                          Data="{StaticResource Ico.More}"
+                                                          Fill="{DynamicResource Brush.Text3}" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Grid>
                                 </Border>
 
-                                <Path x:Name="NodeIcon"
-                                      Grid.Column="1"
-                                      Margin="2,0,0,0"
-                                      Style="{StaticResource Icon}"
-                                      Data="{StaticResource Ico.File}"
-                                      Fill="{DynamicResource Brush.Text3}" />
+                                <!-- 会话/文件紧跟在工作区行下方：宽度随栏宽，随整页一起滚动 -->
+                                <StackPanel x:Name="WorkspaceContent"
+                                            Margin="{StaticResource Margin.Left.Content}"
+                                            Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                        <ListBox x:Name="SessionsList"
+                                                 ItemsSource="{Binding SessionRows}"
+                                                 SelectedItem="{Binding SelectedSession, Mode=TwoWay}"
+                                                 Visibility="{Binding ShowSessionList, Converter={StaticResource BoolToVisibility}}"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Padding="{StaticResource Pad.Left.Content}"
+                                                 ItemContainerStyle="{StaticResource ListBoxItem.Session}"
+                                                 ScrollViewer.CanContentScroll="False"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 VirtualizingStackPanel.IsVirtualizing="False"
+                                                 KeyboardNavigation.DirectionalNavigation="Contained"
+                                                 KeyboardNavigation.TabIndex="5"
+                                                 KeyboardNavigation.IsTabStop="True"
+                                                 FocusVisualStyle="{StaticResource FocusVisual.Card}"
+                                                 AutomationProperties.AutomationId="SessionsList"
+                                                 AutomationProperties.Name="{x:Static res:Strings.SessionsListAutomation}">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <TextBlock x:Name="GroupHeader"
+                                                                   Height="{StaticResource Metric.Row.Group}"
+                                                                   Margin="0,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Text="{Binding HeaderText}"
+                                                                   Style="{StaticResource Text.Group}"
+                                                                   Visibility="Collapsed" />
 
-                                <TextBlock x:Name="NodeName"
-                                           Grid.Column="2"
-                                           Margin="6,0,0,0"
-                                           VerticalAlignment="Center"
-                                           Text="{Binding Name}"
-                                           ToolTip="{Binding ToolTip}"
-                                           Style="{StaticResource Text.ListRow}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource Brush.Text2}" />
-                            </Grid>
-                        </Border>
+                                                        <Grid x:Name="SessionContent"
+                                                              Margin="{StaticResource Pad.SessionRow}"
+                                                              ContextMenu="{StaticResource SessionRowMenu}">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="44" />
+                                                            </Grid.ColumnDefinitions>
 
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IsDirectory}" Value="True">
-                                <Setter TargetName="NodeIcon" Property="Data" Value="{StaticResource Ico.Folder}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                <Setter TargetName="Chevron" Property="Data" Value="{StaticResource Ico.ChevronDown}" />
-                                <Setter TargetName="NodeIcon" Property="Data" Value="{StaticResource Ico.FolderOpen}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsError}" Value="True">
-                                <Setter TargetName="NodeIcon" Property="Data" Value="{StaticResource Ico.Warning}" />
-                                <Setter TargetName="NodeIcon" Property="Fill" Value="{DynamicResource Brush.Warning}" />
-                                <Setter TargetName="NodeName" Property="Foreground" Value="{DynamicResource Brush.Warning}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsOpened}" Value="True">
-                                <Setter TargetName="NodeIcon" Property="Fill" Value="{DynamicResource Brush.Accent}" />
-                                <Setter TargetName="NodeName" Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                <Setter TargetName="NodeName" Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                <Setter TargetName="NodeName" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                                                            <Path Grid.Column="0"
+                                                                  Width="14"
+                                                                  Height="14"
+                                                                  Margin="0,0,2,0"
+                                                                  Style="{StaticResource Icon}"
+                                                                  Data="{StaticResource Ico.Pin}"
+                                                                  Fill="{DynamicResource Brush.Text3}"
+                                                                  Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
 
-            <!-- 分组标题吸顶 -->
-            <Border x:Name="StickyHeader"
-                    Height="{StaticResource Metric.Row.Group}"
-                    VerticalAlignment="Top"
-                    Background="{DynamicResource Brush.Side}"
-                    IsHitTestVisible="False"
-                    Visibility="{Binding ActiveWorkspace.IsStickyHeaderVisible, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Margin="8,0"
-                           VerticalAlignment="Center"
-                           Text="{Binding ActiveWorkspace.StickyHeaderText}"
-                           Style="{StaticResource Text.Group}" />
-            </Border>
+                                                            <TextBlock x:Name="SessionTitle"
+                                                                       Grid.Column="1"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="{Binding Title}"
+                                                                       ToolTip="{Binding ToolTip}"
+                                                                       Style="{StaticResource Text.ListRow}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="{DynamicResource Brush.Text2}"
+                                                                       Visibility="{Binding IsRenaming, Converter={StaticResource InverseBoolToVisibility}}" />
 
-            <!-- 会话空态 -->
-            <StackPanel MaxWidth="210"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding ActiveWorkspace.ShowSessionEmpty, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{x:Static res:Strings.SessionsEmptyTitle}"
-                           Style="{StaticResource Text.Empty}"
-                           Foreground="{DynamicResource Brush.Text}" />
-                <TextBlock Margin="0,4,0,0"
-                           Text="{x:Static res:Strings.SessionsEmptyBody}"
-                           Style="{StaticResource Text.Empty}" />
-                <Button Margin="0,12,0,0"
-                        HorizontalAlignment="Center"
-                        Content="{x:Static res:Strings.NewSession}"
-                        Style="{StaticResource Button.Primary}"
-                        IsEnabled="{Binding CanCreateSession}"
-                        ToolTip="{Binding NewSessionToolTip}" />
-            </StackPanel>
+                                                            <TextBox x:Name="SessionTitleBox"
+                                                                     Grid.Column="1"
+                                                                     Height="24"
+                                                                     Margin="0,0,6,0"
+                                                                     Padding="{StaticResource Pad.Button.Toolbar}"
+                                                                     VerticalAlignment="Center"
+                                                                     Text="{Binding RenameDraft, UpdateSourceTrigger=PropertyChanged}"
+                                                                     Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}}"
+                                                                     IsVisibleChanged="OnInlineRenameBoxVisibleChanged"
+                                                                     KeyDown="OnInlineRenameKeyDown"
+                                                                     LostFocus="OnInlineRenameLostFocus"
+                                                                     AutomationProperties.Name="{x:Static res:Strings.RenameSessionTitle}" />
 
-            <!-- 文件空态 -->
-            <StackPanel MaxWidth="210"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding ActiveWorkspace.ShowFileEmpty, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{x:Static res:Strings.FilesEmptyTitle}"
-                           Style="{StaticResource Text.Empty}"
-                           Foreground="{DynamicResource Brush.Text}" />
-                <TextBlock Margin="0,4,0,0"
-                           Text="{x:Static res:Strings.FilesEmptyBody}"
-                           Style="{StaticResource Text.Empty}" />
-                <Button Margin="0,12,0,0"
-                        HorizontalAlignment="Center"
-                        Content="{x:Static res:Strings.OpenFilePrimary}"
-                        Style="{StaticResource Button.Primary}"
-                        Command="{Binding ActiveWorkspace.OpenFileCommand}" />
-            </StackPanel>
+                                                            <StackPanel Grid.Column="2"
+                                                                        Orientation="Horizontal"
+                                                                        VerticalAlignment="Center">
+                                                                <Ellipse Width="6"
+                                                                         Height="6"
+                                                                         Margin="4,0,0,0"
+                                                                         Fill="{DynamicResource Brush.Warning}"
+                                                                         Visibility="{Binding HasPendingApproval, Converter={StaticResource BoolToVisibility}}"
+                                                                         ToolTip="{x:Static res:Strings.PendingApproval}" />
+                                                                <Ellipse Width="6"
+                                                                         Height="6"
+                                                                         Margin="4,0,0,0"
+                                                                         Fill="{DynamicResource Brush.Accent}"
+                                                                         Visibility="{Binding IsUnread, Converter={StaticResource BoolToVisibility}}" />
+                                                            </StackPanel>
+
+                                                            <Grid Grid.Column="3"
+                                                                  HorizontalAlignment="Right"
+                                                                  VerticalAlignment="Center">
+                                                                <TextBlock x:Name="SessionTime"
+                                                                           HorizontalAlignment="Right"
+                                                                           VerticalAlignment="Center"
+                                                                           Text="{Binding TimeText}"
+                                                                           Style="{StaticResource Text.Time}" />
+
+                                                                <Button x:Name="SessionMoreButton"
+                                                                        Style="{StaticResource Button.Icon}"
+                                                                        HorizontalAlignment="Right"
+                                                                        Visibility="Collapsed"
+                                                                        ToolTip="{x:Static res:Strings.SessionActions}"
+                                                                        AutomationProperties.AutomationId="SessionMore"
+                                                                        AutomationProperties.Name="{x:Static res:Strings.SessionActions}"
+                                                                        ContextMenu="{StaticResource SessionRowMenu}"
+                                                                        Click="OnMoreButtonClick">
+                                                                    <Path Style="{StaticResource Icon.Solid}"
+                                                                          Data="{StaticResource Ico.More}"
+                                                                          Fill="{DynamicResource Brush.Text3}" />
+                                                                </Button>
+                                                            </Grid>
+                                                        </Grid>
+                                                    </Grid>
+
+                                                    <DataTemplate.Triggers>
+                                                        <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                                                            <Setter TargetName="GroupHeader" Property="Visibility" Value="Visible" />
+                                                            <Setter TargetName="SessionContent" Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                            <Setter TargetName="SessionTitle" Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                            <Setter TargetName="SessionTitle" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                            <Setter TargetName="SessionTime" Property="Visibility" Value="Collapsed" />
+                                                            <Setter TargetName="SessionMoreButton" Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                            <Setter TargetName="SessionTime" Property="Visibility" Value="Collapsed" />
+                                                            <Setter TargetName="SessionMoreButton" Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </DataTemplate.Triggers>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+
+                                        <!-- 最近几条之外的会话 -->
+                                        <Button Height="28"
+                                                Margin="8,8,8,4"
+                                                Padding="9,0"
+                                                HorizontalAlignment="Left"
+                                                Style="{StaticResource Button.Ghost}"
+                                                Command="{Binding ToggleAllSessionsCommand}"
+                                                Visibility="{Binding ShowSessionMore, Converter={StaticResource BoolToVisibility}}"
+                                                AutomationProperties.AutomationId="SessionMore">
+                                            <TextBlock Text="{Binding SessionMoreText}"
+                                                       Style="{StaticResource Text.Meta}"
+                                                       Foreground="{DynamicResource Brush.Text2}" />
+                                        </Button>
+
+                                        <Button Height="28"
+                                                Margin="8,0,8,4"
+                                                Padding="9,0"
+                                                HorizontalAlignment="Left"
+                                                Style="{StaticResource Button.Ghost}"
+                                                Command="{Binding ToggleArchivedSessionsCommand}"
+                                                Visibility="{Binding ShowArchivedToggle, Converter={StaticResource BoolToVisibility}}"
+                                                AutomationProperties.AutomationId="ArchivedSessionsToggle">
+                                            <TextBlock Text="{Binding ArchivedToggleText}"
+                                                       Style="{StaticResource Text.Meta}"
+                                                       Foreground="{DynamicResource Brush.Text2}" />
+                                        </Button>
+
+                                        <ListBox x:Name="TreeList"
+                                                 ItemsSource="{Binding TreeRows}"
+                                                 SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                                                 Visibility="{Binding ShowFileTree, Converter={StaticResource BoolToVisibility}}"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Padding="{StaticResource Pad.Left.Content}"
+                                                 ItemContainerStyle="{StaticResource ListBoxItem.Tree}"
+                                                 ScrollViewer.CanContentScroll="True"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="{Binding TreeNeedsHorizontalScroll, Converter={StaticResource BoolToScrollBarVisibility}}"
+                                                 VirtualizingStackPanel.IsVirtualizing="False"
+                                                 PreviewKeyDown="OnTreePreviewKeyDown"
+                                                 PreviewMouseLeftButtonUp="OnTreeRowClick"
+                                                 MouseDoubleClick="OnTreeRowDoubleClick"
+                                                 KeyboardNavigation.TabIndex="5"
+                                                 KeyboardNavigation.IsTabStop="True"
+                                                 FocusVisualStyle="{StaticResource FocusVisual.Card}"
+                                                 AutomationProperties.AutomationId="FileTree"
+                                                 AutomationProperties.Name="{x:Static res:Strings.FileTreeAutomation}">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border x:Name="RowRoot"
+                                                            Background="Transparent"
+                                                            ContextMenu="{StaticResource FileRowMenu}">
+                                                        <Grid MinWidth="{Binding MinRowWidth}" Margin="{StaticResource Pad.TreeRow}">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <Border Grid.Column="0" Margin="{Binding Indent}">
+                                                                <Button x:Name="ChevronButton"
+                                                                        Style="{StaticResource Button.TreeChevron}"
+                                                                        Command="{Binding ToggleCommand}"
+                                                                        Visibility="{Binding CanExpand, Converter={StaticResource BoolToVisibility}}">
+                                                                    <Path x:Name="Chevron"
+                                                                          Width="16"
+                                                                          Height="16"
+                                                                          Style="{StaticResource Icon}"
+                                                                          Data="{StaticResource Ico.ChevronRight}"
+                                                                          Fill="{DynamicResource Brush.Text3}" />
+                                                                </Button>
+                                                            </Border>
+
+                                                            <Path x:Name="NodeIcon"
+                                                                  Grid.Column="1"
+                                                                  Margin="2,0,0,0"
+                                                                  Style="{StaticResource Icon}"
+                                                                  Data="{StaticResource Ico.File}"
+                                                                  Fill="{DynamicResource Brush.Text3}" />
+
+                                                            <TextBlock x:Name="NodeName"
+                                                                       Grid.Column="2"
+                                                                       Margin="6,0,0,0"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="{Binding Name}"
+                                                                       ToolTip="{Binding ToolTip}"
+                                                                       Style="{StaticResource Text.ListRow}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="{DynamicResource Brush.Text2}"
+                                                                       Visibility="{Binding IsRenaming, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                                                            <TextBox x:Name="FileNameBox"
+                                                                     Grid.Column="2"
+                                                                     Height="21"
+                                                                     Margin="4,0,6,0"
+                                                                     Padding="{StaticResource Pad.Button.Toolbar}"
+                                                                     VerticalAlignment="Center"
+                                                                     Text="{Binding RenameDraft, UpdateSourceTrigger=PropertyChanged}"
+                                                                     Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}}"
+                                                                     IsVisibleChanged="OnInlineRenameBoxVisibleChanged"
+                                                                     KeyDown="OnInlineRenameKeyDown"
+                                                                     LostFocus="OnInlineRenameLostFocus"
+                                                                     AutomationProperties.Name="{x:Static res:Strings.RenameFile}" />
+
+                                                            <Button x:Name="FileMoreButton"
+                                                                    Grid.Column="3"
+                                                                    Style="{StaticResource Button.Icon}"
+                                                                    Visibility="Collapsed"
+                                                                    ToolTip="{x:Static res:Strings.FileActions}"
+                                                                    AutomationProperties.AutomationId="FileMore"
+                                                                    AutomationProperties.Name="{x:Static res:Strings.FileActions}"
+                                                                    ContextMenu="{StaticResource FileRowMenu}"
+                                                                    Click="OnMoreButtonClick">
+                                                                <Path Style="{StaticResource Icon.Solid}"
+                                                                      Data="{StaticResource Ico.More}"
+                                                                      Fill="{DynamicResource Brush.Text3}" />
+                                                            </Button>
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <DataTemplate.Triggers>
+                                                        <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                                                            <Setter TargetName="NodeIcon" Property="Data" Value="{StaticResource Ico.Folder}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                            <Setter TargetName="Chevron" Property="Data" Value="{StaticResource Ico.ChevronDown}" />
+                                                            <Setter TargetName="NodeIcon" Property="Data" Value="{StaticResource Ico.FolderOpen}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsError}" Value="True">
+                                                            <Setter TargetName="NodeIcon" Property="Data" Value="{StaticResource Ico.Warning}" />
+                                                            <Setter TargetName="NodeIcon" Property="Fill" Value="{DynamicResource Brush.Warning}" />
+                                                            <Setter TargetName="NodeName" Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsOpened}" Value="True">
+                                                            <Setter TargetName="NodeIcon" Property="Fill" Value="{DynamicResource Brush.Accent}" />
+                                                            <Setter TargetName="NodeName" Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                            <Setter TargetName="NodeName" Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                            <Setter TargetName="NodeName" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                                                        </DataTrigger>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding CanManage}" Value="True" />
+                                                                <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter TargetName="FileMoreButton" Property="Visibility" Value="Visible" />
+                                                        </MultiDataTrigger>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding CanManage}" Value="True" />
+                                                                <Condition Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter TargetName="FileMoreButton" Property="Visibility" Value="Visible" />
+                                                        </MultiDataTrigger>
+                                                    </DataTemplate.Triggers>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+
+                                        <!-- 会话空态：只保留一句提示，不放按钮 -->
+                                        <TextBlock MaxWidth="196"
+                                                   Margin="0,20,0,12"
+                                                   HorizontalAlignment="Center"
+                                                   Text="{x:Static res:Strings.SessionsEmptyHint}"
+                                                   Style="{StaticResource Text.Empty}"
+                                                   Visibility="{Binding ShowSessionEmpty, Converter={StaticResource BoolToVisibility}}" />
+
+                                        <!-- 文件空态：只保留一句提示，不放按钮 -->
+                                        <TextBlock MaxWidth="196"
+                                                   Margin="0,20,0,12"
+                                                   HorizontalAlignment="Center"
+                                                   Text="{x:Static res:Strings.FilesEmptyHint}"
+                                                   Style="{StaticResource Text.Empty}"
+                                                   Visibility="{Binding ShowFileEmpty, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                            </StackPanel>
+
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                    <Setter TargetName="WorkspaceRow" Property="Background" Value="{DynamicResource Brush.Sel}" />
+                                    <Setter TargetName="WorkspaceChevron" Property="Data" Value="{StaticResource Ico.ChevronDown}" />
+                                    <Setter TargetName="WorkspaceIcon" Property="Data" Value="{StaticResource Ico.FolderOpen}" />
+                                    <Setter TargetName="WorkspaceIcon" Property="Fill" Value="{DynamicResource Brush.Accent}" />
+                                    <Setter TargetName="WorkspaceName" Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                    <Setter TargetName="WorkspaceName" Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                                </DataTrigger>
+                                <Trigger SourceName="WorkspaceRow" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="WorkspaceMeta" Property="Visibility" Value="Collapsed" />
+                                    <Setter TargetName="WorkspaceActions" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                                <Trigger SourceName="WorkspaceRow" Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter TargetName="WorkspaceMeta" Property="Visibility" Value="Collapsed" />
+                                    <Setter TargetName="WorkspaceActions" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
 
             <!-- 没有工作区 -->
             <StackPanel MaxWidth="220"
@@ -479,15 +664,15 @@
                            Style="{StaticResource Text.Empty}" />
                 <Button Margin="0,12,0,0"
                         HorizontalAlignment="Center"
-                        Content="{x:Static res:Strings.AddWorkspacePrimary}"
+                        Content="{x:Static res:Strings.NewWorkspace}"
                         Style="{StaticResource Button.Primary}"
                         Command="{Binding AddWorkspaceCommand}" />
             </StackPanel>
         </Grid>
 
         <!-- 底部固定入口 -->
-        <Border Grid.Row="5"
-                Padding="8,10,8,8"
+        <Border Grid.Row="4"
+                Padding="{StaticResource Pad.Left.Nav}"
                 Background="{DynamicResource Brush.Side}">
             <StackPanel>
                 <Button Style="{StaticResource Button.NavItem}"
@@ -501,10 +686,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <!-- 过渡：market.svg 画的是公文包，先保留旧四宫格 -->
-                        <Path Style="{StaticResource Icon.Stroke}"
+                        <Path Style="{StaticResource Icon}"
                               Data="{StaticResource Ico.Market}"
-                              Stroke="{DynamicResource Brush.Text3}" />
+                              Fill="{DynamicResource Brush.Text3}" />
                         <TextBlock Grid.Column="1"
                                    Margin="8,0,0,0"
                                    VerticalAlignment="Center"

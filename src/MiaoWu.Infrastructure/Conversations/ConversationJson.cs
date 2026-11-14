@@ -371,6 +371,7 @@ namespace MiaoWu.Infrastructure.Conversations
                     node["createdAt"] = JsonValue.From(FormatTimestamp(entry.CreatedAt));
                     node["updatedAt"] = JsonValue.From(FormatTimestamp(entry.UpdatedAt));
                     node["pinned"] = JsonValue.From(entry.IsPinned);
+                    node["archived"] = JsonValue.From(entry.IsArchived);
                     node["messageCount"] = JsonValue.From(entry.MessageCount);
                     AddIfNotEmpty(node, "lastModel", entry.LastModel);
                     AddIfNotEmpty(node, "preview", entry.Preview);
@@ -431,6 +432,7 @@ namespace MiaoWu.Infrastructure.Conversations
                     CreatedAt = ParseTimestamp(node.Get("createdAt"), DateTimeOffset.UtcNow),
                     UpdatedAt = ParseTimestamp(node.Get("updatedAt"), DateTimeOffset.UtcNow),
                     IsPinned = GetBoolean(node, "pinned"),
+                    IsArchived = GetBoolean(node, "archived"),
                     MessageCount = GetInt(node, "messageCount"),
                     LastModel = GetString(node, "lastModel"),
                     Preview = GetString(node, "preview")

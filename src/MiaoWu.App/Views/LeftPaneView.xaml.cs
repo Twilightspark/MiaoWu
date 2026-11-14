@@ -1,7 +1,8 @@
 using System;
-using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -10,300 +11,101 @@ using MiaoWu.App.ViewModels;
 namespace MiaoWu.App.Views
 {
     /// <summary>
-    /// 左栏视图：工作区手风琴、会话列表（虚拟化 + 吸顶分组）、文件树（懒加载、横向滚动）、
-    /// 底部固定入口。滚动位置按工作区保存与恢复。
+    /// 左栏视图：顶部功能入口、工作区手风琴（单击展开/收起，会话/文件紧跟在工作区下方）、
+    /// 底部固定入口。整栏只有最外层一个垂直滚动条；文件树在深度过大时保留自身的横向滚动。
     /// </summary>
     public partial class LeftPaneView : UserControl
     {
-        private ScrollViewer _sessionsScroll;
-        private ScrollViewer _treeScroll;
-        private bool _suppressScroll;
+        /// <summary>滚轮一行的兜底像素高度；系统“每次滚动行数”默认 3 行 ≈ 48px。</summary>
+        private const double WheelLineHeight = 16;
+
+        /// <summary>同一行两次单击的合并窗口；覆盖默认 500ms 双击，避免双击导致开→关。</summary>
+        private const double FolderToggleDebounceMs = 500;
+
         private LeftPaneViewModel _viewModel;
-        private WorkspaceItemViewModel _watchedWorkspace;
+
+        private FileTreeRowViewModel _lastToggledRow;
+
+        private DateTime _lastToggleAt = DateTime.MinValue;
 
         public LeftPaneView()
         {
             InitializeComponent();
-            Loaded += OnLoaded;
-            Unloaded += OnUnloaded;
             DataContextChanged += OnDataContextChanged;
         }
 
-        /// <summary>离屏快照与测试可直接调用，避免依赖 Dispatcher 队列。</summary>
-        public void ApplyScrollOffsets()
+        /// <summary>当前展开工作区的会话列表（模板生成后才有值）。</summary>
+        public ListBox ActiveSessionsList
         {
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
-            if (workspace == null)
-            {
-                return;
-            }
-
-            EnsureScrollViewers();
-
-            _suppressScroll = true;
-            try
-            {
-                if (_sessionsScroll != null && SessionsList.Visibility == Visibility.Visible)
-                {
-                    _sessionsScroll.ScrollToVerticalOffset(workspace.ScrollOffset);
-                }
-
-                if (_treeScroll != null && TreeList.Visibility == Visibility.Visible)
-                {
-                    _treeScroll.ScrollToVerticalOffset(workspace.ScrollOffset);
-                }
-            }
-            finally
-            {
-                _suppressScroll = false;
-            }
-
-            UpdateStickyHeader();
+            get { return FindActiveList("SessionsList"); }
         }
 
-        /// <summary>快照工具用：滚动到指定偏移并同步工作区状态。</summary>
-        public void ScrollSessionsTo(double offset)
+        /// <summary>当前展开工作区的文件树（模板生成后才有值）。</summary>
+        public ListBox ActiveTreeList
         {
-            EnsureScrollViewers();
-
-            if (_sessionsScroll == null)
-            {
-                return;
-            }
-
-            _suppressScroll = true;
-            try
-            {
-                _sessionsScroll.ScrollToVerticalOffset(offset);
-            }
-            finally
-            {
-                _suppressScroll = false;
-            }
-
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
-            if (workspace != null)
-            {
-                workspace.ScrollOffset = offset;
-            }
-
-            UpdateStickyHeader();
-        }
-
-        public void ScrollTreeTo(double offset)
-        {
-            EnsureScrollViewers();
-
-            if (_treeScroll == null)
-            {
-                return;
-            }
-
-            _suppressScroll = true;
-            try
-            {
-                _treeScroll.ScrollToVerticalOffset(offset);
-            }
-            finally
-            {
-                _suppressScroll = false;
-            }
-
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
-            if (workspace != null)
-            {
-                workspace.ScrollOffset = offset;
-            }
+            get { return FindActiveList("FileTree"); }
         }
 
         public void FocusInitial()
         {
-            if (SessionsList.Visibility == Visibility.Visible)
+            ListBox sessions = ActiveSessionsList;
+            if (sessions != null && sessions.Visibility == Visibility.Visible)
             {
-                Keyboard.Focus(SessionsList);
+                Keyboard.Focus(sessions);
                 return;
             }
 
-            if (TreeList.Visibility == Visibility.Visible)
+            ListBox tree = ActiveTreeList;
+            if (tree != null && tree.Visibility == Visibility.Visible)
             {
-                Keyboard.Focus(TreeList);
+                Keyboard.Focus(tree);
                 return;
             }
 
             Keyboard.Focus(AddWorkspaceButton);
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
-        {
-            EnsureScrollViewers();
-            Subscribe();
-            QueueApplyScroll();
-        }
-
-        private void EnsureScrollViewers()
-        {
-            if (_sessionsScroll == null)
-            {
-                AttachScrollViewer(SessionsList, OnSessionsScroll, viewer => _sessionsScroll = viewer);
-            }
-
-            if (_treeScroll == null)
-            {
-                AttachScrollViewer(TreeList, OnTreeScroll, viewer => _treeScroll = viewer);
-            }
-        }
-
-        private void OnUnloaded(object sender, RoutedEventArgs e)
-        {
-            if (_sessionsScroll != null)
-            {
-                _sessionsScroll.ScrollChanged -= OnSessionsScroll;
-                _sessionsScroll = null;
-            }
-
-            if (_treeScroll != null)
-            {
-                _treeScroll.ScrollChanged -= OnTreeScroll;
-                _treeScroll = null;
-            }
-
-            Unsubscribe();
-        }
-
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            Unsubscribe();
-            Subscribe();
-            QueueApplyScroll();
-        }
-
-        private void Subscribe()
-        {
-            if (_viewModel != null)
-            {
-                _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-            }
-
             _viewModel = DataContext as LeftPaneViewModel;
-            if (_viewModel != null)
-            {
-                _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-            }
-
-            WatchWorkspace(_viewModel == null ? null : _viewModel.ActiveWorkspace);
         }
 
-        private void Unsubscribe()
+        private ListBox FindActiveList(string automationId)
         {
-            if (_viewModel != null)
+            if (_viewModel == null || WorkspaceList == null)
             {
-                _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-                _viewModel = null;
+                return null;
             }
 
-            WatchWorkspace(null);
+            WorkspaceItemViewModel active = _viewModel.ActiveWorkspace;
+            if (active == null)
+            {
+                return null;
+            }
+
+            return FindActiveListIn(WorkspaceList, automationId, active);
         }
 
-        private void OnViewModelPropertyChanged(object sender, PropertyChangedEventArgs e)
+        private static ListBox FindActiveListIn(
+            DependencyObject root,
+            string automationId,
+            WorkspaceItemViewModel active)
         {
-            if (e.PropertyName == "ActiveWorkspace")
+            var list = root as ListBox;
+            if (list != null
+                && ReferenceEquals(list.DataContext, active)
+                && string.Equals(
+                    AutomationProperties.GetAutomationId(list),
+                    automationId,
+                    StringComparison.Ordinal))
             {
-                WatchWorkspace(_viewModel == null ? null : _viewModel.ActiveWorkspace);
-                QueueApplyScroll();
-                UpdateStickyHeader();
-            }
-        }
-
-        private void WatchWorkspace(WorkspaceItemViewModel workspace)
-        {
-            if (ReferenceEquals(_watchedWorkspace, workspace))
-            {
-                return;
-            }
-
-            if (_watchedWorkspace != null)
-            {
-                _watchedWorkspace.PropertyChanged -= OnWorkspacePropertyChanged;
-            }
-
-            _watchedWorkspace = workspace;
-
-            if (_watchedWorkspace != null)
-            {
-                _watchedWorkspace.PropertyChanged += OnWorkspacePropertyChanged;
-            }
-        }
-
-        private void OnWorkspacePropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == "ShowSessionList"
-                || e.PropertyName == "ShowFileTree"
-                || e.PropertyName == "IsExpanded")
-            {
-                QueueApplyScroll();
-                UpdateStickyHeader();
-            }
-        }
-
-        private void QueueApplyScroll()
-        {
-            if (!IsLoaded)
-            {
-                return;
-            }
-
-            Dispatcher.BeginInvoke(
-                new Action(ApplyScrollOffsets),
-                DispatcherPriority.Loaded);
-        }
-
-        private void AttachScrollViewer(
-            ListBox listBox,
-            ScrollChangedEventHandler handler,
-            Action<ScrollViewer> assign)
-        {
-            listBox.ApplyTemplate();
-            listBox.UpdateLayout();
-
-            ScrollViewer viewer = FindScrollViewer(listBox);
-            if (viewer != null)
-            {
-                assign(viewer);
-                viewer.ScrollChanged += handler;
-                return;
-            }
-
-            // 模板可能还没生成；LayoutUpdated 时再试一次。
-            EventHandler retry = null;
-            retry = (sender, args) =>
-            {
-                ScrollViewer retried = FindScrollViewer(listBox);
-                if (retried == null)
-                {
-                    return;
-                }
-
-                assign(retried);
-                retried.ScrollChanged += handler;
-                listBox.LayoutUpdated -= retry;
-                ApplyScrollOffsets();
-            };
-
-            listBox.LayoutUpdated += retry;
-        }
-
-        private static ScrollViewer FindScrollViewer(DependencyObject root)
-        {
-            var viewer = root as ScrollViewer;
-            if (viewer != null)
-            {
-                return viewer;
+                return list;
             }
 
             int count = VisualTreeHelper.GetChildrenCount(root);
             for (int index = 0; index < count; index++)
             {
-                ScrollViewer found = FindScrollViewer(VisualTreeHelper.GetChild(root, index));
+                ListBox found = FindActiveListIn(VisualTreeHelper.GetChild(root, index), automationId, active);
                 if (found != null)
                 {
                     return found;
@@ -313,90 +115,199 @@ namespace MiaoWu.App.Views
             return null;
         }
 
-        private void OnSessionsScroll(object sender, ScrollChangedEventArgs e)
+        /// <summary>
+        /// 会话/文件列表自己带 ScrollViewer，即使关掉滚动条也会消费滚轮；左栏只允许最外层滚动，
+        /// 因此在这里统一把滚轮折算成外层偏移，避免“鼠标在会话/文件上滚不动”。
+        /// </summary>
+        private void OnWorkspacePreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (_suppressScroll)
+            if (e.Handled || WorkspaceScroll == null || WorkspaceScroll.ScrollableHeight <= 0 || e.Delta == 0)
             {
                 return;
             }
 
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
-            if (workspace == null || SessionsList.Visibility != Visibility.Visible)
-            {
-                return;
-            }
+            int lines = SystemParameters.WheelScrollLines;
+            double step = lines == -1
+                ? WorkspaceScroll.ViewportHeight
+                : Math.Max(1, lines) * WheelLineHeight;
 
-            workspace.ScrollOffset = _sessionsScroll == null ? 0 : _sessionsScroll.VerticalOffset;
-            UpdateStickyHeader();
+            WorkspaceScroll.ScrollToVerticalOffset(WorkspaceScroll.VerticalOffset - Math.Sign(e.Delta) * step);
+            e.Handled = true;
         }
 
-        private void OnTreeScroll(object sender, ScrollChangedEventArgs e)
+        /// <summary>单击工作区行展开/收起；点按钮或行内输入框时不触发。</summary>
+        private void OnWorkspaceRowClick(object sender, MouseButtonEventArgs e)
         {
-            if (_suppressScroll)
+            DependencyObject source = (DependencyObject)e.OriginalSource;
+            if (FindAncestor<Button>(source) != null || FindAncestor<TextBox>(source) != null)
             {
                 return;
             }
 
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
-            if (workspace == null || TreeList.Visibility != Visibility.Visible)
+            var element = sender as FrameworkElement;
+            WorkspaceItemViewModel workspace = element == null
+                ? null
+                : element.DataContext as WorkspaceItemViewModel;
+            if (workspace == null)
             {
                 return;
             }
 
-            workspace.ScrollOffset = _treeScroll == null ? 0 : _treeScroll.VerticalOffset;
+            workspace.ToggleExpandedCommand.Execute(null);
+            e.Handled = true;
         }
 
-        private void UpdateStickyHeader()
+        /// <summary>左键点击行尾更多按钮时打开同一个悬浮菜单；右键仍由 WPF 默认处理。</summary>
+        private void OnMoreButtonClick(object sender, RoutedEventArgs e)
         {
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
-            if (workspace == null || SessionsList.Visibility != Visibility.Visible)
+            var button = sender as Button;
+            if (button == null || button.ContextMenu == null)
             {
-                if (workspace != null)
-                {
-                    workspace.IsStickyHeaderVisible = false;
-                }
-
                 return;
             }
 
-            double offset = _sessionsScroll == null ? 0 : _sessionsScroll.VerticalOffset;
-            if (offset < 1)
+            button.ContextMenu.PlacementTarget = button;
+            button.ContextMenu.Placement = PlacementMode.Bottom;
+            button.ContextMenu.IsOpen = true;
+            e.Handled = true;
+        }
+
+        /// <summary>行内重命名输入框出现时自动聚焦并全选，减少一次点击。</summary>
+        private void OnInlineRenameBoxVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            var box = sender as TextBox;
+            if (box == null || !box.IsVisible)
             {
-                workspace.IsStickyHeaderVisible = false;
                 return;
             }
 
-            for (int index = 0; index < SessionsList.Items.Count; index++)
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    if (!box.IsVisible)
+                    {
+                        return;
+                    }
+
+                    box.Focus();
+                    box.SelectAll();
+                }),
+                DispatcherPriority.Input);
+        }
+
+        private void OnInlineRenameKeyDown(object sender, KeyEventArgs e)
+        {
+            var box = sender as TextBox;
+            var row = box == null ? null : box.DataContext as IInlineRenameRow;
+            if (row == null)
             {
-                var container = SessionsList.ItemContainerGenerator.ContainerFromIndex(index) as ListBoxItem;
-                if (container == null)
-                {
-                    continue;
-                }
-
-                Point origin = container.TransformToAncestor(SessionsList).Transform(new Point(0, 0));
-                if (origin.Y + container.ActualHeight < 26)
-                {
-                    continue;
-                }
-
-                var row = container.DataContext as SessionRowViewModel;
-                if (row == null)
-                {
-                    continue;
-                }
-
-                workspace.StickyHeaderText = LeftPaneViewModel.GetGroupHeaderText(row.Group);
-                workspace.IsStickyHeaderVisible = true;
                 return;
             }
 
-            workspace.IsStickyHeaderVisible = false;
+            if (e.Key == Key.Enter)
+            {
+                row.CommitRename();
+                MoveFocusBackToList(box);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                row.CancelRename();
+                MoveFocusBackToList(box);
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>点击行内其它位置即提交；提交失败时由 ViewModel 写内联错误。</summary>
+        private void OnInlineRenameLostFocus(object sender, RoutedEventArgs e)
+        {
+            var box = sender as TextBox;
+            var row = box == null ? null : box.DataContext as IInlineRenameRow;
+            if (row != null && row.IsRenaming)
+            {
+                row.CommitRename();
+            }
+        }
+
+        private static void MoveFocusBackToList(DependencyObject source)
+        {
+            ListBox list = FindAncestor<ListBox>(source);
+            if (list != null)
+            {
+                list.Focus();
+            }
+        }
+
+        /// <summary>单击文件夹即展开/收起；文件仍然是双击打开。</summary>
+        private void OnTreeRowClick(object sender, MouseButtonEventArgs e)
+        {
+            FileTreeRowViewModel row = FindRow(sender, e);
+            if (row == null || !row.IsDirectory)
+            {
+                return;
+            }
+
+            var workspace = GetWorkspaceFromSender(sender);
+            if (workspace == null)
+            {
+                return;
+            }
+
+            // 双击会被拆成两次单击：同一行在双击时间窗内只认一次，避免“开了又关”。
+            DateTime now = DateTime.UtcNow;
+            if (ReferenceEquals(row, _lastToggledRow)
+                && (now - _lastToggleAt).TotalMilliseconds < FolderToggleDebounceMs)
+            {
+                return;
+            }
+
+            _lastToggledRow = row;
+            _lastToggleAt = now;
+            workspace.ToggleNode(row);
+        }
+
+        private void OnTreeRowDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            FileTreeRowViewModel row = FindRow(sender, e);
+            if (row == null || row.IsDirectory)
+            {
+                return;
+            }
+
+            var workspace = GetWorkspaceFromSender(sender);
+            if (workspace == null)
+            {
+                return;
+            }
+
+            workspace.OpenNode(row);
+            e.Handled = true;
+        }
+
+        private static FileTreeRowViewModel FindRow(object sender, MouseButtonEventArgs e)
+        {
+            DependencyObject source = (DependencyObject)e.OriginalSource;
+            if (FindAncestor<Button>(source) != null || FindAncestor<TextBox>(source) != null)
+            {
+                return null;
+            }
+
+            var listBox = sender as ListBox;
+            if (listBox == null)
+            {
+                return null;
+            }
+
+            var container = ItemsControl.ContainerFromElement(
+                listBox,
+                (DependencyObject)e.OriginalSource) as ListBoxItem;
+
+            return container == null ? null : container.DataContext as FileTreeRowViewModel;
         }
 
         private void OnTreePreviewKeyDown(object sender, KeyEventArgs e)
         {
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
+            WorkspaceItemViewModel workspace = GetWorkspaceFromSender(sender);
             FileTreeRowViewModel row = workspace == null ? null : workspace.SelectedFile;
             if (row == null)
             {
@@ -420,34 +331,10 @@ namespace MiaoWu.App.Views
             }
         }
 
-        private void OnTreeMouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private static WorkspaceItemViewModel GetWorkspaceFromSender(object sender)
         {
-            if (FindAncestor<Button>((DependencyObject)e.OriginalSource) != null)
-            {
-                return;
-            }
-
-            var container = ItemsControl.ContainerFromElement(
-                TreeList,
-                (DependencyObject)e.OriginalSource) as ListBoxItem;
-
-            var row = container == null ? null : container.DataContext as FileTreeRowViewModel;
-            WorkspaceItemViewModel workspace = _viewModel == null ? null : _viewModel.ActiveWorkspace;
-            if (row == null || workspace == null)
-            {
-                return;
-            }
-
-            if (row.IsDirectory)
-            {
-                workspace.ToggleNode(row);
-            }
-            else
-            {
-                workspace.OpenNode(row);
-            }
-
-            e.Handled = true;
+            var element = sender as FrameworkElement;
+            return element == null ? null : element.DataContext as WorkspaceItemViewModel;
         }
 
         private static T FindAncestor<T>(DependencyObject start) where T : DependencyObject

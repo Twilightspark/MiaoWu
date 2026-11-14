@@ -14,6 +14,7 @@ using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Documents;
 using MiaoWu.Core.Layout;
 using MiaoWu.Core.Markdown;
+using MiaoWu.Core.Sessions;
 using MiaoWu.Core.Settings;
 using MiaoWu.Core.Workspaces;
 
@@ -33,6 +34,7 @@ namespace MiaoWu.App.ViewModels
         private readonly IWorkspaceStore _workspaceStore;
         private readonly AppSettings _settings;
         private readonly AppServices _services;
+        private readonly IDialogService _dialogs;
         private readonly PaneLayoutPolicy _layoutPolicy;
         private readonly Dictionary<string, bool> _runningSessions =
             new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -56,6 +58,8 @@ namespace MiaoWu.App.ViewModels
             IWorkspaceStore workspaceStore,
             ISessionCatalog sessionCatalog,
             IFileCatalog fileCatalog,
+            ISessionEditor sessionEditor,
+            IFileEditor fileEditor,
             IFilePreviewService previewService,
             IFolderPicker folderPicker,
             IFilePicker filePicker,
@@ -74,6 +78,16 @@ namespace MiaoWu.App.ViewModels
             if (fileCatalog == null)
             {
                 throw new ArgumentNullException(nameof(fileCatalog));
+            }
+
+            if (sessionEditor == null)
+            {
+                throw new ArgumentNullException(nameof(sessionEditor));
+            }
+
+            if (fileEditor == null)
+            {
+                throw new ArgumentNullException(nameof(fileEditor));
             }
 
             if (previewService == null)
@@ -103,6 +117,7 @@ namespace MiaoWu.App.ViewModels
 
             Func<DateTime> now = clock ?? (() => DateTime.Now);
             _services = services;
+            _dialogs = dialogs;
 
             _settings = UiSettingsPolicy.Normalize(
                 services != null ? services.Settings : (_settingsStore.Load() ?? new AppSettings()),
@@ -124,6 +139,8 @@ namespace MiaoWu.App.ViewModels
             Left = new LeftPaneViewModel(
                 sessionCatalog,
                 fileCatalog,
+                sessionEditor,
+                fileEditor,
                 folderPicker,
                 filePicker,
                 dialogs,
@@ -153,6 +170,12 @@ namespace MiaoWu.App.ViewModels
             Left.FileOpenRequested += OnFileOpenRequested;
             Left.SettingsRequested += (sender, args) => ShowSettings();
             Left.MarketplaceRequested += (sender, args) => ShowMarketplacePlaceholder();
+            Left.ScheduledTasksRequested += (sender, args) => ShowScheduledTasksPlaceholder();
+            Left.SessionRenamed += OnLeftSessionRenamed;
+            Left.SessionDeleteRequested += OnLeftSessionDeleteRequested;
+            Left.ClearSessionsRequested += OnLeftClearSessionsRequested;
+            Left.FileRenamed += OnLeftFileRenamed;
+            Left.FileDeleted += OnLeftFileDeleted;
             Canvas.StateChanged += OnChildStateChanged;
             Canvas.AddToConversationRequested += OnAddToConversationRequested;
             Canvas.FileOpened += OnCanvasFileOpened;
@@ -535,6 +558,11 @@ namespace MiaoWu.App.ViewModels
             Overlay.Show(Strings.CapabilityMarketPendingTitle, Strings.CapabilityMarketPendingBody);
         }
 
+        public void ShowScheduledTasksPlaceholder()
+        {
+            Overlay.Show(Strings.ScheduledTasksPendingTitle, Strings.ScheduledTasksPendingBody);
+        }
+
         /// <summary>兼容离屏快照工具的旧入口：没有真实服务时退化为文本浮层。</summary>
         public void ShowSettingsPlaceholder()
         {
@@ -654,6 +682,123 @@ namespace MiaoWu.App.ViewModels
         private void OnFileOpenRequested(object sender, FileOpenRequestedEventArgs e)
         {
             Canvas.OpenFile(e.FilePath, e.DisplayName);
+        }
+
+        private void OnLeftSessionRenamed(object sender, SessionRenamedEventArgs e)
+        {
+            if (Conversation != null)
+            {
+                Conversation.ApplySessionTitle(e.SessionId, e.Title);
+            }
+        }
+
+        private void OnLeftSessionDeleteRequested(object sender, SessionActionRequestedEventArgs e)
+        {
+            FireAndForget(DeleteSessionAsync(e));
+        }
+
+        private void OnLeftClearSessionsRequested(object sender, WorkspaceActionRequestedEventArgs e)
+        {
+            FireAndForget(ClearWorkspaceSessionsAsync(e.Workspace));
+        }
+
+        private void OnLeftFileRenamed(object sender, FileRenamedEventArgs e)
+        {
+            Canvas.HandleFileRenamed(e.OldPath, e.NewPath);
+        }
+
+        private void OnLeftFileDeleted(object sender, FileDeletedEventArgs e)
+        {
+            Canvas.HandleFileDeleted(e.FilePath);
+        }
+
+        /// <summary>左栏删除会话：先关停运行中的会话，再删 JSONL 与索引项。</summary>
+        private async System.Threading.Tasks.Task DeleteSessionAsync(SessionActionRequestedEventArgs e)
+        {
+            if (_services == null || e == null || e.Workspace == null)
+            {
+                return;
+            }
+
+            string title = string.IsNullOrWhiteSpace(e.Title) ? Strings.NewSession : e.Title;
+            if (!_dialogs.Confirm(
+                Strings.DeleteSession,
+                "删除“" + title + "”后，本会话的 JSONL 记录会从工作区移除，无法恢复。",
+                Strings.Delete,
+                Strings.Cancel))
+            {
+                return;
+            }
+
+            try
+            {
+                await _services.Runtime.CloseAsync(e.SessionId, System.Threading.CancellationToken.None);
+
+                if (Conversation != null
+                    && string.Equals(Conversation.SessionId, e.SessionId, StringComparison.Ordinal))
+                {
+                    Conversation.Detach();
+                }
+
+                await _services.GetStore(e.Workspace.Model).DeleteAsync(
+                    e.SessionId,
+                    System.Threading.CancellationToken.None);
+
+                Left.RefreshSessions();
+                OnSessionSelectionChanged(this, EventArgs.Empty);
+            }
+            catch (Exception exception)
+            {
+                Overlay.Show("删除失败", exception.Message);
+            }
+        }
+
+        /// <summary>清空工作区会话：先关停该工作区所有会话，再删除记录文件。</summary>
+        private async System.Threading.Tasks.Task ClearWorkspaceSessionsAsync(
+            WorkspaceItemViewModel workspace)
+        {
+            if (_services == null || workspace == null)
+            {
+                return;
+            }
+
+            if (!_dialogs.Confirm(
+                Strings.ClearWorkspaceSessions,
+                "将清除“" + workspace.Name + "”下的全部会话记录，无法恢复；工作区文件不受影响。",
+                Strings.ClearWorkspaceSessions,
+                Strings.Cancel))
+            {
+                return;
+            }
+
+            try
+            {
+                var sessions = _services.SessionCatalog.GetSessions(workspace.Model);
+                foreach (SessionSummary session in sessions)
+                {
+                    await _services.Runtime.CloseAsync(
+                        session.Id,
+                        System.Threading.CancellationToken.None);
+                }
+
+                if (Conversation != null && workspace.Model != null
+                    && ReferenceEquals(Conversation.Workspace, workspace.Model))
+                {
+                    Conversation.Detach();
+                }
+
+                await _services.SessionCatalog.ClearAsync(
+                    workspace.Model,
+                    System.Threading.CancellationToken.None);
+
+                workspace.RefreshSessions();
+                Left.RefreshSessions();
+                OnSessionSelectionChanged(this, EventArgs.Empty);
+            }
+            catch (Exception exception)
+            {
+                Overlay.Show("清除失败", exception.Message);
+            }
         }
 
         private void OnAddToConversationRequested(object sender, EventArgs e)
@@ -975,52 +1120,8 @@ namespace MiaoWu.App.ViewModels
                 collection.Workspaces = new List<Workspace>();
             }
 
-            if (collection.Workspaces.Count > 0)
-            {
-                return collection;
-            }
-
-            string path = GetDefaultWorkspacePath();
-            if (string.IsNullOrEmpty(path))
-            {
-                return collection;
-            }
-
-            var models = new List<Workspace>();
-            var seeded = new WorkspaceCollection { SchemaVersion = collection.SchemaVersion };
-            Workspace workspace;
-            string error;
-
-            if (WorkspacePolicy.TryAdd(models, path, out workspace, out error))
-            {
-                seeded.Workspaces.Add(workspace);
-                seeded.ActiveWorkspaceId = workspace.Id;
-                return seeded;
-            }
-
+            // 不再自动把当前目录/环境变量塞成默认工作区：首个工作区由首次向导或用户手动添加。
             return collection;
-        }
-
-        /// <summary>
-        /// 首次启动前的默认工作区：环境变量优先，其次当前目录。
-        /// 向导完成前仍用这段逻辑，保证没有配置时也能打开一个可用工作区。
-        /// </summary>
-        private static string GetDefaultWorkspacePath()
-        {
-            string fromEnvironment = Environment.GetEnvironmentVariable("MIAOWU_DEFAULT_WORKSPACE");
-            if (!string.IsNullOrWhiteSpace(fromEnvironment) && Directory.Exists(fromEnvironment))
-            {
-                return fromEnvironment;
-            }
-
-            string current = Environment.CurrentDirectory;
-            if (!string.IsNullOrWhiteSpace(current) && Directory.Exists(current))
-            {
-                return current;
-            }
-
-            string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            return Directory.Exists(documents) ? documents : null;
         }
     }
 }

@@ -684,6 +684,35 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        /// <summary>左栏重命名后同步右栏标题；只处理当前会话。</summary>
+        public void ApplySessionTitle(string sessionId, string title)
+        {
+            if (string.IsNullOrEmpty(sessionId)
+                || !string.Equals(_sessionId, sessionId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _title = title;
+            OnPropertyChanged(nameof(Title));
+
+            // 左栏直接改的是存储；同步给运行中的会话，避免首条消息自动标题覆盖。
+            IAgentSession session = CurrentSession;
+            if (session == null)
+            {
+                return;
+            }
+
+            try
+            {
+                session.RenameAsync(title, CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (Exception exception)
+            {
+                StatusText = "重命名保存失败：" + exception.Message;
+            }
+        }
+
         public void FocusComposerRequested()
         {
             ComposerFocusRequested?.Invoke(this, EventArgs.Empty);

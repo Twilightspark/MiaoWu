@@ -27,9 +27,9 @@ namespace MiaoWu.Core.Workspaces
             Children = new List<FileNode>();
         }
 
-        public string Name { get; }
+        public string Name { get; private set; }
 
-        public string FullPath { get; }
+        public string FullPath { get; private set; }
 
         public bool IsDirectory { get; }
 
@@ -62,6 +62,13 @@ namespace MiaoWu.Core.Workspaces
         public bool IsErrorRow
         {
             get { return State == FileNodeState.Error; }
+        }
+
+        /// <summary>磁盘重命名成功后同步行数据；调用方负责重建或刷新行。</summary>
+        public void Rename(string name, string fullPath)
+        {
+            Name = name ?? string.Empty;
+            FullPath = fullPath ?? string.Empty;
         }
 
         public void ResetChildren()

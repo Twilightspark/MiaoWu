@@ -50,6 +50,31 @@ namespace MiaoWu.Tests.Sessions
         }
 
         [Fact]
+        public void ArchivedSessionsFormTheirOwnLastGroup()
+        {
+            var archived = Create("archived", Now.AddHours(-2));
+            archived.IsArchived = true;
+            var pinnedArchived = Create("pinned-archived", Now.AddHours(-3), pinned: true);
+            pinnedArchived.IsArchived = true;
+
+            var sessions = new List<SessionSummary>
+            {
+                Create("today", Now.AddHours(-1)),
+                archived,
+                pinnedArchived
+            };
+
+            IReadOnlyList<SessionListRow> rows = SessionGroupPolicy.Build(sessions, Now);
+
+            Assert.Equal(
+                new[] { SessionGroup.Today, SessionGroup.Archived },
+                rows.Where(r => r.IsHeader).Select(r => r.Group).ToArray());
+            Assert.Equal(
+                new[] { "today", "archived", "pinned-archived" },
+                rows.Where(r => !r.IsHeader).Select(r => r.Session.Id).ToArray());
+        }
+
+        [Fact]
         public void BuildHandlesNullAndEmpty()
         {
             Assert.Empty(SessionGroupPolicy.Build(null, Now));

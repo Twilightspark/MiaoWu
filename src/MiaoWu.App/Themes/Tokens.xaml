@@ -32,6 +32,8 @@
     <Color x:Key="Color.AccentHover">#2A6F4D</Color>
     <Color x:Key="Color.AccentPressed">#245F42</Color>
     <Color x:Key="Color.AccentSoft">#E9F3ED</Color>
+    <!-- 主题色表面上的文字与图标：深色主题下同样保持白色 -->
+    <Color x:Key="Color.OnAccent">#FFFFFF</Color>
     <Color x:Key="Color.Warning">#B7841F</Color>
     <Color x:Key="Color.WarningSoft">#FFFAF0</Color>
     <Color x:Key="Color.Danger">#B42318</Color>
@@ -74,6 +76,7 @@
     <SolidColorBrush x:Key="Brush.AccentHover" Color="{StaticResource Color.AccentHover}" />
     <SolidColorBrush x:Key="Brush.AccentPressed" Color="{StaticResource Color.AccentPressed}" />
     <SolidColorBrush x:Key="Brush.AccentSoft" Color="{StaticResource Color.AccentSoft}" />
+    <SolidColorBrush x:Key="Brush.OnAccent" Color="{StaticResource Color.OnAccent}" />
     <SolidColorBrush x:Key="Brush.Warning" Color="{StaticResource Color.Warning}" />
     <SolidColorBrush x:Key="Brush.WarningSoft" Color="{StaticResource Color.WarningSoft}" />
     <SolidColorBrush x:Key="Brush.Danger" Color="{StaticResource Color.Danger}" />
@@ -102,9 +105,11 @@
     <FontWeight x:Key="Font.Weight.Bold">Bold</FontWeight>
 
     <!-- 字号 -->
-    <sys:Double x:Key="Font.AppName.Size">13</sys:Double>
+    <sys:Double x:Key="Font.AppName.Size">16.5</sys:Double>
     <sys:Double x:Key="Font.Brand.Size">28</sys:Double>
     <sys:Double x:Key="Font.Section.Size">13.5</sys:Double>
+    <sys:Double x:Key="Font.LeftSection.Size">12.5</sys:Double>
+    <sys:Double x:Key="Font.LeftSection.Line">20</sys:Double>
     <sys:Double x:Key="Font.H1.Size">22</sys:Double>
     <sys:Double x:Key="Font.H2.Size">14</sys:Double>
     <sys:Double x:Key="Font.H3.Size">13</sys:Double>
@@ -121,7 +126,7 @@
     <sys:Double x:Key="Font.Tab.Size">12</sys:Double>
 
     <!-- 行高 -->
-    <sys:Double x:Key="Font.AppName.Line">20</sys:Double>
+    <sys:Double x:Key="Font.AppName.Line">22</sys:Double>
     <sys:Double x:Key="Font.Brand.Line">38</sys:Double>
     <sys:Double x:Key="Font.Section.Line">20</sys:Double>
     <sys:Double x:Key="Font.H1.Line">32</sys:Double>
@@ -147,6 +152,7 @@
     <sys:Double x:Key="Metric.Left.Width">262</sys:Double>
     <sys:Double x:Key="Metric.Left.Min">208</sys:Double>
     <sys:Double x:Key="Metric.Left.Max">320</sys:Double>
+    <sys:Double x:Key="Metric.Left.Section.Height">32</sys:Double>
     <sys:Double x:Key="Metric.Middle.Min">480</sys:Double>
     <sys:Double x:Key="Metric.Right.Width">428</sys:Double>
     <sys:Double x:Key="Metric.Right.Min">384</sys:Double>
@@ -167,7 +173,7 @@
     <sys:Double x:Key="Metric.Window.Min.Height">760</sys:Double>
     <sys:Double x:Key="Metric.Window.CornerRadius">8</sys:Double>
     <sys:Double x:Key="Metric.Icon">16</sys:Double>
-    <sys:Double x:Key="Metric.Icon.Brand">22</sys:Double>
+    <sys:Double x:Key="Metric.Icon.Brand">28</sys:Double>
     <sys:Double x:Key="Metric.Icon.Stroke">1.25</sys:Double>
     <sys:Double x:Key="Metric.Focus.Stroke">1.5</sys:Double>
     <sys:Double x:Key="Metric.WindowGlyph.Size">10</sys:Double>
@@ -181,11 +187,11 @@
     <sys:Double x:Key="Metric.FocusRadius.Card">10</sys:Double>
 
     <!-- 行与控件 -->
-    <sys:Double x:Key="Metric.Row.Workspace">32</sys:Double>
-    <sys:Double x:Key="Metric.Row.Session">32</sys:Double>
+    <sys:Double x:Key="Metric.Row.Workspace">34</sys:Double>
+    <sys:Double x:Key="Metric.Row.Session">34</sys:Double>
     <sys:Double x:Key="Metric.Row.Tree">25</sys:Double>
-    <sys:Double x:Key="Metric.Row.Group">25</sys:Double>
-    <sys:Double x:Key="Metric.Segment.Height">22</sys:Double>
+    <sys:Double x:Key="Metric.Row.Group">26</sys:Double>
+    <sys:Double x:Key="Metric.Segment.Height">24</sys:Double>
     <sys:Double x:Key="Metric.Tab.Width">168</sys:Double>
     <sys:Double x:Key="Metric.Tab.Height">28</sys:Double>
     <sys:Double x:Key="Metric.Tab.Gap">6</sys:Double>
@@ -196,7 +202,6 @@
     <sys:Double x:Key="Metric.Diff.NumberWidth">38</sys:Double>
     <sys:Double x:Key="Metric.Markdown.ListIndent">16</sys:Double>
     <sys:Double x:Key="Metric.Image.MaxWidth">720</sys:Double>
-    <sys:Double x:Key="Metric.Left.Segment.RowHeight">30</sys:Double>
     <sys:Double x:Key="Metric.Left.InlineError.Height">26</sys:Double>
     <sys:Double x:Key="Metric.Line.Height">19</sys:Double>
     <sys:Double x:Key="Metric.Doc.PadTop">28</sys:Double>
@@ -237,11 +242,17 @@
 
     <!-- 间距 -->
     <Thickness x:Key="Pad.TopBar">14,0,8,0</Thickness>
-    <Thickness x:Key="Pad.WorkspaceRow">8,0,10,0</Thickness>
+    <Thickness x:Key="Pad.WorkspaceRow">10,0,10,0</Thickness>
     <Thickness x:Key="Pad.SessionRow">9,0,9,0</Thickness>
     <Thickness x:Key="Pad.Tab">9,0,9,0</Thickness>
     <Thickness x:Key="Pad.ActionBar">10,0,10,0</Thickness>
-    <Thickness x:Key="Pad.LeftHeader">8,0,8,0</Thickness>
+    <!-- 左栏标题与其他功能入口共用同一条图标列：12（内容边距）+ 9（按钮内边距） -->
+    <Thickness x:Key="Pad.LeftHeader">21,0,12,0</Thickness>
+    <Thickness x:Key="Pad.Left.Actions">12,6,12,0</Thickness>
+    <Thickness x:Key="Pad.Left.Nav">12,8,12,12</Thickness>
+    <Thickness x:Key="Pad.Left.Content">0,0,0,4</Thickness>
+    <Thickness x:Key="Margin.Left.WorkspaceRow">12,0,12,0</Thickness>
+    <Thickness x:Key="Margin.Left.Content">24,2,12,10</Thickness>
     <Thickness x:Key="Pad.TreeRow">6,0,10,0</Thickness>
     <Thickness x:Key="Pad.TableCell">12,6</Thickness>
     <Thickness x:Key="Pad.MarkdownCode">12,8,12,10</Thickness>
@@ -252,6 +263,7 @@
     <Thickness x:Key="Pad.Button">8,0</Thickness>
     <Thickness x:Key="Pad.Button.Toolbar">6,0</Thickness>
     <Thickness x:Key="Pad.Button.Primary">12,0</Thickness>
+    <Thickness x:Key="Pad.Button.NavAccent">9,0</Thickness>
     <Thickness x:Key="Pad.Segment">10,0</Thickness>
     <Thickness x:Key="Pad.ToolTip">8,5</Thickness>
     <Thickness x:Key="Pad.TextBox">8,6</Thickness>

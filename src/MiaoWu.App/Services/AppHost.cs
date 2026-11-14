@@ -38,6 +38,8 @@ namespace MiaoWu.App.Services
                 _services.WorkspaceStore,
                 _services.SessionCatalog,
                 _services.FileCatalog,
+                _services.SessionCatalog,
+                _services.FileCatalog,
                 _services.PreviewService,
                 new WindowsFolderPicker(),
                 new WindowsFilePicker(),

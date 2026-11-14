@@ -159,6 +159,7 @@ namespace MiaoWu.Infrastructure.Conversations
                     CreatedAt = createdAt,
                     UpdatedAt = createdAt,
                     IsPinned = false,
+                    IsArchived = false,
                     MessageCount = 0,
                     LastModel = BuildModelRef(descriptor.ProviderId, descriptor.ModelId),
                     Preview = string.Empty
@@ -417,6 +418,110 @@ namespace MiaoWu.Infrastructure.Conversations
             return Task.CompletedTask;
         }
 
+        /// <summary>置顶 / 取消置顶，并追加 <c>session.pinned</c> 事件保证索引重建后仍保留。</summary>
+        public Task SetPinnedAsync(
+            string sessionId,
+            bool pinned,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireSessionId(sessionId);
+            string path = RequireSessionFile(sessionId);
+            DateTimeOffset now = _clock.UtcNow;
+
+            lock (GetSessionGate(sessionId))
+            {
+                JsonValue body = JsonValue.NewObject();
+                body["pinned"] = JsonValue.From(pinned);
+                AppendEvent(sessionId, path, now, "session.pinned", body);
+
+                lock (_indexGate)
+                {
+                    ConversationIndex index = GetIndexUnsafe();
+                    ConversationIndexEntry entry = RequireEntry(index, sessionId, now);
+                    entry.IsPinned = pinned;
+                    MarkIndexDirty(index, persist: true);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>归档 / 取消归档，并追加 <c>session.archived</c> 事件。</summary>
+        public Task SetArchivedAsync(
+            string sessionId,
+            bool archived,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireSessionId(sessionId);
+            string path = RequireSessionFile(sessionId);
+            DateTimeOffset now = _clock.UtcNow;
+
+            lock (GetSessionGate(sessionId))
+            {
+                JsonValue body = JsonValue.NewObject();
+                body["archived"] = JsonValue.From(archived);
+                AppendEvent(sessionId, path, now, "session.archived", body);
+
+                lock (_indexGate)
+                {
+                    ConversationIndex index = GetIndexUnsafe();
+                    ConversationIndexEntry entry = RequireEntry(index, sessionId, now);
+                    entry.IsArchived = archived;
+                    MarkIndexDirty(index, persist: true);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// 清空工作区的全部会话：删除 <c>sessions</c> 下合法的 JSONL 文件并重置索引。
+        /// 其它目录（attachments / cache / skills）与工作区文件不受影响。
+        /// </summary>
+        public Task ClearAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            lock (_indexGate)
+            {
+                string directory = SessionsDirectory;
+                if (Directory.Exists(directory))
+                {
+                    foreach (string file in Directory.GetFiles(
+                        directory,
+                        "*" + AgentWorkspaceLayout.SessionFileExtension))
+                    {
+                        string id = Path.GetFileNameWithoutExtension(file);
+                        if (!AgentWorkspaceLayout.IsValidSessionId(id))
+                        {
+                            continue;
+                        }
+
+                        try
+                        {
+                            File.Delete(file);
+                        }
+                        catch (IOException)
+                        {
+                            // 被占用时保留该会话，清空其余会话；索引重建会补齐。
+                        }
+                        catch (UnauthorizedAccessException)
+                        {
+                        }
+                    }
+                }
+
+                _lastSequences.Clear();
+                _index = RebuildIndex();
+                _indexLoaded = true;
+                MarkIndexDirty(_index, persist: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
         public Task FlushAsync(string sessionId, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -663,6 +768,14 @@ namespace MiaoWu.Infrastructure.Conversations
 
                         case "session.renamed":
                             ApplyRenamed(transcript, evt);
+                            break;
+
+                        case "session.pinned":
+                            transcript.IsPinned = ConversationJson.GetBoolean(evt, "pinned");
+                            break;
+
+                        case "session.archived":
+                            transcript.IsArchived = ConversationJson.GetBoolean(evt, "archived");
                             break;
 
                         case "session.model":
@@ -1044,6 +1157,8 @@ namespace MiaoWu.Infrastructure.Conversations
                 }
 
                 bool changed = entry.MessageCount != fresh.MessageCount
+                    || entry.IsPinned != fresh.IsPinned
+                    || entry.IsArchived != fresh.IsArchived
                     || !string.Equals(entry.Title, fresh.Title, StringComparison.Ordinal)
                     || !string.Equals(entry.Preview, fresh.Preview, StringComparison.Ordinal)
                     || !string.Equals(entry.LastModel, fresh.LastModel, StringComparison.Ordinal)
@@ -1060,6 +1175,8 @@ namespace MiaoWu.Infrastructure.Conversations
                 entry.MessageCount = fresh.MessageCount;
                 entry.UpdatedAt = fresh.UpdatedAt;
                 entry.CreatedAt = fresh.CreatedAt;
+                entry.IsPinned = fresh.IsPinned;
+                entry.IsArchived = fresh.IsArchived;
                 MarkIndexDirty(index, persist: true);
             }
         }
@@ -1085,6 +1202,30 @@ namespace MiaoWu.Infrastructure.Conversations
 
                 MarkIndexDirty(index, persist);
             }
+        }
+
+        private ConversationIndexEntry RequireEntry(
+            ConversationIndex index,
+            string sessionId,
+            DateTimeOffset now)
+        {
+            ConversationIndexEntry entry = FindEntry(index, sessionId);
+            if (entry != null)
+            {
+                return entry;
+            }
+
+            entry = new ConversationIndexEntry
+            {
+                SessionId = sessionId,
+                WorkspaceId = _workspaceId,
+                Title = DefaultSessionTitle,
+                CreatedAt = now,
+                UpdatedAt = now,
+                MessageCount = 0
+            };
+            index.Sessions.Add(entry);
+            return entry;
         }
 
         private void MarkIndexDirty(ConversationIndex index, bool persist)
@@ -1144,7 +1285,8 @@ namespace MiaoWu.Infrastructure.Conversations
                     : transcript.Title,
                 CreatedAt = transcript.CreatedAt,
                 UpdatedAt = transcript.UpdatedAt,
-                IsPinned = false,
+                IsPinned = transcript.IsPinned,
+                IsArchived = transcript.IsArchived,
                 MessageCount = transcript.MessageCount,
                 LastModel = BuildModelRef(transcript.ProviderId, transcript.ModelId),
                 Preview = string.Empty
@@ -1181,6 +1323,11 @@ namespace MiaoWu.Infrastructure.Conversations
             if (left == null || right == null)
             {
                 return left == null ? (right == null ? 0 : 1) : -1;
+            }
+
+            if (left.IsArchived != right.IsArchived)
+            {
+                return left.IsArchived ? 1 : -1;
             }
 
             if (left.IsPinned != right.IsPinned)

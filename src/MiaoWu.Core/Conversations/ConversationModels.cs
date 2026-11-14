@@ -27,6 +27,10 @@ namespace MiaoWu.Core.Conversations
 
         public string ModelId { get; set; }
 
+        public bool IsPinned { get; set; }
+
+        public bool IsArchived { get; set; }
+
         public DateTimeOffset CreatedAt { get; set; }
 
         public DateTimeOffset UpdatedAt { get; set; }
@@ -80,6 +84,8 @@ namespace MiaoWu.Core.Conversations
 
         public bool IsPinned { get; set; }
 
+        public bool IsArchived { get; set; }
+
         public int MessageCount { get; set; }
 
         /// <summary>"providerId/modelId"；未配置时为空。</summary>
@@ -98,6 +104,7 @@ namespace MiaoWu.Core.Conversations
                 UpdatedAt = UpdatedAt,
                 CreatedAt = CreatedAt,
                 IsPinned = IsPinned,
+                IsArchived = IsArchived,
                 MessageCount = MessageCount,
                 LastModel = LastModel,
                 Preview = Preview

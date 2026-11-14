@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Sessions;
@@ -18,7 +19,7 @@ namespace MiaoWu.Infrastructure.Sessions
     /// 工作区不可写（只读盘、权限不足）时返回空列表而不是抛异常，
     /// 让左栏能显示“暂无会话”；错误由 P3 的内联错误条承担。
     /// </remarks>
-    public sealed class WorkspaceConversationCatalog : ISessionCatalog
+    public sealed class WorkspaceConversationCatalog : ISessionCatalog, ISessionEditor
     {
         private readonly ConcurrentDictionary<string, WorkspaceConversationStore> _stores =
             new ConcurrentDictionary<string, WorkspaceConversationStore>(StringComparer.OrdinalIgnoreCase);
@@ -82,6 +83,46 @@ namespace MiaoWu.Infrastructure.Sessions
             return GetStore(workspace, path);
         }
 
+        public Task RenameAsync(
+            Workspace workspace,
+            string sessionId,
+            string title,
+            CancellationToken cancellationToken)
+        {
+            return GetStore(workspace).RenameAsync(sessionId, title, cancellationToken);
+        }
+
+        public Task SetPinnedAsync(
+            Workspace workspace,
+            string sessionId,
+            bool pinned,
+            CancellationToken cancellationToken)
+        {
+            return GetStore(workspace).SetPinnedAsync(sessionId, pinned, cancellationToken);
+        }
+
+        public Task SetArchivedAsync(
+            Workspace workspace,
+            string sessionId,
+            bool archived,
+            CancellationToken cancellationToken)
+        {
+            return GetStore(workspace).SetArchivedAsync(sessionId, archived, cancellationToken);
+        }
+
+        public Task DeleteAsync(
+            Workspace workspace,
+            string sessionId,
+            CancellationToken cancellationToken)
+        {
+            return GetStore(workspace).DeleteAsync(sessionId, cancellationToken);
+        }
+
+        public Task ClearAsync(Workspace workspace, CancellationToken cancellationToken)
+        {
+            return GetStore(workspace).ClearAsync(cancellationToken);
+        }
+
         private WorkspaceConversationStore GetStore(Workspace workspace, string path)
         {
             string key = System.IO.Path.GetFullPath(path);
@@ -101,6 +142,7 @@ namespace MiaoWu.Infrastructure.Sessions
                     : entry.Title,
                 UpdatedAt = entry.UpdatedAt.ToLocalTime().DateTime,
                 IsPinned = entry.IsPinned,
+                IsArchived = entry.IsArchived,
                 IsUnread = false,
                 HasPendingApproval = false
             };

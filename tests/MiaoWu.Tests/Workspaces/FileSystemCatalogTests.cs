@@ -64,6 +64,28 @@ namespace MiaoWu.Tests.Workspaces
         }
 
         [Fact]
+        public void RenameMovesFileInSameDirectory()
+        {
+            string source = Path.Combine(_directory, "b.txt");
+
+            string target = _catalog.Rename(source, "renamed.txt");
+
+            Assert.False(File.Exists(source));
+            Assert.True(File.Exists(target));
+            Assert.Equal(Path.Combine(_directory, "renamed.txt"), target);
+        }
+
+        [Fact]
+        public void RenameRejectsExistingTargetAndInvalidName()
+        {
+            string source = Path.Combine(_directory, "b.txt");
+
+            Assert.Throws<System.IO.IOException>(() => { _catalog.Rename(source, "A.txt"); });
+            Assert.Throws<System.InvalidOperationException>(() => { _catalog.Rename(source, "nested/b.txt"); });
+            Assert.True(File.Exists(source));
+        }
+
+        [Fact]
         public void EmptyPathReturnsErrorRow()
         {
             var nodes = _catalog.GetChildren(" ", 0);

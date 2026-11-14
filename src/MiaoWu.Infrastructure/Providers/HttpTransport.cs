@@ -15,7 +15,7 @@ namespace MiaoWu.Infrastructure.Providers
             ProxyMode = ProxyModes.System;
             ConnectTimeoutSeconds = 20;
             IdleTimeoutSeconds = 60;
-            UserAgent = "MiaoWu/0.1.1";
+            UserAgent = "MiaoWu/" + ProductVersion;
         }
 
         public string ProxyMode { get; set; }
@@ -27,6 +27,18 @@ namespace MiaoWu.Infrastructure.Providers
         public int IdleTimeoutSeconds { get; set; }
 
         public string UserAgent { get; set; }
+
+        /// <summary>程序集版本的前三段（Major.Minor.Patch），随 `Directory.Build.props` 自动变化。</summary>
+        private static string ProductVersion
+        {
+            get
+            {
+                Version version = typeof(HttpTransportOptions).Assembly.GetName().Version;
+                return version == null
+                    ? "0.0.0"
+                    : string.Format("{0}.{1}.{2}", version.Major, version.Minor, version.Build);
+            }
+        }
     }
 
     /// <summary>

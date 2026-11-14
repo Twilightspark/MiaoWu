@@ -43,6 +43,7 @@ namespace MiaoWu.Tests.Storage
             first.IsExpanded = false;
             first.View = WorkspaceView.Files;
             first.ScrollOffset = 88;
+            first.IsPinned = true;
             first.SelectedSessionId = "s1";
             first.SelectedFilePath = @"D:\AI\MiaoWu\README.md";
             workspaces.Workspaces.Add(first);
@@ -63,6 +64,7 @@ namespace MiaoWu.Tests.Storage
             Assert.Equal(@"D:\AI\MiaoWu", restored.Path);
             Assert.Equal(WorkspaceView.Files, restored.View);
             Assert.Equal(88, restored.ScrollOffset);
+            Assert.True(restored.IsPinned);
             Assert.Equal("s1", restored.SelectedSessionId);
             Assert.Equal(@"D:\AI\MiaoWu\README.md", restored.SelectedFilePath);
             Assert.True(WorkspacePolicy.FindById(reloaded.Workspaces, "b").IsExpanded);
