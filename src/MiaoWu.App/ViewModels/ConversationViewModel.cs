@@ -330,7 +330,7 @@ namespace MiaoWu.App.ViewModels
             {
                 if (_workspace == null)
                 {
-                    return "先在标题栏选择工作区";
+                    return "先在左栏选择工作区";
                 }
 
                 return "描述你想让 MiaoWu 做的事，Enter 发送";
@@ -347,7 +347,7 @@ namespace MiaoWu.App.ViewModels
             get
             {
                 return _workspace == null
-                    ? "工作区是会话的归属。先在左栏新建工作区，或在标题栏选择已有工作区，然后回到这里输入。"
+                    ? "工作区是会话的归属。先在左栏新建工作区或选择已有工作区，然后回到这里输入。"
                     : "在下方描述你想让 MiaoWu 做的事。写文件或执行命令前，它会先征求你的同意。";
             }
         }
@@ -388,7 +388,7 @@ namespace MiaoWu.App.ViewModels
             {
                 if (_workspace == null)
                 {
-                    return "请先在标题栏选择工作区";
+                    return "请先在左栏选择工作区";
                 }
 
                 if (ModelOptions.Count == 0)
@@ -704,7 +704,7 @@ namespace MiaoWu.App.ViewModels
 
             if (_workspace == null)
             {
-                StatusText = "请先在标题栏新建或选择工作区。";
+                StatusText = "请先在左栏新建或选择工作区。";
                 return;
             }
 
@@ -754,7 +754,7 @@ namespace MiaoWu.App.ViewModels
 
             if (_workspace == null)
             {
-                StatusText = "请先在标题栏新建或选择工作区。";
+                StatusText = "请先在左栏新建或选择工作区。";
                 return;
             }
 
@@ -791,7 +791,7 @@ namespace MiaoWu.App.ViewModels
                 }
 
                 string clientId = "m_" + Guid.NewGuid().ToString("N").Substring(0, 12);
-                var optimistic = new UserChatItemViewModel(clientId, text, _clock());
+                var optimistic = new UserChatItemViewModel(clientId, text, _clock(), _clipboard);
                 Items.Add(optimistic);
                 _userItems[clientId] = optimistic;
                 Draft = string.Empty;
@@ -1112,22 +1112,6 @@ namespace MiaoWu.App.ViewModels
                 AddApprovalCard(ticket.Request);
             }
 
-            AgentMessage last = snapshot.Messages == null || snapshot.Messages.Count == 0
-                ? null
-                : snapshot.Messages[snapshot.Messages.Count - 1];
-
-            if (last != null && last.Role == AgentMessageRole.Assistant)
-            {
-                if (last.Status == AgentMessageStatus.Interrupted)
-                {
-                    AddInterruptedNotice(last.Id);
-                }
-                else if (last.Status == AgentMessageStatus.Failed)
-                {
-                    AddFailedNotice(last.ErrorMessage, last.Id);
-                }
-            }
-
             OnPropertyChanged(nameof(Title));
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(HasRetryTarget));
@@ -1233,7 +1217,6 @@ namespace MiaoWu.App.ViewModels
                     assistant.MarkInterrupted();
                 }
 
-                AddInterruptedNotice(cancelled.AssistantMessageId);
                 RaiseHasRetry();
                 return;
             }
@@ -1242,16 +1225,28 @@ namespace MiaoWu.App.ViewModels
             if (failed != null)
             {
                 IsRunning = false;
+                string message = failed.Error == null || string.IsNullOrWhiteSpace(failed.Error.Message)
+                    ? "生成失败。"
+                    : failed.Error.Message;
+
                 AssistantChatItemViewModel assistant;
                 if (failed.AssistantMessageId != null
                     && _assistantItems.TryGetValue(failed.AssistantMessageId, out assistant))
                 {
-                    assistant.MarkFailed(failed.Error == null ? "生成失败。" : failed.Error.Message);
+                    assistant.MarkFailed(message);
+                    AddFailedNotice(failed.Error, failed.AssistantMessageId);
+                }
+                else
+                {
+                    // 连助手行都没建起来（请求在 step 之前就失败）时，至少留一个可重试的提示。
+                    Items.Add(new NoticeChatItemViewModel("生成失败", message, true, _clock())
+                    {
+                        ActionText = "重试",
+                        ActionCommand = new RelayCommand(() => FireAndForget(RetryLastAsync()))
+                    });
+                    OnPropertyChanged(nameof(IsEmpty));
                 }
 
-                AddFailedNotice(
-                    failed.Error,
-                    failed.AssistantMessageId);
                 RaiseHasRetry();
                 return;
             }
@@ -1305,7 +1300,7 @@ namespace MiaoWu.App.ViewModels
                 case AgentMessageRole.User:
                     if (!_userItems.ContainsKey(message.Id))
                     {
-                        var item = new UserChatItemViewModel(message.Id, message.GetText(), message.CreatedAt);
+                        var item = new UserChatItemViewModel(message.Id, message.GetText(), message.CreatedAt, _clipboard);
                         Items.Add(item);
                         _userItems[message.Id] = item;
                         OnPropertyChanged(nameof(IsEmpty));
@@ -1516,34 +1511,34 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        private void AddInterruptedNotice(string assistantId)
-        {
-            if (assistantId != null && Items.OfType<NoticeChatItemViewModel>().Any(
-                n => string.Equals(n.Tag, assistantId, StringComparison.Ordinal)))
-            {
-                return;
-            }
-
-            var notice = new NoticeChatItemViewModel(
-                "已中断",
-                "保留了已生成的内容。重试不会重复发送用户消息。",
-                false,
-                _clock())
-            {
-                Tag = assistantId,
-                ActionText = "重试",
-                ActionCommand = new RelayCommand(() => FireAndForget(RetryLastAsync()))
-            };
-
-            Items.Add(notice);
-            OnPropertyChanged(nameof(IsEmpty));
-        }
-
+        /// <summary>
+        /// 失败本身已经写在助手行里（错误文案 + 尾部重试），这里只补“必须换一个动作才能解决”的提示：
+        /// 鉴权 / 权限 / 模型不存在要打开设置，上下文溢出要新建会话。其余情况不再叠一张重复的卡。
+        /// </summary>
         private void AddFailedNotice(AgentError error, string assistantId)
         {
-            string message = error == null || string.IsNullOrWhiteSpace(error.Message)
-                ? "生成失败。"
-                : error.Message;
+            if (error == null)
+            {
+                return;
+            }
+
+            string actionText;
+            Action onAction;
+            switch (error.Kind)
+            {
+                case AgentErrorKind.Auth:
+                case AgentErrorKind.Permission:
+                case AgentErrorKind.NotFound:
+                    actionText = "打开设置";
+                    onAction = () => SettingsRequested?.Invoke(this, EventArgs.Empty);
+                    break;
+                case AgentErrorKind.ContextOverflow:
+                    actionText = "新建会话";
+                    onAction = () => FireAndForget(NewSessionAsync());
+                    break;
+                default:
+                    return;
+            }
 
             if (assistantId != null && Items.OfType<NoticeChatItemViewModel>().Any(
                 n => string.Equals(n.Tag, "error:" + assistantId, StringComparison.Ordinal)))
@@ -1551,52 +1546,11 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            var notice = new NoticeChatItemViewModel("生成失败", message, true, _clock())
-            {
-                Tag = "error:" + assistantId
-            };
-
-            if (error != null
-                && (error.Kind == AgentErrorKind.Auth
-                    || error.Kind == AgentErrorKind.Permission
-                    || error.Kind == AgentErrorKind.NotFound))
-            {
-                notice.ActionText = "打开设置";
-                notice.ActionCommand = new RelayCommand(
-                    () => SettingsRequested?.Invoke(this, EventArgs.Empty));
-            }
-            else if (error != null && error.Kind == AgentErrorKind.ContextOverflow)
-            {
-                notice.ActionText = "新建会话";
-                notice.ActionCommand = new RelayCommand(() => FireAndForget(NewSessionAsync()));
-            }
-            else
-            {
-                notice.ActionText = "重试";
-                notice.ActionCommand = new RelayCommand(() => FireAndForget(RetryLastAsync()));
-            }
-
-            Items.Add(notice);
-            OnPropertyChanged(nameof(IsEmpty));
-        }
-
-        private void AddFailedNotice(string message, string assistantId)
-        {
-            if (assistantId != null && Items.OfType<NoticeChatItemViewModel>().Any(
-                n => string.Equals(n.Tag, "error:" + assistantId, StringComparison.Ordinal)))
-            {
-                return;
-            }
-
-            var notice = new NoticeChatItemViewModel(
-                "生成失败",
-                message,
-                true,
-                _clock())
+            var notice = new NoticeChatItemViewModel("生成失败", error.Message, true, _clock())
             {
                 Tag = "error:" + assistantId,
-                ActionText = "重试",
-                ActionCommand = new RelayCommand(() => FireAndForget(RetryLastAsync()))
+                ActionText = actionText,
+                ActionCommand = new RelayCommand(onAction)
             };
 
             Items.Add(notice);

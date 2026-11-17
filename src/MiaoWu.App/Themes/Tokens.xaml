@@ -124,6 +124,8 @@
     <sys:Double x:Key="Font.InlineCode.Size">11.5</sys:Double>
     <sys:Double x:Key="Font.Button.Size">12</sys:Double>
     <sys:Double x:Key="Font.Chip.Size">11.5</sys:Double>
+    <!-- 思考与提示正文：比正文小一档、行高 20，长段落仍可读 -->
+    <sys:Double x:Key="Font.Reasoning.Size">12</sys:Double>
     <sys:Double x:Key="Font.Empty.Size">12.5</sys:Double>
     <sys:Double x:Key="Font.Segment.Size">11.5</sys:Double>
     <sys:Double x:Key="Font.Tab.Size">12</sys:Double>
@@ -142,6 +144,7 @@
     <sys:Double x:Key="Font.Code.Line">19</sys:Double>
     <sys:Double x:Key="Font.Button.Line">20</sys:Double>
     <sys:Double x:Key="Font.Chip.Line">20</sys:Double>
+    <sys:Double x:Key="Font.Reasoning.Line">20</sys:Double>
     <sys:Double x:Key="Font.Empty.Line">20</sys:Double>
 
     <!-- 窗口与布局 -->
@@ -167,6 +170,11 @@
     <sys:Double x:Key="Metric.RightTitle.Height">34</sys:Double>
     <sys:Double x:Key="Metric.Avatar">22</sys:Double>
     <sys:Double x:Key="Metric.Message.Gap">17</sys:Double>
+
+    <!-- 会话消息流：用户右气泡 / 助手左正文 / 24 高过程行 -->
+    <sys:Double x:Key="Metric.Chat.Row">24</sys:Double>
+    <sys:Double x:Key="Metric.Chat.Icon">14</sys:Double>
+    <sys:Double x:Key="Metric.Chat.Chevron">12</sys:Double>
     <sys:Double x:Key="Metric.Input.AttachmentRow">21</sys:Double>
     <sys:Double x:Key="Metric.Input.BodyRow">20</sys:Double>
     <sys:Double x:Key="Metric.Input.ToolsRow">28</sys:Double>
@@ -245,6 +253,7 @@
     <CornerRadius x:Key="Radius.Tree">5</CornerRadius>
     <CornerRadius x:Key="Radius.Button">6</CornerRadius>
     <CornerRadius x:Key="Radius.Input">16</CornerRadius>
+    <CornerRadius x:Key="Radius.Bubble">12</CornerRadius>
     <CornerRadius x:Key="Radius.ComposerButton">14</CornerRadius>
     <CornerRadius x:Key="Radius.Notification">12</CornerRadius>
     <CornerRadius x:Key="Radius.Segment">6</CornerRadius>
@@ -290,6 +299,18 @@
     <Thickness x:Key="Pad.TextBox">8,6</Thickness>
     <Thickness x:Key="Pad.Field">4,4</Thickness>
     <Thickness x:Key="Pad.Input">12,14,12,14</Thickness>
+
+    <!-- 会话消息流：行内边距 14 与输入框、会话头对齐；轮次间距 18，轮内 10 -->
+    <Thickness x:Key="Margin.Chat.User">14,18,14,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Assistant">14,10,14,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Tool">14,6,14,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Notice">14,10,14,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Approval">14,10,14,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Caption">0,0,0,4</Thickness>
+    <Thickness x:Key="Margin.Chat.Footer">0,2,0,0</Thickness>
+    <Thickness x:Key="Pad.Bubble">9,12</Thickness>
+    <Thickness x:Key="Pad.Chat.Body">10,8</Thickness>
+    <Thickness x:Key="Pad.Chat.Reasoning">10,0,0,0</Thickness>
     <!-- 通知栈底距 = 输入框 132 + 输入框外边距 14 + 栈间距 12 -->
     <Thickness x:Key="Margin.Notification">0,0,16,158</Thickness>
     <Thickness x:Key="Margin.NotificationCollapsed">0,0,16,18</Thickness>

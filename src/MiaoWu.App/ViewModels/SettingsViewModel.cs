@@ -34,7 +34,7 @@ namespace MiaoWu.App.ViewModels
         public string Title { get; }
     }
 
-    /// <summary>设置页“关闭窗口时”选项；Ask 是尚未选择任何一项时的旧配置状态。</summary>
+    /// <summary>设置页“关闭窗口时”的选项；三项并列，Ask（每次询问）为默认。</summary>
     public sealed class CloseActionChoice
     {
         public CloseActionChoice(CloseWindowAction action, string title)
@@ -169,10 +169,12 @@ namespace MiaoWu.App.ViewModels
                 new LanguageChoice("zh-CN", "中文"),
                 new LanguageChoice("en-US", "英文")
             };
+            // 三个出口并列：询问（默认）/ 直接退出 / 最小化到托盘。
             CloseActionOptions = new[]
             {
-                new CloseActionChoice(CloseWindowAction.MinimizeToTray, "最小化到托盘"),
-                new CloseActionChoice(CloseWindowAction.Exit, "退出")
+                new CloseActionChoice(CloseWindowAction.Ask, "每次询问"),
+                new CloseActionChoice(CloseWindowAction.Exit, "直接退出"),
+                new CloseActionChoice(CloseWindowAction.MinimizeToTray, "最小化到托盘")
             };
             ProviderFormModeOptions = new[]
             {
@@ -345,7 +347,8 @@ namespace MiaoWu.App.ViewModels
         }
 
         /// <summary>
-        /// 关闭行为选项的选中项。旧配置为 Ask 时返回 null，让两个选项都不选中。
+        /// 关闭行为选项的选中项。Ask（每次询问）是默认值，配置损坏时由
+        /// <c>AgentSettings.Validate</c> 归一为 Ask，因此正常情况下总有一项选中。
         /// </summary>
         public CloseActionChoice SelectedCloseAction
         {

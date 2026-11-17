@@ -185,6 +185,15 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
+    <!-- 思考与提示正文：12/20，常用于折叠区与错误说明 -->
+    <Style x:Key="Text.Reasoning" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource Font.Reasoning.Size}" />
+        <Setter Property="LineHeight" Value="{StaticResource Font.Reasoning.Line}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
     <Style x:Key="Text.ListRow" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{StaticResource Font.List.Size}" />
         <Setter Property="LineHeight" Value="{StaticResource Font.List.Line}" />

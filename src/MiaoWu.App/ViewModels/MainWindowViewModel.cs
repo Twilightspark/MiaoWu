@@ -151,9 +151,6 @@ namespace MiaoWu.App.ViewModels
                 collection,
                 now());
 
-            WorkspaceOptions = new ObservableCollection<WorkspaceOption>();
-            SyncWorkspaceOptions();
-
             Canvas = new CanvasViewModel(
                 previewService,
                 clipboard,
@@ -172,9 +169,6 @@ namespace MiaoWu.App.ViewModels
             NewSessionCommand = new RelayCommand(RequestNewSession);
             ExportSessionCommand = new RelayCommand(() => ConversationCommand("export"));
             ExitCommand = new RelayCommand(RequestExit);
-            SwitchWorkspaceCommand = new RelayCommand(
-                parameter => SwitchWorkspace(parameter as WorkspaceOption),
-                parameter => parameter is WorkspaceOption);
 
             Left.StateChanged += OnChildStateChanged;
             Left.FileOpenRequested += OnFileOpenRequested;
@@ -287,35 +281,6 @@ namespace MiaoWu.App.ViewModels
         }
 
         public ObservableCollection<NotificationViewModel> Notifications { get; }
-
-        /// <summary>标题栏工作区菜单的数据源，顺序与左栏工作区列表一致。</summary>
-        public ObservableCollection<WorkspaceOption> WorkspaceOptions { get; }
-
-        public string WorkspaceName
-        {
-            get
-            {
-                WorkspaceItemViewModel active = Left == null ? null : Left.ActiveWorkspace;
-                return active == null ? "选择工作区" : active.Name;
-            }
-        }
-
-        public bool HasWorkspaces
-        {
-            get { return WorkspaceOptions.Count > 0; }
-        }
-
-        public string WorkspaceMenuToolTip
-        {
-            get
-            {
-                return HasWorkspaces
-                    ? "切换工作区"
-                    : "还没有工作区，先在左栏新建工作区";
-            }
-        }
-
-        public RelayCommand SwitchWorkspaceCommand { get; }
 
         public RelayCommand ToggleRightPaneCommand { get; }
 
@@ -740,7 +705,6 @@ namespace MiaoWu.App.ViewModels
         {
             WorkspaceCollection collection = _workspaceStore.Load() ?? new WorkspaceCollection();
             Left.Reload(collection);
-            SyncWorkspaceOptions();
             OnSessionSelectionChanged(this, EventArgs.Empty);
         }
 
@@ -967,79 +931,8 @@ namespace MiaoWu.App.ViewModels
 
         private void OnChildStateChanged(object sender, EventArgs e)
         {
-            SyncWorkspaceOptions();
             SyncConversationSessionState();
             RaiseStateChanged();
-        }
-
-        /// <summary>把左栏工作区列表同步给标题栏菜单，工作区增删改名后保持一致。</summary>
-        private void SyncWorkspaceOptions()
-        {
-            WorkspaceItemViewModel active = Left == null ? null : Left.ActiveWorkspace;
-            string currentId = active == null ? null : active.Id;
-
-            var next = new List<WorkspaceOption>();
-            if (Left != null)
-            {
-                foreach (WorkspaceItemViewModel workspace in Left.Workspaces)
-                {
-                    next.Add(new WorkspaceOption(
-                        workspace.Id,
-                        workspace.Name,
-                        string.Equals(workspace.Id, currentId, StringComparison.Ordinal)));
-                }
-            }
-
-            bool same = next.Count == WorkspaceOptions.Count;
-            if (same)
-            {
-                for (int i = 0; i < next.Count; i++)
-                {
-                    if (!string.Equals(next[i].Id, WorkspaceOptions[i].Id, StringComparison.Ordinal)
-                        || !string.Equals(next[i].Name, WorkspaceOptions[i].Name, StringComparison.Ordinal)
-                        || next[i].IsCurrent != WorkspaceOptions[i].IsCurrent)
-                    {
-                        same = false;
-                        break;
-                    }
-                }
-            }
-
-            if (!same)
-            {
-                WorkspaceOptions.Clear();
-                foreach (WorkspaceOption option in next)
-                {
-                    WorkspaceOptions.Add(option);
-                }
-
-                OnPropertyChanged(nameof(HasWorkspaces));
-                OnPropertyChanged(nameof(WorkspaceMenuToolTip));
-            }
-
-            OnPropertyChanged(nameof(WorkspaceName));
-        }
-
-        /// <summary>标题栏工作区菜单：切到目标工作区，右栏随后按该工作区的选中会话重挂。</summary>
-        private void SwitchWorkspace(WorkspaceOption option)
-        {
-            if (option == null || Left == null)
-            {
-                return;
-            }
-
-            WorkspaceItemViewModel target = Left.Workspaces.FirstOrDefault(
-                workspace => string.Equals(workspace.Id, option.Id, StringComparison.Ordinal));
-            if (target == null)
-            {
-                return;
-            }
-
-            Left.ActivateWorkspace(target);
-            if (Conversation != null)
-            {
-                Conversation.FocusComposerRequested();
-            }
         }
 
         private void OnConversationSessionPinRequested(object sender, EventArgs e)

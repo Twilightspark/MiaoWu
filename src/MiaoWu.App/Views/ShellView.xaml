@@ -29,14 +29,6 @@
     <UserControl.Resources>
         <conv:DoubleToGridLengthConverter x:Key="DoubleToGridLength" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
-
-        <!-- 标题栏工作区：只做入口，不占输入框；菜单项由代码后置按工作区列表生成。 -->
-        <Style x:Key="TopBar.WorkspaceChip" TargetType="Button" BasedOn="{StaticResource Button.Base}">
-            <Setter Property="Height" Value="26" />
-            <Setter Property="MaxWidth" Value="240" />
-            <Setter Property="Padding" Value="6,0,8,0" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
-        </Style>
     </UserControl.Resources>
 
     <Grid x:Name="Root"
@@ -60,6 +52,7 @@
                        Fill="{DynamicResource Brush.Side}"
                        IsHitTestVisible="False" />
 
+            <!-- 顶栏左段只有品牌图标与应用名；工作区入口已移除，工作区在左栏切换。 -->
             <StackPanel Orientation="Horizontal"
                         Margin="{StaticResource Pad.TopBar}"
                         VerticalAlignment="Center">
@@ -71,41 +64,6 @@
                            VerticalAlignment="Center"
                            Text="{x:Static res:Strings.AppName}"
                            Style="{StaticResource Text.AppName}" />
-
-                <Button x:Name="WorkspaceChip"
-                        Margin="16,0,0,0"
-                        Style="{StaticResource TopBar.WorkspaceChip}"
-                        Click="OnWorkspaceChipClick"
-                        ContextMenuOpening="OnWorkspaceMenuOpening"
-                        IsEnabled="{Binding HasWorkspaces}"
-                        ToolTip="{Binding WorkspaceMenuToolTip}"
-                        ToolTipService.ShowOnDisabled="True"
-                        AutomationProperties.AutomationId="TopBarWorkspace"
-                        AutomationProperties.Name="切换工作区"
-                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                    <StackPanel Orientation="Horizontal">
-                        <Path Width="14"
-                              Height="14"
-                              Style="{StaticResource Icon}"
-                              Data="{StaticResource Ico.Folder}"
-                              Fill="{DynamicResource Brush.Text3}" />
-                        <TextBlock Margin="6,0,0,0"
-                                   VerticalAlignment="Center"
-                                   MaxWidth="180"
-                                   Text="{Binding WorkspaceName, FallbackValue=选择工作区}"
-                                   Style="{StaticResource Text.Chip}"
-                                   TextTrimming="CharacterEllipsis" />
-                        <Path Width="12"
-                              Height="12"
-                              Margin="4,0,0,0"
-                              Style="{StaticResource Icon}"
-                              Data="{StaticResource Ico.ChevronDown}"
-                              Fill="{DynamicResource Brush.Text3}" />
-                    </StackPanel>
-                    <Button.ContextMenu>
-                        <ContextMenu x:Name="WorkspaceMenu" />
-                    </Button.ContextMenu>
-                </Button>
             </StackPanel>
 
             <Button x:Name="TopBarToggle"

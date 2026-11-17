@@ -33,17 +33,22 @@ namespace MiaoWu.App.ViewModels
 
     public sealed class UserChatItemViewModel : ChatItemViewModel
     {
+        private readonly IClipboardService _clipboard;
         private string _text;
         private bool _isPending;
 
-        public UserChatItemViewModel(string id, string text, DateTimeOffset timestamp)
+        public UserChatItemViewModel(string id, string text, DateTimeOffset timestamp, IClipboardService clipboard)
             : base(timestamp)
         {
             Id = id;
             _text = text ?? string.Empty;
+            _clipboard = clipboard;
+            CopyCommand = new RelayCommand(CopyText);
         }
 
         public string Id { get; }
+
+        public RelayCommand CopyCommand { get; }
 
         public string Text
         {
@@ -60,6 +65,14 @@ namespace MiaoWu.App.ViewModels
         public override string AutomationName
         {
             get { return "用户消息"; }
+        }
+
+        private void CopyText()
+        {
+            if (_clipboard != null)
+            {
+                _clipboard.SetText(_text);
+            }
         }
     }
 
@@ -79,6 +92,8 @@ namespace MiaoWu.App.ViewModels
         private bool _hasThinking;
         private bool _isThinkingExpanded;
         private bool _isMarkdownDirty;
+        private bool _continuesWithTools;
+        private string _thinkingPreview;
 
         public AssistantChatItemViewModel(string id, IClipboardService clipboard, DateTimeOffset timestamp)
             : base(timestamp)
@@ -112,6 +127,16 @@ namespace MiaoWu.App.ViewModels
             get { return _isFailed || _isInterrupted; }
         }
 
+        /// <summary>
+        /// 尾部元信息与动作只在真正有内容（正文、错误、进行中、可重试）时出现。
+        /// 以工具调用收尾的那一步是过程，不是答案：它的时间/模型/用量留到最后一条答案上，
+        /// 否则元信息会插在"读文件"这句话和它下面的工具行之间。
+        /// </summary>
+        public bool ShowFooter
+        {
+            get { return (HasText || HasError || IsStreaming || ShowRetry) && !_continuesWithTools; }
+        }
+
         public bool HasError
         {
             get { return !string.IsNullOrEmpty(_errorText); }
@@ -125,6 +150,13 @@ namespace MiaoWu.App.ViewModels
         public string ThinkingText
         {
             get { return _thinking.ToString(); }
+        }
+
+        /// <summary>收起时显示的一行摘要：最近一个段落的首行，去掉 Markdown 标记并截断。</summary>
+        public string ThinkingPreview
+        {
+            get { return _thinkingPreview; }
+            private set { SetProperty(ref _thinkingPreview, value); }
         }
 
         public bool HasThinking
@@ -209,6 +241,7 @@ namespace MiaoWu.App.ViewModels
             _isMarkdownDirty = true;
             OnPropertyChanged(nameof(Text));
             OnPropertyChanged(nameof(HasText));
+            OnPropertyChanged(nameof(ShowFooter));
         }
 
         public void AppendThinking(string delta)
@@ -220,6 +253,7 @@ namespace MiaoWu.App.ViewModels
 
             _thinking.Append(delta);
             HasThinking = true;
+            ThinkingPreview = BuildThinkingPreview(_thinking.ToString());
             OnPropertyChanged(nameof(ThinkingText));
         }
 
@@ -233,6 +267,7 @@ namespace MiaoWu.App.ViewModels
             _builder.Clear();
             _thinking.Clear();
 
+            bool endsWithToolCall = false;
             if (message.Blocks != null)
             {
                 foreach (AgentContentBlock block in message.Blocks)
@@ -245,20 +280,25 @@ namespace MiaoWu.App.ViewModels
                     if (string.Equals(block.Type, "text", StringComparison.Ordinal))
                     {
                         _builder.Append(block.Text);
+                        endsWithToolCall = false;
                     }
                     else if (string.Equals(block.Type, "thinking", StringComparison.Ordinal))
                     {
                         _thinking.Append(block.Thinking);
+                        endsWithToolCall = false;
                     }
                     else if (string.Equals(block.Type, "toolCall", StringComparison.Ordinal))
                     {
                         // 工具调用由工具卡渲染；助手正文不重复显示参数。
+                        endsWithToolCall = true;
                     }
                 }
             }
 
             HasThinking = _thinking.Length > 0;
+            ThinkingPreview = BuildThinkingPreview(_thinking.ToString());
             IsStreaming = message.Status == AgentMessageStatus.Streaming;
+            _continuesWithTools = endsWithToolCall || message.StopReason == StopReason.ToolUse;
             IsFailed = message.Status == AgentMessageStatus.Failed;
             IsInterrupted = message.Status == AgentMessageStatus.Interrupted;
             ErrorText = message.ErrorMessage;
@@ -271,6 +311,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(HasText));
             OnPropertyChanged(nameof(HasError));
             OnPropertyChanged(nameof(ShowRetry));
+            OnPropertyChanged(nameof(ShowFooter));
             OnPropertyChanged(nameof(ThinkingText));
 
             if (rebuildMarkdown)
@@ -282,14 +323,13 @@ namespace MiaoWu.App.ViewModels
         public void MarkCompleted(StopReason reason)
         {
             IsStreaming = false;
+            _continuesWithTools = reason == StopReason.ToolUse;
             if (reason == StopReason.Length)
             {
                 StatusText = "已达到输出上限";
             }
-            else if (reason == StopReason.ToolUse)
-            {
-                StatusText = "调用工具";
-            }
+
+            OnPropertyChanged(nameof(ShowFooter));
         }
 
         public void MarkFailed(string error)
@@ -298,8 +338,10 @@ namespace MiaoWu.App.ViewModels
             IsFailed = true;
             ErrorText = error;
             StatusText = "失败";
+            _continuesWithTools = false;
             OnPropertyChanged(nameof(HasError));
             OnPropertyChanged(nameof(ShowRetry));
+            OnPropertyChanged(nameof(ShowFooter));
         }
 
         public void MarkInterrupted()
@@ -307,7 +349,9 @@ namespace MiaoWu.App.ViewModels
             IsStreaming = false;
             IsInterrupted = true;
             StatusText = "已中断";
+            _continuesWithTools = false;
             OnPropertyChanged(nameof(ShowRetry));
+            OnPropertyChanged(nameof(ShowFooter));
         }
 
         public void RebuildMarkdown()
@@ -358,6 +402,46 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// 思考收起时的一行预览。取"最近一个段落"的首行：流式期间最后一段还在长，
+        /// 用段首而不是段尾，摘要才不会每来一个字就整体跳动。
+        /// </summary>
+        internal static string BuildThinkingPreview(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            string[] lines = text.Replace("\r", string.Empty).Split('\n');
+            int end = lines.Length - 1;
+            while (end >= 0 && string.IsNullOrWhiteSpace(lines[end]))
+            {
+                end--;
+            }
+
+            if (end < 0)
+            {
+                return null;
+            }
+
+            int start = end;
+            while (start > 0 && !string.IsNullOrWhiteSpace(lines[start - 1]))
+            {
+                start--;
+            }
+
+            string line = lines[start].Trim().TrimStart('#', '>', '-', '*', ' ');
+            line = line.Replace("**", string.Empty).Replace("`", string.Empty).Trim();
+            if (line.Length == 0)
+            {
+                line = lines[end].Trim();
+            }
+
+            const int MaxLength = 48;
+            return line.Length <= MaxLength ? line : line.Substring(0, MaxLength) + "…";
+        }
+
         private static string BuildStatusText(AgentMessage message)
         {
             switch (message.Status)
@@ -374,11 +458,6 @@ namespace MiaoWu.App.ViewModels
                     if (message.StopReason == StopReason.Length)
                     {
                         return "已达到输出上限";
-                    }
-
-                    if (message.StopReason == StopReason.ToolUse)
-                    {
-                        return "调用工具";
                     }
 
                     return null;
@@ -621,7 +700,7 @@ namespace MiaoWu.App.ViewModels
             FullOutputPath = result.FullOutputPath;
             BackupPath = result.BackupPath;
             CanUndo = !string.IsNullOrEmpty(result.BackupPath) && result.IsSuccess;
-            Output = result.Content;
+            Output = (result.Content ?? string.Empty).TrimEnd();
             ErrorText = result.ErrorMessage;
             StatusText = StatusToText(result.Status);
             Summary = string.IsNullOrWhiteSpace(result.Summary) ? Summary : result.Summary;
@@ -645,7 +724,7 @@ namespace MiaoWu.App.ViewModels
                 {
                     if (block != null && string.Equals(block.Type, "toolResult", StringComparison.Ordinal))
                     {
-                        Output = block.ResultContent;
+                        Output = (block.ResultContent ?? string.Empty).TrimEnd();
                         IsTruncated = block.Truncated;
                         FullOutputPath = block.FullOutputPath;
                     }
@@ -800,6 +879,12 @@ namespace MiaoWu.App.ViewModels
             private set { SetProperty(ref _resolutionText, value); }
         }
 
+        /// <summary>已答复的审批不再显示按钮，只留一句“已处理”结果。</summary>
+        public bool CanDecide
+        {
+            get { return !_isResolved; }
+        }
+
         public bool IsDiffVisible
         {
             get { return _isDiffVisible; }
@@ -823,6 +908,7 @@ namespace MiaoWu.App.ViewModels
         {
             IsResolved = true;
             ResolutionText = text;
+            OnPropertyChanged(nameof(CanDecide));
             CommandManager.InvalidateRequerySuggested();
         }
 

@@ -259,16 +259,24 @@ namespace MiaoWu.App.Views
             }
         }
 
-        /// <summary>菜单右缘与模型按钮对齐，避免在右栏贴边处被裁掉。</summary>
+        /// <summary>
+        /// 模型菜单向上展开，右缘与模型按钮对齐，避免在右栏贴边处被裁掉；
+        /// 上方空间不足时由 WPF 顺次回退到按钮下方，不会顶出屏幕。
+        /// </summary>
         private static CustomPopupPlacement[] PlaceModelPopup(
             Size popupSize,
             Size targetSize,
             Point offset)
         {
+            const double gap = 6;
+            double x = targetSize.Width - popupSize.Width;
             return new[]
             {
                 new CustomPopupPlacement(
-                    new Point(targetSize.Width - popupSize.Width, -6),
+                    new Point(x, -popupSize.Height - gap),
+                    PopupPrimaryAxis.Horizontal),
+                new CustomPopupPlacement(
+                    new Point(x, targetSize.Height + gap),
                     PopupPrimaryAxis.Horizontal)
             };
         }
