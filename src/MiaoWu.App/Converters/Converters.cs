@@ -88,22 +88,22 @@ namespace MiaoWu.App.Converters
     }
 
     /// <summary>
-    /// 工具名 → 16 网格填充图标几何。先按工具族归类，认不出的回落到终端图标，
-    /// 不给每个工具单独配图标（词表见 docs/06-dsh-chat-message.md §9.5）。
+    /// 工具名 → 16 网格描边图标几何（DSH 的工具族词表，见 docs/06 §9.5）。
+    /// 先按工具族归类，认不出的回落到 sparkle，不给每个工具单独配图标。
     /// </summary>
     public sealed class ToolIconConverter : IValueConverter
     {
         private static readonly Dictionary<string, string> Icons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                { "list_dir", "Ico.Folder" },
-                { "read_file", "Ico.File" },
-                { "search_files", "Ico.Search" },
-                { "find_files", "Ico.Search" },
-                { "edit_file", "Ico.Edit" },
-                { "write_file", "Ico.Edit" },
-                { "run_command", "Ico.Terminal" },
-                { "load_skill", "Ico.Market" }
+                { "list_dir", "Ico.Browse" },
+                { "read_file", "Ico.Browse" },
+                { "search_files", "Ico.SearchStroke" },
+                { "find_files", "Ico.SearchStroke" },
+                { "edit_file", "Ico.EditStroke" },
+                { "write_file", "Ico.EditStroke" },
+                { "run_command", "Ico.Api" },
+                { "load_skill", "Ico.Sparkle" }
             };
 
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -112,7 +112,7 @@ namespace MiaoWu.App.Converters
             string key;
             if (!Icons.TryGetValue(name, out key))
             {
-                key = "Ico.Terminal";
+                key = "Ico.Sparkle";
             }
 
             Application app = Application.Current;

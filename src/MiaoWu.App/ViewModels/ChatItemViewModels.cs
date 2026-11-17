@@ -10,18 +10,39 @@ using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Markdown;
 using MiaoWu.Core.Models;
 using MiaoWu.Core.Text;
+using MiaoWu.Infrastructure.Json;
 
 namespace MiaoWu.App.ViewModels
 {
     /// <summary>对话列表中的一条可渲染项。用隐式 DataTemplate 按类型选择模板。</summary>
     public abstract class ChatItemViewModel : ObservableObject
     {
+        private bool _isProcessMember;
+        private bool _isHiddenByGroup;
+
         protected ChatItemViewModel(DateTimeOffset timestamp)
         {
             Timestamp = timestamp;
         }
 
         public DateTimeOffset Timestamp { get; private set; }
+
+        /// <summary>
+        /// 是否是执行过程组的成员。模板据此缩进，组头摘要也靠它统计活动；
+        /// 成员身份不会改变行在 <c>Items</c> 里的顺序。
+        /// </summary>
+        public bool IsProcessMember
+        {
+            get { return _isProcessMember; }
+            internal set { SetProperty(ref _isProcessMember, value); }
+        }
+
+        /// <summary>所属过程组收起时为 true，容器折叠成 0 高但不从列表移除。</summary>
+        public bool IsHiddenByGroup
+        {
+            get { return _isHiddenByGroup; }
+            internal set { SetProperty(ref _isHiddenByGroup, value); }
+        }
 
         public string TimeText
         {
@@ -125,6 +146,15 @@ namespace MiaoWu.App.ViewModels
         public bool ShowRetry
         {
             get { return _isFailed || _isInterrupted; }
+        }
+
+        /// <summary>
+        /// 这一条助手消息以工具调用收尾，属于「过程」而不是答案：
+        /// 它会被收进执行过程组，组收起时整行隐藏（DSH 的 step → process 归属）。
+        /// </summary>
+        public bool IsProcessOnly
+        {
+            get { return _continuesWithTools; }
         }
 
         /// <summary>
@@ -313,6 +343,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(ShowRetry));
             OnPropertyChanged(nameof(ShowFooter));
             OnPropertyChanged(nameof(ThinkingText));
+            OnPropertyChanged(nameof(IsProcessOnly));
 
             if (rebuildMarkdown)
             {
@@ -330,6 +361,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             OnPropertyChanged(nameof(ShowFooter));
+            OnPropertyChanged(nameof(IsProcessOnly));
         }
 
         public void MarkFailed(string error)
@@ -342,6 +374,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(HasError));
             OnPropertyChanged(nameof(ShowRetry));
             OnPropertyChanged(nameof(ShowFooter));
+            OnPropertyChanged(nameof(IsProcessOnly));
         }
 
         public void MarkInterrupted()
@@ -352,6 +385,7 @@ namespace MiaoWu.App.ViewModels
             _continuesWithTools = false;
             OnPropertyChanged(nameof(ShowRetry));
             OnPropertyChanged(nameof(ShowFooter));
+            OnPropertyChanged(nameof(IsProcessOnly));
         }
 
         public void RebuildMarkdown()
@@ -526,8 +560,9 @@ namespace MiaoWu.App.ViewModels
         {
             CallId = call == null ? null : call.Id;
             ToolName = call == null ? "tool" : call.Name;
+            DisplayName = GetDisplayName(ToolName);
             ArgumentsJson = call == null ? null : call.ArgumentsJson;
-            Summary = BuildArgumentsSummary(ArgumentsJson);
+            Summary = BuildArgumentsSummary(ToolName, ArgumentsJson);
             StatusText = "准备中";
             _isPending = true;
 
@@ -541,6 +576,36 @@ namespace MiaoWu.App.ViewModels
         public string CallId { get; }
 
         public string ToolName { get; }
+
+        /// <summary>
+        /// 工具行的中文标题。DSH 的工具行读起来是动作名而不是工具 ID，
+        /// 认不出的工具退回原始名字，避免出现空标题。
+        /// </summary>
+        public string DisplayName { get; }
+
+        private static readonly System.Collections.Generic.Dictionary<string, string> ToolTitles =
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "list_dir", "列出目录" },
+                { "read_file", "读取文件" },
+                { "search_files", "搜索文件" },
+                { "find_files", "查找文件" },
+                { "edit_file", "编辑文件" },
+                { "write_file", "写入文件" },
+                { "run_command", "执行命令" },
+                { "load_skill", "加载技能" }
+            };
+
+        public static string GetDisplayName(string toolName)
+        {
+            if (string.IsNullOrWhiteSpace(toolName))
+            {
+                return "工具调用";
+            }
+
+            string title;
+            return ToolTitles.TryGetValue(toolName, out title) ? title : toolName;
+        }
 
         public string ArgumentsJson { get; }
 
@@ -770,15 +835,66 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        private static string BuildArgumentsSummary(string json)
+        private static string BuildArgumentsSummary(string toolName, string json)
         {
             if (string.IsNullOrWhiteSpace(json))
             {
                 return string.Empty;
             }
 
-            string value = json.Replace("\r", " ").Replace("\n", " ").Trim();
-            return value.Length <= 160 ? value : value.Substring(0, 160) + "…";
+            // 摘要读参数里最像“动作对象”的字段（路径 / 命令 / 查询词），
+            // 不把整段 JSON 摊在行内；解析失败才回落到原文。
+            try
+            {
+                JsonValue root = JsonParser.Parse(json);
+                string text = ReadArgument(root, "command");
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    text = ReadArgument(root, "path");
+                }
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    text = ReadArgument(root, "query");
+                }
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    text = ReadArgument(root, "pattern");
+                }
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    text = ReadArgument(root, "skill");
+                }
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    text = ReadArgument(root, "name");
+                }
+
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return ClipSummary(text);
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return ClipSummary(json.Replace("\r", " ").Replace("\n", " ").Trim());
+        }
+
+        private static string ReadArgument(JsonValue value, string name)
+        {
+            JsonValue node = value == null ? null : value.Get(name);
+            return node == null ? null : node.AsString(null);
+        }
+
+        private static string ClipSummary(string value)
+        {
+            string text = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            return text.Length <= 160 ? text : text.Substring(0, 160) + "…";
         }
 
         private static string StatusToText(ToolResultStatus status)
@@ -873,6 +989,266 @@ namespace MiaoWu.App.ViewModels
         public override string AutomationName
         {
             get { return Title; }
+        }
+    }
+
+    /// <summary>
+    /// 一轮里的「执行过程」：以工具调用收尾的助手步骤 + 工具卡。
+    /// 组头是一行摘要（思考 / 读取 / 命令…），组体是成员行；收起时成员折叠成 0 高，
+    /// 但不从 <c>Items</c> 移除，因此重试、追溯与虚拟化仍按原来的平铺列表工作。
+    /// </summary>
+    public sealed class ProcessGroupViewModel : ChatItemViewModel
+    {
+        private readonly System.Collections.Generic.List<ChatItemViewModel> _members =
+            new System.Collections.Generic.List<ChatItemViewModel>();
+
+        private bool _isExpanded;
+        private string _summary = "执行过程";
+        private string _statusText;
+        private string _firstToolName;
+        private bool _hasTool;
+
+        public ProcessGroupViewModel(DateTimeOffset timestamp, bool expanded)
+            : base(timestamp)
+        {
+            _isExpanded = expanded;
+            ToggleExpandedCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+        }
+
+        /// <summary>成员清空（重试裁掉整轮）时通知持有者把组头和组一起移除。</summary>
+        public event EventHandler Emptied;
+
+        public RelayCommand ToggleExpandedCommand { get; }
+
+        public System.Collections.Generic.IReadOnlyList<ChatItemViewModel> Members
+        {
+            get { return _members; }
+        }
+
+        public bool IsEmpty
+        {
+            get { return _members.Count == 0; }
+        }
+
+        public bool IsExpanded
+        {
+            get { return _isExpanded; }
+            set
+            {
+                if (!SetProperty(ref _isExpanded, value))
+                {
+                    return;
+                }
+
+                foreach (ChatItemViewModel member in _members)
+                {
+                    member.IsHiddenByGroup = !_isExpanded;
+                }
+            }
+        }
+
+        /// <summary>组头摘要：思考 · 读取 2 项 · 运行 1 条命令。</summary>
+        public string Summary
+        {
+            get { return _summary; }
+            private set
+            {
+                if (SetProperty(ref _summary, value))
+                {
+                    OnPropertyChanged(nameof(AutomationName));
+                }
+            }
+        }
+
+        public string StatusText
+        {
+            get { return _statusText; }
+            private set { SetProperty(ref _statusText, value); }
+        }
+
+        /// <summary>组头是否用第一件工具的族图标；摘要以“思考”开头时改用 think 图标。</summary>
+        public bool HasTool
+        {
+            get { return _hasTool; }
+            private set { SetProperty(ref _hasTool, value); }
+        }
+
+        public string FirstToolName
+        {
+            get { return _firstToolName; }
+            private set { SetProperty(ref _firstToolName, value); }
+        }
+
+        public override string AutomationName
+        {
+            get { return "执行过程：" + _summary; }
+        }
+
+        public void Add(ChatItemViewModel member)
+        {
+            if (member == null || _members.Contains(member))
+            {
+                return;
+            }
+
+            member.IsProcessMember = true;
+            member.IsHiddenByGroup = !_isExpanded;
+            member.PropertyChanged += OnMemberPropertyChanged;
+            _members.Add(member);
+            Refresh();
+        }
+
+        public void Remove(ChatItemViewModel member)
+        {
+            if (member == null || !_members.Remove(member))
+            {
+                return;
+            }
+
+            member.PropertyChanged -= OnMemberPropertyChanged;
+            member.IsProcessMember = false;
+            member.IsHiddenByGroup = false;
+            Refresh();
+
+            if (_members.Count == 0)
+            {
+                EventHandler emptied = Emptied;
+                if (emptied != null)
+                {
+                    emptied(this, EventArgs.Empty);
+                }
+            }
+        }
+
+        /// <summary>整轮结束时自动收起；用户手动展开的历史组不受影响。</summary>
+        public void CollapseAfterTurn()
+        {
+            IsExpanded = false;
+        }
+
+        private void OnMemberPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(AssistantChatItemViewModel.IsStreaming)
+                || e.PropertyName == nameof(AssistantChatItemViewModel.HasThinking)
+                || e.PropertyName == nameof(AssistantChatItemViewModel.IsFailed)
+                || e.PropertyName == nameof(ToolCardViewModel.IsPending)
+                || e.PropertyName == nameof(ToolCardViewModel.IsError)
+                || e.PropertyName == nameof(ToolCardViewModel.IsBlocked))
+            {
+                Refresh();
+            }
+        }
+
+        private void Refresh()
+        {
+            int thinking = 0;
+            int read = 0;
+            int search = 0;
+            int write = 0;
+            int command = 0;
+            int skill = 0;
+            int other = 0;
+            bool running = false;
+            bool failed = false;
+            string firstTool = null;
+
+            foreach (ChatItemViewModel member in _members)
+            {
+                var assistant = member as AssistantChatItemViewModel;
+                if (assistant != null)
+                {
+                    if (assistant.HasThinking)
+                    {
+                        thinking++;
+                    }
+
+                    running |= assistant.IsStreaming;
+                    failed |= assistant.IsFailed;
+                    continue;
+                }
+
+                var tool = member as ToolCardViewModel;
+                if (tool == null)
+                {
+                    continue;
+                }
+
+                if (firstTool == null)
+                {
+                    firstTool = tool.ToolName;
+                }
+
+                running |= tool.IsPending;
+                failed |= tool.IsError || tool.IsBlocked;
+
+                string name = tool.ToolName ?? string.Empty;
+                if (name == "read_file" || name == "list_dir")
+                {
+                    read++;
+                }
+                else if (name == "search_files" || name == "find_files")
+                {
+                    search++;
+                }
+                else if (name == "write_file" || name == "edit_file")
+                {
+                    write++;
+                }
+                else if (name == "run_command")
+                {
+                    command++;
+                }
+                else if (name == "load_skill")
+                {
+                    skill++;
+                }
+                else
+                {
+                    other++;
+                }
+            }
+
+            var parts = new System.Collections.Generic.List<string>();
+            if (thinking > 0)
+            {
+                parts.Add("思考");
+            }
+
+            if (read > 0)
+            {
+                parts.Add("读取 " + read + " 项");
+            }
+
+            if (search > 0)
+            {
+                parts.Add("搜索 " + search + " 次");
+            }
+
+            if (write > 0)
+            {
+                parts.Add("写入 " + write + " 个文件");
+            }
+
+            if (command > 0)
+            {
+                parts.Add("运行 " + command + " 条命令");
+            }
+
+            if (skill > 0)
+            {
+                parts.Add("加载 " + skill + " 个技能");
+            }
+
+            if (other > 0)
+            {
+                parts.Add("调用 " + other + " 个工具");
+            }
+
+            Summary = parts.Count == 0 ? "执行过程" : string.Join(" · ", parts);
+            StatusText = running ? "运行中" : (failed ? "有失败" : "完成");
+            // 摘要以“思考”开头时用 think 图标；纯工具过程才用第一件工具的族图标。
+            HasTool = firstTool != null && thinking == 0;
+            FirstToolName = firstTool;
         }
     }
 }

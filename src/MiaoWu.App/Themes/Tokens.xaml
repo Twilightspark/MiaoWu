@@ -175,6 +175,7 @@
     <sys:Double x:Key="Metric.Chat.Row">24</sys:Double>
     <sys:Double x:Key="Metric.Chat.Icon">14</sys:Double>
     <sys:Double x:Key="Metric.Chat.Chevron">12</sys:Double>
+    <sys:Double x:Key="Metric.Chat.StatusDot">6</sys:Double>
     <sys:Double x:Key="Metric.Input.AttachmentRow">21</sys:Double>
     <sys:Double x:Key="Metric.Input.BodyRow">20</sys:Double>
     <sys:Double x:Key="Metric.Input.ToolsRow">28</sys:Double>
@@ -306,6 +307,9 @@
     <Thickness x:Key="Margin.Chat.User">14,18,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Assistant">14,10,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Tool">14,6,14,0</Thickness>
+    <!-- 执行过程组头与组内成员：成员缩进 22（16 图标 + 6 间距），与 DSH 的组体对齐 -->
+    <Thickness x:Key="Margin.Chat.Process">14,6,14,0</Thickness>
+    <Thickness x:Key="Margin.Chat.ProcessMember">36,4,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Notice">14,10,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Caption">0,0,0,4</Thickness>
     <Thickness x:Key="Margin.Chat.Footer">0,2,0,0</Thickness>

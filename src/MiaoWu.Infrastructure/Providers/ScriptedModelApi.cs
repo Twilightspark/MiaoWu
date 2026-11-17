@@ -44,6 +44,12 @@ namespace MiaoWu.Infrastructure.Providers
             }
         }
 
+        /// <summary>
+        /// 每个流事件之间的等待毫秒数。默认 0（同步返回）；界面证据需要观察
+        /// “运行中”状态与计时时把它调大，让一轮生成停留足够久。
+        /// </summary>
+        public int DelayMs { get; set; }
+
         public void EnqueueText(string text)
         {
             var events = new List<LlmStreamEvent>();
@@ -160,7 +166,7 @@ namespace MiaoWu.Infrastructure.Providers
                     };
             }
 
-            return new ScriptedStream(turn.Events);
+            return new ScriptedStream(turn.Events, this);
         }
 
         public sealed class ToolCallScript
@@ -180,22 +186,29 @@ namespace MiaoWu.Infrastructure.Providers
         private sealed class ScriptedStream : ILlmStream
         {
             private readonly LlmStreamEvent[] _events;
+            private readonly ScriptedModelApi _api;
             private int _index;
 
-            public ScriptedStream(LlmStreamEvent[] events)
+            public ScriptedStream(LlmStreamEvent[] events, ScriptedModelApi api)
             {
                 _events = events ?? new LlmStreamEvent[0];
+                _api = api;
             }
 
-            public Task<LlmStreamEvent> ReadAsync(CancellationToken cancellationToken)
+            public async Task<LlmStreamEvent> ReadAsync(CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (_index >= _events.Length)
                 {
-                    return Task.FromResult<LlmStreamEvent>(null);
+                    return null;
                 }
 
-                return Task.FromResult(_events[_index++]);
+                if (_api != null && _api.DelayMs > 0)
+                {
+                    await Task.Delay(_api.DelayMs, cancellationToken).ConfigureAwait(false);
+                }
+
+                return _events[_index++];
             }
 
             public void Dispose()

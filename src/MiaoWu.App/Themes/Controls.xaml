@@ -101,6 +101,14 @@
         <Setter Property="Fill" Value="{DynamicResource Brush.Text2}" />
     </Style>
 
+    <!-- 1:1 描边图标：几何已在 16 网格里（DSH 的 16 盒 / 14 字形），
+         不再 Uniform 拉伸，线宽恒为 Metric.Icon.Stroke；不要拿去渲染旧的 1024 网格几何。 -->
+    <Style x:Key="Icon.Stroke.Exact" TargetType="Path" BasedOn="{StaticResource Icon.Stroke}">
+        <Setter Property="Width" Value="{StaticResource Metric.Icon}" />
+        <Setter Property="Height" Value="{StaticResource Metric.Icon}" />
+        <Setter Property="Stretch" Value="None" />
+    </Style>
+
     <Style x:Key="Icon.WindowGlyph" TargetType="Path" BasedOn="{StaticResource Icon}">
         <Setter Property="Width" Value="{StaticResource Metric.WindowGlyph.Size}" />
         <Setter Property="Height" Value="{StaticResource Metric.WindowGlyph.Size}" />

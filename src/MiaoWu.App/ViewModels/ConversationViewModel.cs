@@ -107,7 +107,16 @@ namespace MiaoWu.App.ViewModels
             new Dictionary<string, AssistantChatItemViewModel>(StringComparer.Ordinal);
         private readonly Dictionary<string, ToolCardViewModel> _toolCards =
             new Dictionary<string, ToolCardViewModel>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<ChatItemViewModel, ProcessGroupViewModel> _groupOf =
+            new Dictionary<ChatItemViewModel, ProcessGroupViewModel>();
         private readonly DispatcherTimer _markdownTimer;
+        private readonly DispatcherTimer _clockTimer;
+
+        private ProcessGroupViewModel _openGroup;
+        private DateTime? _runStartedAt;
+        private TimeSpan _activeAccumulated;
+        private string _elapsedText = "00:00";
+        private string _runElapsedText;
 
         private SessionEventPump _pump;
         private Workspace _workspace;
@@ -162,7 +171,7 @@ namespace MiaoWu.App.ViewModels
             DeleteCommand = new RelayCommand(() => FireAndForget(DeleteAsync()), () => HasSession);
             ExportCommand = new RelayCommand(() => FireAndForget(ExportAsync()), () => HasSession);
             OpenSettingsCommand = new RelayCommand(() => SettingsRequested?.Invoke(this, EventArgs.Empty));
-            ClearCommand = new RelayCommand(() => Items.Clear(), () => HasSession);
+            ClearCommand = new RelayCommand(ClearTranscript, () => HasSession);
 
             _markdownTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
             {
@@ -170,6 +179,13 @@ namespace MiaoWu.App.ViewModels
             };
             _markdownTimer.Tick += OnMarkdownTick;
             _markdownTimer.Start();
+
+            _clockTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _clockTimer.Tick += OnClockTick;
+            _clockTimer.Start();
 
             _app.ProvidersChanged += OnProvidersChanged;
             RefreshModelOptions();
@@ -298,6 +314,23 @@ namespace MiaoWu.App.ViewModels
             {
                 return string.IsNullOrWhiteSpace(_statusText) ? _contextText : _statusText;
             }
+        }
+
+        /// <summary>会话头的会话计时：本次打开后累计的运行时长（mm:ss / h:mm:ss）。</summary>
+        public string ElapsedText
+        {
+            get { return _elapsedText; }
+        }
+
+        /// <summary>当前这一轮的运行计时；空闲时为 null（运行状态条随之隐藏）。</summary>
+        public string RunElapsedText
+        {
+            get { return _runElapsedText; }
+        }
+
+        public string ElapsedToolTip
+        {
+            get { return "本会话累计运行时长，运行中每秒更新"; }
         }
 
         public bool IsPinned
@@ -459,8 +492,10 @@ namespace MiaoWu.App.ViewModels
             {
                 if (SetProperty(ref _isRunning, value))
                 {
+                    UpdateRunClock();
                     OnPropertyChanged(nameof(CanSend));
                     OnPropertyChanged(nameof(IsIdle));
+                    OnPropertyChanged(nameof(ShowRunningStatus));
                     OnPropertyChanged(nameof(SendToolTip));
                     CommandManager.InvalidateRequerySuggested();
                 }
@@ -470,6 +505,12 @@ namespace MiaoWu.App.ViewModels
         public bool IsIdle
         {
             get { return !_isRunning; }
+        }
+
+        /// <summary>消息流底部的运行状态条只在生成中显示，计时随每秒刷新。</summary>
+        public bool ShowRunningStatus
+        {
+            get { return _isRunning; }
         }
 
         public bool HasSession
@@ -637,6 +678,10 @@ namespace MiaoWu.App.ViewModels
                 }
 
                 Items.Clear();
+                _assistantItems.Clear();
+                _toolCards.Clear();
+                _groupOf.Clear();
+                _openGroup = null;
                 ApplySessionFlags(false, false);
                 StatusText = "打开会话失败：" + exception.Message;
                 _app.Logger.Error("conversation.attach", "打开会话失败。", exception);
@@ -678,7 +723,10 @@ namespace MiaoWu.App.ViewModels
             _userItems.Clear();
             _assistantItems.Clear();
             _toolCards.Clear();
+            _groupOf.Clear();
+            _openGroup = null;
             IsRunning = false;
+            ResetSessionClock();
             StatusText = null;
             UsageText = null;
             ContextText = null;
@@ -788,6 +836,7 @@ namespace MiaoWu.App.ViewModels
 
                 string clientId = "m_" + Guid.NewGuid().ToString("N").Substring(0, 12);
                 var optimistic = new UserChatItemViewModel(clientId, text, _clock(), _clipboard);
+                CloseProcessGroup(true);
                 Items.Add(optimistic);
                 _userItems[clientId] = optimistic;
                 Draft = string.Empty;
@@ -903,11 +952,13 @@ namespace MiaoWu.App.ViewModels
             int index = Items.IndexOf(assistant);
             if (index >= 0)
             {
-                while (Items.Count > index)
+                // 过程组可能在删除成员时同步移除组头；每轮重算目标下标，别按旧 count 删到别人。
+                while (index >= 0 && Items.Count > index)
                 {
                     ChatItemViewModel item = Items[Items.Count - 1];
                     Items.RemoveAt(Items.Count - 1);
                     Untrack(item);
+                    index = Items.IndexOf(assistant);
                 }
             }
 
@@ -1067,6 +1118,8 @@ namespace MiaoWu.App.ViewModels
         {
             _markdownTimer.Stop();
             _markdownTimer.Tick -= OnMarkdownTick;
+            _clockTimer.Stop();
+            _clockTimer.Tick -= OnClockTick;
             _app.ProvidersChanged -= OnProvidersChanged;
             Detach();
         }
@@ -1086,6 +1139,8 @@ namespace MiaoWu.App.ViewModels
             _userItems.Clear();
             _assistantItems.Clear();
             _toolCards.Clear();
+            _groupOf.Clear();
+            _openGroup = null;
 
             _title = snapshot.Title;
             IsRunning = snapshot.State == AgentSessionState.Running || snapshot.State == AgentSessionState.Cancelling;
@@ -1115,6 +1170,11 @@ namespace MiaoWu.App.ViewModels
             {
                 IsRunning = stateChanged.State == AgentSessionState.Running
                     || stateChanged.State == AgentSessionState.Cancelling;
+                if (!IsRunning)
+                {
+                    CloseProcessGroup(true);
+                }
+
                 StatusText = stateChanged.State == AgentSessionState.Cancelling
                     ? "正在停止…"
                     : null;
@@ -1168,6 +1228,7 @@ namespace MiaoWu.App.ViewModels
                 {
                     assistant.Apply(completed.Message, true);
                     assistant.MarkCompleted(completed.StopReason);
+                    SyncProcessMembership(assistant);
                 }
                 else
                 {
@@ -1182,6 +1243,7 @@ namespace MiaoWu.App.ViewModels
             if (runCompleted != null)
             {
                 IsRunning = false;
+                CloseProcessGroup(true);
                 StatusText = runCompleted.StopReason == StopReason.Length
                     ? "已达到输出上限"
                     : null;
@@ -1206,6 +1268,7 @@ namespace MiaoWu.App.ViewModels
                     assistant.MarkInterrupted();
                 }
 
+                CloseProcessGroup(true);
                 RaiseHasRetry();
                 return;
             }
@@ -1223,11 +1286,13 @@ namespace MiaoWu.App.ViewModels
                     && _assistantItems.TryGetValue(failed.AssistantMessageId, out assistant))
                 {
                     assistant.MarkFailed(message);
+                    CloseProcessGroup(true);
                     AddFailedNotice(failed.Error, failed.AssistantMessageId);
                 }
                 else
                 {
                     // 连助手行都没建起来（请求在 step 之前就失败）时，至少留一个可重试的提示。
+                    CloseProcessGroup(true);
                     Items.Add(new NoticeChatItemViewModel("生成失败", message, true, _clock())
                     {
                         ActionText = "重试",
@@ -1289,6 +1354,7 @@ namespace MiaoWu.App.ViewModels
                 case AgentMessageRole.User:
                     if (!_userItems.ContainsKey(message.Id))
                     {
+                        CloseProcessGroup(true);
                         var item = new UserChatItemViewModel(message.Id, message.GetText(), message.CreatedAt, _clipboard);
                         Items.Add(item);
                         _userItems[message.Id] = item;
@@ -1325,6 +1391,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             item.Apply(message, live);
+            SyncProcessMembership(item);
             EnsureToolCardsForMessage(message);
 
             if (!live)
@@ -1369,7 +1436,7 @@ namespace MiaoWu.App.ViewModels
                     },
                     message.CreatedAt);
 
-                Items.Add(card);
+                AddToolCard(card);
                 _toolCards[key] = card;
             }
         }
@@ -1389,7 +1456,7 @@ namespace MiaoWu.App.ViewModels
             if (!_toolCards.TryGetValue(key, out card))
             {
                 card = CreateToolCard(execution.Call, _clock());
-                Items.Add(card);
+                AddToolCard(card);
                 _toolCards[key] = card;
             }
 
@@ -1410,7 +1477,7 @@ namespace MiaoWu.App.ViewModels
             {
                 var call = new ToolCall { Id = message.ToolCallId, Name = message.ToolName };
                 card = CreateToolCard(call, message.CreatedAt);
-                Items.Add(card);
+                AddToolCard(card);
                 _toolCards[key] = card;
             }
 
@@ -1548,6 +1615,7 @@ namespace MiaoWu.App.ViewModels
 
         private void AddNotice(string title, string body, bool isError)
         {
+            CloseProcessGroup(true);
             Items.Add(new NoticeChatItemViewModel(title, body, isError, _clock()));
             OnPropertyChanged(nameof(IsEmpty));
         }
@@ -1676,6 +1744,218 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        // ---------------------------------------------------------------
+        // 执行过程组：以工具调用收尾的助手步骤 + 工具卡
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// 助手行刚建出来时还不知道它会不会以工具调用收尾；Apply / 落定后调用这里，
+        /// 是过程就收进当前组，是最终答案就关掉当前组。
+        /// </summary>
+        private void SyncProcessMembership(AssistantChatItemViewModel assistant)
+        {
+            if (assistant == null)
+            {
+                return;
+            }
+
+            // MessageStarted 先建一个空的流式行；此时还不知道这一步会不会以工具收尾，
+            // 不能拿它去关闭上一组，否则每个工具步骤都会被拆成两组。
+            if (assistant.IsStreaming && !assistant.IsProcessOnly)
+            {
+                return;
+            }
+
+            ProcessGroupViewModel existing;
+            if (_groupOf.TryGetValue(assistant, out existing))
+            {
+                if (assistant.IsProcessOnly)
+                {
+                    return;
+                }
+
+                _groupOf.Remove(assistant);
+                existing.Remove(assistant);
+                CloseProcessGroup(true);
+                return;
+            }
+
+            if (!assistant.IsProcessOnly)
+            {
+                CloseProcessGroup(true);
+                return;
+            }
+
+            ProcessGroupViewModel group = _openGroup;
+            if (group == null)
+            {
+                group = new ProcessGroupViewModel(assistant.Timestamp, IsRunning);
+                group.Emptied += OnGroupEmptied;
+                int index = Items.IndexOf(assistant);
+                Items.Insert(index < 0 ? Items.Count : index, group);
+                _openGroup = group;
+            }
+
+            group.Add(assistant);
+            _groupOf[assistant] = group;
+        }
+
+        /// <summary>工具卡永远属于过程：没有打开的组就在它前面补一个组头。</summary>
+        private void AddToolCard(ToolCardViewModel card)
+        {
+            ProcessGroupViewModel group = _openGroup;
+            if (group == null)
+            {
+                group = new ProcessGroupViewModel(card.Timestamp, IsRunning);
+                group.Emptied += OnGroupEmptied;
+                Items.Add(group);
+                _openGroup = group;
+            }
+
+            Items.Add(card);
+            group.Add(card);
+            _groupOf[card] = group;
+        }
+
+        /// <summary>一轮结束 / 最终答案 / 新的用户消息：当前组收起，后续过程另起一组。</summary>
+        private void CloseProcessGroup(bool collapse)
+        {
+            if (_openGroup == null)
+            {
+                return;
+            }
+
+            if (collapse)
+            {
+                _openGroup.CollapseAfterTurn();
+            }
+
+            _openGroup = null;
+        }
+
+        private void OnGroupEmptied(object sender, EventArgs e)
+        {
+            var group = sender as ProcessGroupViewModel;
+            if (group == null)
+            {
+                return;
+            }
+
+            group.Emptied -= OnGroupEmptied;
+            Items.Remove(group);
+            if (ReferenceEquals(_openGroup, group))
+            {
+                _openGroup = null;
+            }
+        }
+
+        private void UntrackGroupMember(ChatItemViewModel item)
+        {
+            ProcessGroupViewModel group;
+            if (!_groupOf.TryGetValue(item, out group))
+            {
+                return;
+            }
+
+            _groupOf.Remove(item);
+            group.Remove(item);
+        }
+
+        private void ClearTranscript()
+        {
+            Items.Clear();
+            _userItems.Clear();
+            _assistantItems.Clear();
+            _toolCards.Clear();
+            _groupOf.Clear();
+            _openGroup = null;
+            OnPropertyChanged(nameof(IsEmpty));
+        }
+
+        // ---------------------------------------------------------------
+        // 会话计时
+        // ---------------------------------------------------------------
+
+        private void OnClockTick(object sender, EventArgs e)
+        {
+            if (HasSession)
+            {
+                UpdateClockTexts();
+            }
+        }
+
+        /// <summary>运行开始记起点，结束把这一段折进累计时长；切换会话时归零。</summary>
+        private void UpdateRunClock()
+        {
+            if (_isRunning)
+            {
+                if (_runStartedAt == null)
+                {
+                    _runStartedAt = _clock();
+                }
+            }
+            else if (_runStartedAt != null)
+            {
+                _activeAccumulated += _clock() - _runStartedAt.Value;
+                _runStartedAt = null;
+            }
+
+            UpdateClockTexts();
+        }
+
+        private void UpdateClockTexts()
+        {
+            DateTime now = _clock();
+            TimeSpan active = _activeAccumulated;
+            if (_runStartedAt != null)
+            {
+                active += now - _runStartedAt.Value;
+            }
+
+            string elapsed = FormatDuration(active);
+            if (!string.Equals(_elapsedText, elapsed, StringComparison.Ordinal))
+            {
+                _elapsedText = elapsed;
+                OnPropertyChanged(nameof(ElapsedText));
+            }
+
+            string run = _runStartedAt == null ? null : FormatDuration(now - _runStartedAt.Value);
+            if (!string.Equals(_runElapsedText, run, StringComparison.Ordinal))
+            {
+                _runElapsedText = run;
+                OnPropertyChanged(nameof(RunElapsedText));
+            }
+        }
+
+        private void ResetSessionClock()
+        {
+            _runStartedAt = null;
+            _activeAccumulated = TimeSpan.Zero;
+            _elapsedText = "00:00";
+            _runElapsedText = null;
+            OnPropertyChanged(nameof(ElapsedText));
+            OnPropertyChanged(nameof(RunElapsedText));
+        }
+
+        internal static string FormatDuration(TimeSpan value)
+        {
+            if (value < TimeSpan.Zero)
+            {
+                value = TimeSpan.Zero;
+            }
+
+            int total = (int)value.TotalSeconds;
+            int hours = total / 3600;
+            int minutes = (total % 3600) / 60;
+            int seconds = total % 60;
+            return hours > 0
+                ? hours.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + ":" + minutes.ToString("00", System.Globalization.CultureInfo.InvariantCulture)
+                    + ":" + seconds.ToString("00", System.Globalization.CultureInfo.InvariantCulture)
+                : minutes.ToString("00", System.Globalization.CultureInfo.InvariantCulture)
+                    + ":" + seconds.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         private void OnProvidersChanged(object sender, EventArgs e)
         {
             if (!_dispatcher.CheckAccess())
@@ -1700,6 +1980,8 @@ namespace MiaoWu.App.ViewModels
 
         private void Untrack(ChatItemViewModel item)
         {
+            UntrackGroupMember(item);
+
             var user = item as UserChatItemViewModel;
             if (user != null)
             {
