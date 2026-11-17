@@ -6,20 +6,29 @@
              mc:Ignorable="d"
              d:DesignWidth="440"
              d:DesignHeight="400"
-             Focusable="False"
-             Background="Transparent"
-             IsHitTestVisible="True">
+             Focusable="False">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </UserControl.Resources>
 
+    <!-- 根元素不要铺 Transparent：UserControl 的边界包含通知栈底距，
+         透明背景仍参与命中测试，会把下方输入框的点击整块吃掉。 -->
     <ItemsControl ItemsSource="{Binding Notifications}"
                   Width="{StaticResource Metric.Notification.Width}"
-                  Margin="0,0,16,146"
                   HorizontalAlignment="Right"
                   VerticalAlignment="Bottom"
                   Focusable="False">
+        <ItemsControl.Style>
+            <Style TargetType="ItemsControl">
+                <Setter Property="Margin" Value="{StaticResource Margin.Notification}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsRightPaneCollapsed}" Value="True">
+                        <Setter Property="Margin" Value="{StaticResource Margin.NotificationCollapsed}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ItemsControl.Style>
         <ItemsControl.ItemTemplate>
             <DataTemplate>
                 <Border Margin="0,9,0,0"

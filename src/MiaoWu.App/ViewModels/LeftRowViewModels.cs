@@ -52,6 +52,7 @@ namespace MiaoWu.App.ViewModels
             CancelRenameCommand = new RelayCommand(CancelRename, () => _isRenaming);
             TogglePinCommand = new RelayCommand(TogglePin, () => !IsHeader);
             ToggleArchiveCommand = new RelayCommand(ToggleArchive, () => !IsHeader);
+            ExportCommand = new RelayCommand(Export, () => !IsHeader);
             DeleteCommand = new RelayCommand(Delete, () => !IsHeader);
         }
 
@@ -169,6 +170,8 @@ namespace MiaoWu.App.ViewModels
 
         public RelayCommand ToggleArchiveCommand { get; }
 
+        public RelayCommand ExportCommand { get; }
+
         public RelayCommand DeleteCommand { get; }
 
         public void Refresh()
@@ -222,6 +225,14 @@ namespace MiaoWu.App.ViewModels
             if (!IsHeader)
             {
                 _owner.ToggleSessionArchive(this);
+            }
+        }
+
+        private void Export()
+        {
+            if (!IsHeader)
+            {
+                _owner.ExportSession(this);
             }
         }
 

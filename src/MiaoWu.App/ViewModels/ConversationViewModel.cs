@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using MiaoWu.App.Mvvm;
+using MiaoWu.App.Resources;
 using MiaoWu.App.Services;
 using MiaoWu.Core.Agents;
 using MiaoWu.Core.Agents.Tools;
@@ -22,13 +23,21 @@ using MiaoWu.Infrastructure.Tools;
 
 namespace MiaoWu.App.ViewModels
 {
+    /// <summary>输入框右下角的模型下拉项。</summary>
     public sealed class ModelOption
     {
-        public ModelOption(string providerId, string modelId, string displayName)
+        public ModelOption(
+            string providerId,
+            string modelId,
+            string displayName,
+            string providerName,
+            bool isDefault)
         {
             ProviderId = providerId;
             ModelId = modelId;
             DisplayName = displayName;
+            ProviderName = providerName;
+            IsDefault = isDefault;
         }
 
         public string ProviderId { get; }
@@ -42,10 +51,42 @@ namespace MiaoWu.App.ViewModels
 
         public string DisplayName { get; }
 
+        public string ProviderName { get; }
+
+        public bool IsDefault { get; }
+
+        /// <summary>下拉行右侧只标「默认」；供应商与模型 ID 放进行的 tooltip。</summary>
+        public string Badge
+        {
+            get { return IsDefault ? "默认" : string.Empty; }
+        }
+
+        public string Detail
+        {
+            get { return ProviderName + " · " + ModelId; }
+        }
+
         public override string ToString()
         {
             return DisplayName;
         }
+    }
+
+    /// <summary>模型下拉里按提供商分区的一组模型。</summary>
+    public sealed class ModelGroup
+    {
+        public ModelGroup(string providerId, string providerName)
+        {
+            ProviderId = providerId;
+            ProviderName = providerName;
+            Models = new List<ModelOption>();
+        }
+
+        public string ProviderId { get; }
+
+        public string ProviderName { get; }
+
+        public List<ModelOption> Models { get; }
     }
 
     /// <summary>
@@ -84,13 +125,15 @@ namespace MiaoWu.App.ViewModels
         private string _renameDraft;
         private bool _isAttached;
         private bool _isBusy;
+        private bool _isPinned;
+        private bool _isArchived;
+        private int _attachVersion;
 
         public ConversationViewModel(
             AppServices app,
             IDialogService dialogs,
             IClipboardService clipboard,
             IFolderPicker folderPicker,
-            IFilePicker filePicker,
             Func<DateTime> clock = null)
         {
             _app = app ?? throw new ArgumentNullException(nameof(app));
@@ -103,6 +146,7 @@ namespace MiaoWu.App.ViewModels
 
             Items = new ObservableCollection<ChatItemViewModel>();
             ModelOptions = new ObservableCollection<ModelOption>();
+            ModelGroups = new ObservableCollection<ModelGroup>();
 
             SendCommand = new RelayCommand(() => FireAndForget(SendAsync()), () => CanSend);
             StopCommand = new RelayCommand(() => FireAndForget(StopAsync()), () => IsRunning);
@@ -111,6 +155,12 @@ namespace MiaoWu.App.ViewModels
             RenameCommand = new RelayCommand(BeginRename, () => HasSession);
             CommitRenameCommand = new RelayCommand(() => FireAndForget(CommitRenameAsync()));
             CancelRenameCommand = new RelayCommand(() => IsRenaming = false);
+            TogglePinCommand = new RelayCommand(
+                () => SessionPinRequested?.Invoke(this, EventArgs.Empty),
+                () => HasSession);
+            ToggleArchiveCommand = new RelayCommand(
+                () => SessionArchiveRequested?.Invoke(this, EventArgs.Empty),
+                () => HasSession);
             DeleteCommand = new RelayCommand(() => FireAndForget(DeleteAsync()), () => HasSession);
             ExportCommand = new RelayCommand(() => FireAndForget(ExportAsync()), () => HasSession);
             OpenSettingsCommand = new RelayCommand(() => SettingsRequested?.Invoke(this, EventArgs.Empty));
@@ -132,9 +182,18 @@ namespace MiaoWu.App.ViewModels
 
         public event EventHandler SettingsRequested;
 
+        /// <summary>请求主窗口对当前会话执行置顶；状态与左栏会话行保持一致。</summary>
+        public event EventHandler SessionPinRequested;
+
+        /// <summary>请求主窗口对当前会话执行归档；状态与左栏会话行保持一致。</summary>
+        public event EventHandler SessionArchiveRequested;
+
         public ObservableCollection<ChatItemViewModel> Items { get; }
 
         public ObservableCollection<ModelOption> ModelOptions { get; }
+
+        /// <summary>模型下拉的数据源：按提供商分区，区内按模型目录顺序。</summary>
+        public ObservableCollection<ModelGroup> ModelGroups { get; }
 
         public RelayCommand SendCommand { get; }
 
@@ -145,6 +204,16 @@ namespace MiaoWu.App.ViewModels
         public RelayCommand RetryCommand { get; }
 
         public RelayCommand RenameCommand { get; }
+
+        /// <summary>与左栏会话菜单同名，供共享菜单模板绑定。</summary>
+        public RelayCommand BeginRenameCommand
+        {
+            get { return RenameCommand; }
+        }
+
+        public RelayCommand TogglePinCommand { get; }
+
+        public RelayCommand ToggleArchiveCommand { get; }
 
         public RelayCommand CommitRenameCommand { get; }
 
@@ -189,6 +258,7 @@ namespace MiaoWu.App.ViewModels
                 if (SetProperty(ref _draft, value))
                 {
                     OnPropertyChanged(nameof(CanSend));
+                    OnPropertyChanged(nameof(IsEmpty));
                     CommandManager.InvalidateRequerySuggested();
                 }
             }
@@ -197,7 +267,13 @@ namespace MiaoWu.App.ViewModels
         public string StatusText
         {
             get { return _statusText; }
-            private set { SetProperty(ref _statusText, value); }
+            private set
+            {
+                if (SetProperty(ref _statusText, value))
+                {
+                    OnPropertyChanged(nameof(HeaderText));
+                }
+            }
         }
 
         public string UsageText
@@ -209,7 +285,119 @@ namespace MiaoWu.App.ViewModels
         public string ContextText
         {
             get { return _contextText; }
-            private set { SetProperty(ref _contextText, value); }
+            private set
+            {
+                if (SetProperty(ref _contextText, value))
+                {
+                    OnPropertyChanged(nameof(HeaderText));
+                }
+            }
+        }
+
+        /// <summary>输入框头部右侧只显示一条：临时状态优先，否则显示上下文用量。</summary>
+        public string HeaderText
+        {
+            get
+            {
+                return string.IsNullOrWhiteSpace(_statusText) ? _contextText : _statusText;
+            }
+        }
+
+        public bool IsPinned
+        {
+            get { return _isPinned; }
+        }
+
+        public bool IsArchived
+        {
+            get { return _isArchived; }
+        }
+
+        /// <summary>菜单文案与左栏会话菜单一致，随当前状态切换。</summary>
+        public string PinActionText
+        {
+            get { return _isPinned ? Strings.UnpinSession : Strings.PinSession; }
+        }
+
+        public string ArchiveActionText
+        {
+            get { return _isArchived ? Strings.UnarchiveSession : Strings.ArchiveSession; }
+        }
+
+        public string ComposerPlaceholder
+        {
+            get
+            {
+                if (_workspace == null)
+                {
+                    return "先在标题栏选择工作区";
+                }
+
+                return "描述你想让 MiaoWu 做的事，Enter 发送";
+            }
+        }
+
+        public string EmptyTitle
+        {
+            get { return _workspace == null ? "先选择工作区" : "开始一个新会话"; }
+        }
+
+        public string EmptyBody
+        {
+            get
+            {
+                return _workspace == null
+                    ? "工作区是会话的归属。先在左栏新建工作区，或在标题栏选择已有工作区，然后回到这里输入。"
+                    : "在下方描述你想让 MiaoWu 做的事。写文件或执行命令前，它会先征求你的同意。";
+            }
+        }
+
+        public bool CanPickModel
+        {
+            get { return ModelOptions.Count > 0; }
+        }
+
+        public bool HasModelGroups
+        {
+            get { return ModelGroups.Count > 0; }
+        }
+
+        public string SelectedModelName
+        {
+            get { return _selectedModel == null ? "选择模型" : _selectedModel.DisplayName; }
+        }
+
+        public string ModelEmptyText
+        {
+            get { return "还没有配置模型。打开“功能设置 > 模型”添加供应商和模型。"; }
+        }
+
+        public string ModelToolTip
+        {
+            get
+            {
+                return HasModelGroups
+                    ? "选择这条消息使用的模型（按提供商分组）"
+                    : "还没有配置模型，点击查看设置";
+            }
+        }
+
+        public string SendToolTip
+        {
+            get
+            {
+                if (_workspace == null)
+                {
+                    return "请先在标题栏选择工作区";
+                }
+
+                if (ModelOptions.Count == 0)
+                {
+                    return "尚未配置模型，请在“功能设置 > 模型”中添加";
+                }
+
+                return IsRunning ? "发送（排队）" : "发送（Enter）";
+            }
         }
 
         public ModelOption SelectedModel
@@ -217,23 +405,54 @@ namespace MiaoWu.App.ViewModels
             get { return _selectedModel; }
             set
             {
-                if (!SetProperty(ref _selectedModel, value) || value == null)
+                if (ReferenceEquals(_selectedModel, value))
                 {
                     return;
                 }
 
-                IAgentSession session = CurrentSession;
-                if (session != null && !IsRunning)
+                SelectModel(value);
+            }
+        }
+
+        /// <summary>模型下拉行点击后调用；先更新本地下一次发送的选择，再同步给已挂载会话。</summary>
+        public void SelectModel(ModelOption option)
+        {
+            if (option == null)
+            {
+                return;
+            }
+
+            _selectedModel = option;
+            OnPropertyChanged(nameof(SelectedModel));
+            OnPropertyChanged(nameof(SelectedModelName));
+
+            IAgentSession session = CurrentSession;
+            if (session != null && !IsRunning)
+            {
+                try
                 {
-                    try
-                    {
-                        session.SetModelAsync(value.ProviderId, value.ModelId, CancellationToken.None);
-                    }
-                    catch (Exception)
-                    {
-                    }
+                    session.SetModelAsync(option.ProviderId, option.ModelId, CancellationToken.None);
+                }
+                catch (Exception)
+                {
                 }
             }
+        }
+
+        /// <summary>由主窗口同步左栏当前会话行的置顶 / 归档状态，保证两处菜单文案一致。</summary>
+        public void ApplySessionFlags(bool pinned, bool archived)
+        {
+            if (_isPinned == pinned && _isArchived == archived)
+            {
+                return;
+            }
+
+            _isPinned = pinned;
+            _isArchived = archived;
+            OnPropertyChanged(nameof(IsPinned));
+            OnPropertyChanged(nameof(IsArchived));
+            OnPropertyChanged(nameof(PinActionText));
+            OnPropertyChanged(nameof(ArchiveActionText));
         }
 
         public bool IsRunning
@@ -245,6 +464,7 @@ namespace MiaoWu.App.ViewModels
                 {
                     OnPropertyChanged(nameof(CanSend));
                     OnPropertyChanged(nameof(IsIdle));
+                    OnPropertyChanged(nameof(SendToolTip));
                     CommandManager.InvalidateRequerySuggested();
                 }
             }
@@ -265,9 +485,10 @@ namespace MiaoWu.App.ViewModels
             get { return _workspace != null; }
         }
 
+        /// <summary>没有消息且草稿为空时显示空态；开始输入后空态让位给正文。</summary>
         public bool IsEmpty
         {
-            get { return Items.Count == 0; }
+            get { return Items.Count == 0 && string.IsNullOrWhiteSpace(_draft); }
         }
 
         public bool IsRenaming
@@ -282,9 +503,18 @@ namespace MiaoWu.App.ViewModels
             set { SetProperty(ref _renameDraft, value); }
         }
 
+        /// <summary>
+        /// 新会话没有 <c>_sessionId</c> 也可以发送：首次发送会先创建并挂载会话。
+        /// 只有当没有工作区或正在创建 / 发送时才禁用。
+        /// </summary>
         public bool CanSend
         {
-            get { return _sessionId != null && !string.IsNullOrWhiteSpace(_draft); }
+            get
+            {
+                return _workspace != null
+                    && !_isBusy
+                    && !string.IsNullOrWhiteSpace(_draft);
+            }
         }
 
         public bool HasRetryTarget
@@ -324,16 +554,32 @@ namespace MiaoWu.App.ViewModels
 
         public void SetWorkspace(Workspace workspace)
         {
-            if (ReferenceEquals(_workspace, workspace))
+            bool sameWorkspace = ReferenceEquals(_workspace, workspace)
+                || (_workspace != null
+                    && workspace != null
+                    && string.Equals(_workspace.Id, workspace.Id, StringComparison.Ordinal));
+            if (sameWorkspace)
             {
+                _workspace = workspace;
+                OnPropertyChanged(nameof(ComposerPlaceholder));
+                OnPropertyChanged(nameof(EmptyTitle));
+                OnPropertyChanged(nameof(EmptyBody));
+                OnPropertyChanged(nameof(SendToolTip));
                 return;
             }
 
+            // 切换工作区时必须先断开旧会话；否则右栏还会挂着上一个工作区的 session，
+            // 新工作区没有选中会话时看起来就像“新会话不能输入”。
+            Detach();
             _workspace = workspace;
             OnPropertyChanged(nameof(Workspace));
             OnPropertyChanged(nameof(HasWorkspace));
-            OnPropertyChanged(nameof(NewSessionCommand));
             OnPropertyChanged(nameof(SessionSubtitle));
+            OnPropertyChanged(nameof(ComposerPlaceholder));
+            OnPropertyChanged(nameof(EmptyTitle));
+            OnPropertyChanged(nameof(EmptyBody));
+            OnPropertyChanged(nameof(CanSend));
+            OnPropertyChanged(nameof(SendToolTip));
             CommandManager.InvalidateRequerySuggested();
         }
 
@@ -352,14 +598,24 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            Detach();
+            int version = ++_attachVersion;
+            DetachCore();
             _workspace = workspace;
             _sessionId = sessionId;
 
             try
             {
-                AgentSessionOptions options = _app.CreateSessionOptions(workspace, sessionId, null, null);
+                AgentSessionOptions options = _app.CreateSessionOptions(
+                    workspace,
+                    sessionId,
+                    _selectedModel == null ? null : _selectedModel.ProviderId,
+                    _selectedModel == null ? null : _selectedModel.ModelId);
                 IAgentSession session = await _app.Runtime.GetOrCreateAsync(options, CancellationToken.None);
+                if (version != _attachVersion)
+                {
+                    return;
+                }
+
                 _pump = new SessionEventPump(session, _dispatcher, ApplyEvent, ApplySnapshot);
                 _pump.Start();
                 _isAttached = true;
@@ -370,6 +626,21 @@ namespace MiaoWu.App.ViewModels
             }
             catch (Exception exception)
             {
+                if (version != _attachVersion)
+                {
+                    return;
+                }
+
+                _sessionId = null;
+                _isAttached = false;
+                if (_pump != null)
+                {
+                    _pump.Dispose();
+                    _pump = null;
+                }
+
+                Items.Clear();
+                ApplySessionFlags(false, false);
                 StatusText = "打开会话失败：" + exception.Message;
                 _app.Logger.Error("conversation.attach", "打开会话失败。", exception);
             }
@@ -382,10 +653,20 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(SessionSubtitle));
             OnPropertyChanged(nameof(CanSend));
             OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(ComposerPlaceholder));
+            OnPropertyChanged(nameof(EmptyTitle));
+            OnPropertyChanged(nameof(EmptyBody));
+            OnPropertyChanged(nameof(SendToolTip));
             CommandManager.InvalidateRequerySuggested();
         }
 
         public void Detach()
+        {
+            _attachVersion++;
+            DetachCore();
+        }
+
+        private void DetachCore()
         {
             if (_pump != null)
             {
@@ -405,35 +686,56 @@ namespace MiaoWu.App.ViewModels
             StatusText = null;
             UsageText = null;
             ContextText = null;
+            ApplySessionFlags(false, false);
             OnPropertyChanged(nameof(SessionId));
             OnPropertyChanged(nameof(HasSession));
             OnPropertyChanged(nameof(Title));
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(CanSend));
+            OnPropertyChanged(nameof(SendToolTip));
         }
 
         public async Task NewSessionAsync()
         {
-            if (_workspace == null)
+            if (_isBusy)
             {
                 return;
             }
 
-            string sessionId = "s_" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "_"
-                + Guid.NewGuid().ToString("N").Substring(0, 6);
+            if (_workspace == null)
+            {
+                StatusText = "请先在标题栏新建或选择工作区。";
+                return;
+            }
 
+            // 已经站在一个空会话上时，新建只会制造重复空记录；把焦点交还输入框。
+            if (HasSession && Items.Count == 0 && !IsRunning)
+            {
+                FocusComposer();
+                return;
+            }
+
+            _isBusy = true;
+            OnPropertyChanged(nameof(CanSend));
+            CommandManager.InvalidateRequerySuggested();
             try
             {
-                AgentSessionOptions options = _app.CreateSessionOptions(_workspace, sessionId, null, null);
-                await _app.Runtime.GetOrCreateAsync(options, CancellationToken.None);
-                SessionListChanged?.Invoke(this, EventArgs.Empty);
+                string sessionId = NewSessionId();
                 await AttachAsync(_workspace, sessionId);
-                SessionListChanged?.Invoke(this, EventArgs.Empty);
+                if (!HasSession)
+                {
+                    return;
+                }
+
                 StatusText = "已新建会话";
+                SessionListChanged?.Invoke(this, EventArgs.Empty);
+                FocusComposer();
             }
-            catch (Exception exception)
+            finally
             {
-                StatusText = "新建会话失败：" + exception.Message;
+                _isBusy = false;
+                OnPropertyChanged(nameof(CanSend));
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
@@ -450,65 +752,110 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            if (_sessionId == null)
+            if (_workspace == null)
             {
-                await NewSessionAsync();
-                if (_sessionId == null)
-                {
-                    return;
-                }
+                StatusText = "请先在标题栏新建或选择工作区。";
+                return;
             }
 
-            IAgentSession session = CurrentSession;
-            if (session == null)
+            if (_app.Models.Models.Count == 0)
             {
-                StatusText = "会话尚未就绪，请重试。";
+                StatusText = "尚未配置模型，请在“功能设置 > 模型”中添加供应商和模型。";
                 return;
             }
 
             _isBusy = true;
-            string clientId = "m_" + Guid.NewGuid().ToString("N").Substring(0, 12);
-            var optimistic = new UserChatItemViewModel(clientId, text, _clock());
-            Items.Add(optimistic);
-            _userItems[clientId] = optimistic;
-            Draft = string.Empty;
-            OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(CanSend));
+            CommandManager.InvalidateRequerySuggested();
 
             try
             {
-                var input = new AgentInput
+                // 新会话：先创建并挂载，成功后才清空草稿。创建失败时保留用户输入。
+                if (_sessionId == null)
                 {
-                    ClientMessageId = clientId,
-                    Blocks = new List<AgentContentBlock>
+                    string sessionId = NewSessionId();
+                    await AttachAsync(_workspace, sessionId);
+                    if (_sessionId == null)
                     {
-                        new AgentContentBlock { Type = "text", Text = text }
-                    },
-                    ProviderId = _selectedModel == null ? null : _selectedModel.ProviderId,
-                    ModelId = _selectedModel == null ? null : _selectedModel.ModelId
-                };
+                        return;
+                    }
 
-                await session.SendAsync(input, AgentSendMode.Queue, CancellationToken.None);
-                IsRunning = true;
-            }
-            catch (AgentRunException exception)
-            {
-                Items.Remove(optimistic);
-                _userItems.Remove(clientId);
-                Draft = text;
-                AddNotice("发送失败", exception.Error == null ? exception.Message : exception.Error.Message, true);
-            }
-            catch (Exception exception)
-            {
-                Items.Remove(optimistic);
-                _userItems.Remove(clientId);
-                Draft = text;
-                AddNotice("发送失败", exception.Message, true);
+                    SessionListChanged?.Invoke(this, EventArgs.Empty);
+                }
+
+                IAgentSession session = CurrentSession;
+                if (session == null)
+                {
+                    StatusText = "会话尚未就绪，请重试。";
+                    return;
+                }
+
+                string clientId = "m_" + Guid.NewGuid().ToString("N").Substring(0, 12);
+                var optimistic = new UserChatItemViewModel(clientId, text, _clock());
+                Items.Add(optimistic);
+                _userItems[clientId] = optimistic;
+                Draft = string.Empty;
+                OnPropertyChanged(nameof(IsEmpty));
+
+                try
+                {
+                    var input = new AgentInput
+                    {
+                        ClientMessageId = clientId,
+                        Blocks = new List<AgentContentBlock>
+                        {
+                            new AgentContentBlock { Type = "text", Text = text }
+                        },
+                        ProviderId = _selectedModel == null ? null : _selectedModel.ProviderId,
+                        ModelId = _selectedModel == null ? null : _selectedModel.ModelId
+                    };
+
+                    await session.SendAsync(input, AgentSendMode.Queue, CancellationToken.None);
+                    IsRunning = true;
+                    FocusComposer();
+                }
+                catch (AgentRunException exception)
+                {
+                    Items.Remove(optimistic);
+                    _userItems.Remove(clientId);
+                    RestoreDraft(text);
+                    AddNotice("发送失败", exception.Error == null ? exception.Message : exception.Error.Message, true);
+                }
+                catch (Exception exception)
+                {
+                    Items.Remove(optimistic);
+                    _userItems.Remove(clientId);
+                    RestoreDraft(text);
+                    AddNotice("发送失败", exception.Message, true);
+                }
             }
             finally
             {
                 _isBusy = false;
+                OnPropertyChanged(nameof(CanSend));
                 OnPropertyChanged(nameof(IsEmpty));
+                CommandManager.InvalidateRequerySuggested();
             }
+        }
+
+        /// <summary>失败时只在用户没有继续输入时还原草稿，避免覆盖刚敲的内容。</summary>
+        private void RestoreDraft(string text)
+        {
+            if (string.IsNullOrWhiteSpace(Draft))
+            {
+                Draft = text;
+            }
+        }
+
+        private static string NewSessionId()
+        {
+            return "s_" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "_"
+                + Guid.NewGuid().ToString("N").Substring(0, 6);
+        }
+
+        private void FocusComposer()
+        {
+            _dispatcher.BeginInvoke(new Action(FocusComposerRequested), DispatcherPriority.Input);
         }
 
         public async Task StopAsync()
@@ -1354,21 +1701,67 @@ namespace MiaoWu.App.ViewModels
         private void RefreshModelOptions()
         {
             ModelOptions.Clear();
+            ModelGroups.Clear();
+            ModelDescriptor defaultModel = _app.Models.GetDefault();
+            string defaultKey = defaultModel == null ? null : defaultModel.Key;
+            var groups = new Dictionary<string, ModelGroup>(StringComparer.OrdinalIgnoreCase);
+
+            // 只列已配置提供商（providers.json 里带模型的条目），按目录顺序分区。
             foreach (ModelDescriptor model in _app.Models.Models)
             {
-                ModelOptions.Add(new ModelOption(
+                var option = new ModelOption(
                     model.ProviderId,
                     model.ModelId,
-                    model.ProviderId + " · " + model.GetDisplayName()));
+                    model.GetDisplayName(),
+                    GetProviderName(model.ProviderId),
+                    string.Equals(model.Key, defaultKey, StringComparison.OrdinalIgnoreCase));
+
+                ModelOptions.Add(option);
+
+                ModelGroup group;
+                if (!groups.TryGetValue(model.ProviderId, out group))
+                {
+                    group = new ModelGroup(model.ProviderId, option.ProviderName);
+                    groups[model.ProviderId] = group;
+                    ModelGroups.Add(group);
+                }
+
+                group.Models.Add(option);
             }
 
+            OnPropertyChanged(nameof(CanPickModel));
+            OnPropertyChanged(nameof(HasModelGroups));
+            OnPropertyChanged(nameof(ModelToolTip));
+            OnPropertyChanged(nameof(ModelEmptyText));
+            OnPropertyChanged(nameof(SendToolTip));
             SyncModelSelection(null);
+        }
+
+        private string GetProviderName(string providerId)
+        {
+            foreach (ProviderDefinition provider in _app.Models.Providers)
+            {
+                if (provider != null
+                    && string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.IsNullOrWhiteSpace(provider.DisplayName)
+                        ? provider.Id
+                        : provider.DisplayName;
+                }
+            }
+
+            return providerId;
         }
 
         private void SyncModelSelection(AgentSessionSnapshot snapshot)
         {
-            string providerId = snapshot == null ? null : snapshot.ProviderId;
-            string modelId = snapshot == null ? null : snapshot.ModelId;
+            // 没挂载会话时保留用户刚在下拉里选中的模型；配置刷新后仍按 key 匹配。
+            string providerId = snapshot != null
+                ? snapshot.ProviderId
+                : (_selectedModel == null ? null : _selectedModel.ProviderId);
+            string modelId = snapshot != null
+                ? snapshot.ModelId
+                : (_selectedModel == null ? null : _selectedModel.ModelId);
 
             if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId))
             {
@@ -1389,11 +1782,9 @@ namespace MiaoWu.App.ViewModels
                 match = ModelOptions[0];
             }
 
-            if (match != null)
-            {
-                _selectedModel = match;
-                OnPropertyChanged(nameof(SelectedModel));
-            }
+            _selectedModel = match;
+            OnPropertyChanged(nameof(SelectedModel));
+            OnPropertyChanged(nameof(SelectedModelName));
         }
 
         private void OnMarkdownTick(object sender, EventArgs e)

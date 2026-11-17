@@ -456,6 +456,17 @@ namespace MiaoWu.App.ViewModels
             _left.RequestDeleteSession(this, row.Session.Id, row.Title);
         }
 
+        /// <summary>由会话行调用：把会话导出为 Markdown / JSON。</summary>
+        public void ExportSession(SessionRowViewModel row)
+        {
+            if (row == null || row.Session == null)
+            {
+                return;
+            }
+
+            _left.RequestExportSession(this, row.Session.Id, row.Title);
+        }
+
         /// <summary>由文件行调用：重命名成功后同步节点、选中项与中栏标签。</summary>
         public void CommitFileRename(FileTreeRowViewModel row)
         {

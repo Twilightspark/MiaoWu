@@ -50,35 +50,6 @@
             </MenuItem>
         </ContextMenu>
 
-        <ContextMenu x:Key="SessionRowMenu" x:Shared="False">
-            <MenuItem Header="{Binding PlacementTarget.DataContext.PinActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                <MenuItem.Icon>
-                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Pin}" />
-                </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Header="{x:Static res:Strings.RenameSessionTitle}"
-                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                <MenuItem.Icon>
-                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Edit}" />
-                </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Header="{Binding PlacementTarget.DataContext.ArchiveActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Command="{Binding PlacementTarget.DataContext.ToggleArchiveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                <MenuItem.Icon>
-                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.ArrowDownToLine}" />
-                </MenuItem.Icon>
-            </MenuItem>
-            <Separator />
-            <MenuItem Header="{x:Static res:Strings.DeleteSession}"
-                      Tag="Danger"
-                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                <MenuItem.Icon>
-                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
-                </MenuItem.Icon>
-            </MenuItem>
-        </ContextMenu>
-
         <ContextMenu x:Key="FileRowMenu" x:Shared="False">
             <MenuItem Header="{x:Static res:Strings.RenameFile}"
                       Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">

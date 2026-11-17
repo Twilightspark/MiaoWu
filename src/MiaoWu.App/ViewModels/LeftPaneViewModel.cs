@@ -127,6 +127,9 @@ namespace MiaoWu.App.ViewModels
         /// <summary>用户要求删除会话；由主窗口先关停运行中的会话再删文件。</summary>
         public event EventHandler<SessionActionRequestedEventArgs> SessionDeleteRequested;
 
+        /// <summary>用户要求导出会话；由主窗口读取 transcript 并落盘。</summary>
+        public event EventHandler<SessionActionRequestedEventArgs> SessionExportRequested;
+
         /// <summary>用户要求清空工作区会话；由主窗口统一关停并删除。</summary>
         public event EventHandler<WorkspaceActionRequestedEventArgs> ClearSessionsRequested;
 
@@ -449,6 +452,21 @@ namespace MiaoWu.App.ViewModels
             }
 
             SessionDeleteRequested?.Invoke(
+                this,
+                new SessionActionRequestedEventArgs(workspace, sessionId, title));
+        }
+
+        public void RequestExportSession(
+            WorkspaceItemViewModel workspace,
+            string sessionId,
+            string title)
+        {
+            if (workspace == null || string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            SessionExportRequested?.Invoke(
                 this,
                 new SessionActionRequestedEventArgs(workspace, sessionId, title));
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -22,6 +23,7 @@ namespace MiaoWu.App.Views
         public ConversationPaneView()
         {
             InitializeComponent();
+            ModelPopup.CustomPopupPlacementCallback = PlaceModelPopup;
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
             DataContextChanged += OnDataContextChanged;
@@ -198,6 +200,77 @@ namespace MiaoWu.App.Views
             {
                 _scroller.ScrollToEnd();
             }
+        }
+
+        /// <summary>会话头「更多」左键打开与左栏会话行共用的菜单。</summary>
+        private void OnMoreClick(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            if (button == null || button.ContextMenu == null)
+            {
+                return;
+            }
+
+            button.ContextMenu.PlacementTarget = button;
+            button.ContextMenu.Placement = PlacementMode.Bottom;
+            button.ContextMenu.IsOpen = true;
+        }
+
+        private void OnModelPickerClick(object sender, RoutedEventArgs e)
+        {
+            if (!(DataContext is ConversationViewModel))
+            {
+                return;
+            }
+
+            if (ModelPopup.IsOpen)
+            {
+                ModelPopup.IsOpen = false;
+                return;
+            }
+
+            // 点击本身会完成一次鼠标捕获；立即打开会被 StaysOpen=False 当成外部点击关掉。
+            Dispatcher.BeginInvoke(
+                new Action(() => ModelPopup.IsOpen = true),
+                System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+        private void OnModelRowClick(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            var option = button == null ? null : button.Tag as ModelOption;
+            var viewModel = DataContext as ConversationViewModel;
+            if (option == null || viewModel == null)
+            {
+                return;
+            }
+
+            viewModel.SelectModel(option);
+            ModelPopup.IsOpen = false;
+        }
+
+        private void OnOpenModelSettingsClick(object sender, RoutedEventArgs e)
+        {
+            var viewModel = DataContext as ConversationViewModel;
+            ModelPopup.IsOpen = false;
+            if (viewModel != null)
+            {
+                viewModel.OpenSettingsCommand.Execute(null);
+            }
+        }
+
+        /// <summary>菜单右缘与模型按钮对齐，避免在右栏贴边处被裁掉。</summary>
+        private static CustomPopupPlacement[] PlaceModelPopup(
+            Size popupSize,
+            Size targetSize,
+            Point offset)
+        {
+            return new[]
+            {
+                new CustomPopupPlacement(
+                    new Point(targetSize.Width - popupSize.Width, -6),
+                    PopupPrimaryAxis.Horizontal)
+            };
         }
 
         private void OnRenameKeyDown(object sender, KeyEventArgs e)

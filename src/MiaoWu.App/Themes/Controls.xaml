@@ -1,7 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="clr-namespace:MiaoWu.App.Controls"
-                    xmlns:conv="clr-namespace:MiaoWu.App.Converters">
+                    xmlns:conv="clr-namespace:MiaoWu.App.Converters"
+                    xmlns:res="clr-namespace:MiaoWu.App.Resources">
 
     <!-- ============================================================
          基础控件样式。
@@ -112,11 +113,14 @@
 
     <!-- 文字角色 -->
 
-    <Style TargetType="TextBlock">
+    <!-- 文字基样式：隐式 TextBlock 样式与按钮模板内的覆盖样式共用，避免 Foreground 被重复固定。 -->
+    <Style x:Key="Text.Base" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
     </Style>
+
+    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Base}" />
 
     <Style x:Key="Text.AppName" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{StaticResource Font.AppName.Size}" />
@@ -361,7 +365,19 @@
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           TextElement.Foreground="{TemplateBinding Foreground}"
-                                          RecognizesAccessKey="True" />
+                                          RecognizesAccessKey="True">
+                            <ContentPresenter.Resources>
+                                <!--
+                                    全局隐式 TextBlock 样式把 Foreground 固定成正文色，样式 setter 会盖掉
+                                    ContentPresenter 的继承值，字符串内容因此显示为深色。主题色按钮内部
+                                    改为绑定按钮自身的 Foreground，保证所有主按钮文字都是白字。
+                                -->
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+                                    <Setter Property="Foreground"
+                                            Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" />
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -1000,6 +1016,44 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
+
+    <!-- 会话「更多」菜单：左栏会话行与右栏会话头共用同一份，保证动作、文案与顺序一致。
+         PlacementTarget.DataContext 需要提供 PinActionText / TogglePinCommand /
+         BeginRenameCommand / ArchiveActionText / ToggleArchiveCommand / DeleteCommand。 -->
+    <ContextMenu x:Key="SessionRowMenu" x:Shared="False">
+        <MenuItem Header="{Binding PlacementTarget.DataContext.PinActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+                <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Pin}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{x:Static res:Strings.RenameSessionTitle}"
+                  Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+                <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Edit}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{Binding PlacementTarget.DataContext.ArchiveActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                  Command="{Binding PlacementTarget.DataContext.ToggleArchiveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+                <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.ArrowDownToLine}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="导出 Markdown / JSON"
+                  Command="{Binding PlacementTarget.DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+                <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Download}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="{x:Static res:Strings.DeleteSession}"
+                  Tag="Danger"
+                  Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+                <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
+            </MenuItem.Icon>
+        </MenuItem>
+    </ContextMenu>
 
     <!-- 菜单卡片的公共表面：ContextMenu 与其子菜单共用。 -->
     <Style x:Key="Menu.Surface" TargetType="Border">

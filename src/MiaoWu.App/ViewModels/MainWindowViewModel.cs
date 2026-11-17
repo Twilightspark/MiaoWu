@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -11,6 +13,7 @@ using MiaoWu.App.Services;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Agents;
 using MiaoWu.Core.Agents.Tools;
+using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Documents;
 using MiaoWu.Core.Layout;
 using MiaoWu.Core.Markdown;
@@ -148,6 +151,9 @@ namespace MiaoWu.App.ViewModels
                 collection,
                 now());
 
+            WorkspaceOptions = new ObservableCollection<WorkspaceOption>();
+            SyncWorkspaceOptions();
+
             Canvas = new CanvasViewModel(
                 previewService,
                 clipboard,
@@ -166,6 +172,9 @@ namespace MiaoWu.App.ViewModels
             NewSessionCommand = new RelayCommand(RequestNewSession);
             ExportSessionCommand = new RelayCommand(() => ConversationCommand("export"));
             ExitCommand = new RelayCommand(RequestExit);
+            SwitchWorkspaceCommand = new RelayCommand(
+                parameter => SwitchWorkspace(parameter as WorkspaceOption),
+                parameter => parameter is WorkspaceOption);
 
             Left.StateChanged += OnChildStateChanged;
             Left.FileOpenRequested += OnFileOpenRequested;
@@ -174,6 +183,7 @@ namespace MiaoWu.App.ViewModels
             Left.ScheduledTasksRequested += (sender, args) => ShowScheduledTasksPlaceholder();
             Left.SessionRenamed += OnLeftSessionRenamed;
             Left.SessionDeleteRequested += OnLeftSessionDeleteRequested;
+            Left.SessionExportRequested += OnLeftSessionExportRequested;
             Left.ClearSessionsRequested += OnLeftClearSessionsRequested;
             Left.FileRenamed += OnLeftFileRenamed;
             Left.FileDeleted += OnLeftFileDeleted;
@@ -198,7 +208,6 @@ namespace MiaoWu.App.ViewModels
                     dialogs,
                     clipboard,
                     folderPicker,
-                    filePicker,
                     now);
 
                 Settings = new SettingsViewModel(services);
@@ -208,6 +217,8 @@ namespace MiaoWu.App.ViewModels
 
                 Conversation.SessionListChanged += OnConversationSessionListChanged;
                 Conversation.SettingsRequested += (sender, args) => ShowSettings();
+                Conversation.SessionPinRequested += OnConversationSessionPinRequested;
+                Conversation.SessionArchiveRequested += OnConversationSessionArchiveRequested;
                 Left.SessionSelectionChanged += OnSessionSelectionChanged;
                 Left.NewSessionRequested += (sender, args) => RequestNewSession();
                 services.Runtime.SessionChanged += OnRuntimeSessionChanged;
@@ -276,6 +287,35 @@ namespace MiaoWu.App.ViewModels
         }
 
         public ObservableCollection<NotificationViewModel> Notifications { get; }
+
+        /// <summary>标题栏工作区菜单的数据源，顺序与左栏工作区列表一致。</summary>
+        public ObservableCollection<WorkspaceOption> WorkspaceOptions { get; }
+
+        public string WorkspaceName
+        {
+            get
+            {
+                WorkspaceItemViewModel active = Left == null ? null : Left.ActiveWorkspace;
+                return active == null ? "选择工作区" : active.Name;
+            }
+        }
+
+        public bool HasWorkspaces
+        {
+            get { return WorkspaceOptions.Count > 0; }
+        }
+
+        public string WorkspaceMenuToolTip
+        {
+            get
+            {
+                return HasWorkspaces
+                    ? "切换工作区"
+                    : "还没有工作区，先在左栏新建工作区";
+            }
+        }
+
+        public RelayCommand SwitchWorkspaceCommand { get; }
 
         public RelayCommand ToggleRightPaneCommand { get; }
 
@@ -700,6 +740,7 @@ namespace MiaoWu.App.ViewModels
         {
             WorkspaceCollection collection = _workspaceStore.Load() ?? new WorkspaceCollection();
             Left.Reload(collection);
+            SyncWorkspaceOptions();
             OnSessionSelectionChanged(this, EventArgs.Empty);
         }
 
@@ -719,6 +760,8 @@ namespace MiaoWu.App.ViewModels
 
             if (Conversation != null)
             {
+                Conversation.SessionPinRequested -= OnConversationSessionPinRequested;
+                Conversation.SessionArchiveRequested -= OnConversationSessionArchiveRequested;
                 Conversation.Dispose();
             }
 
@@ -767,6 +810,40 @@ namespace MiaoWu.App.ViewModels
         private void OnLeftSessionDeleteRequested(object sender, SessionActionRequestedEventArgs e)
         {
             FireAndForget(DeleteSessionAsync(e));
+        }
+
+        private void OnLeftSessionExportRequested(object sender, SessionActionRequestedEventArgs e)
+        {
+            FireAndForget(ExportSessionAsync(e));
+        }
+
+        /// <summary>左栏 / 右栏会话菜单共用：读取 transcript 后交给 Exporter 落盘。</summary>
+        private async System.Threading.Tasks.Task ExportSessionAsync(SessionActionRequestedEventArgs e)
+        {
+            if (_services == null || e == null || e.Workspace == null)
+            {
+                return;
+            }
+
+            try
+            {
+                ConversationTranscript transcript = await _services
+                    .GetStore(e.Workspace.Model)
+                    .LoadAsync(e.SessionId, System.Threading.CancellationToken.None);
+
+                if (transcript == null)
+                {
+                    Overlay.Show("导出失败", "会话内容为空，无法导出。");
+                    return;
+                }
+
+                string folder = _services.Exporter.ExportSession(transcript, e.Workspace.Model.Path);
+                Process.Start("explorer.exe", "\"" + folder + "\"");
+            }
+            catch (Exception exception)
+            {
+                Overlay.Show("导出失败", exception.Message);
+            }
         }
 
         private void OnLeftClearSessionsRequested(object sender, WorkspaceActionRequestedEventArgs e)
@@ -890,7 +967,137 @@ namespace MiaoWu.App.ViewModels
 
         private void OnChildStateChanged(object sender, EventArgs e)
         {
+            SyncWorkspaceOptions();
+            SyncConversationSessionState();
             RaiseStateChanged();
+        }
+
+        /// <summary>把左栏工作区列表同步给标题栏菜单，工作区增删改名后保持一致。</summary>
+        private void SyncWorkspaceOptions()
+        {
+            WorkspaceItemViewModel active = Left == null ? null : Left.ActiveWorkspace;
+            string currentId = active == null ? null : active.Id;
+
+            var next = new List<WorkspaceOption>();
+            if (Left != null)
+            {
+                foreach (WorkspaceItemViewModel workspace in Left.Workspaces)
+                {
+                    next.Add(new WorkspaceOption(
+                        workspace.Id,
+                        workspace.Name,
+                        string.Equals(workspace.Id, currentId, StringComparison.Ordinal)));
+                }
+            }
+
+            bool same = next.Count == WorkspaceOptions.Count;
+            if (same)
+            {
+                for (int i = 0; i < next.Count; i++)
+                {
+                    if (!string.Equals(next[i].Id, WorkspaceOptions[i].Id, StringComparison.Ordinal)
+                        || !string.Equals(next[i].Name, WorkspaceOptions[i].Name, StringComparison.Ordinal)
+                        || next[i].IsCurrent != WorkspaceOptions[i].IsCurrent)
+                    {
+                        same = false;
+                        break;
+                    }
+                }
+            }
+
+            if (!same)
+            {
+                WorkspaceOptions.Clear();
+                foreach (WorkspaceOption option in next)
+                {
+                    WorkspaceOptions.Add(option);
+                }
+
+                OnPropertyChanged(nameof(HasWorkspaces));
+                OnPropertyChanged(nameof(WorkspaceMenuToolTip));
+            }
+
+            OnPropertyChanged(nameof(WorkspaceName));
+        }
+
+        /// <summary>标题栏工作区菜单：切到目标工作区，右栏随后按该工作区的选中会话重挂。</summary>
+        private void SwitchWorkspace(WorkspaceOption option)
+        {
+            if (option == null || Left == null)
+            {
+                return;
+            }
+
+            WorkspaceItemViewModel target = Left.Workspaces.FirstOrDefault(
+                workspace => string.Equals(workspace.Id, option.Id, StringComparison.Ordinal));
+            if (target == null)
+            {
+                return;
+            }
+
+            Left.ActivateWorkspace(target);
+            if (Conversation != null)
+            {
+                Conversation.FocusComposerRequested();
+            }
+        }
+
+        private void OnConversationSessionPinRequested(object sender, EventArgs e)
+        {
+            ToggleActiveSessionFlag(false);
+        }
+
+        private void OnConversationSessionArchiveRequested(object sender, EventArgs e)
+        {
+            ToggleActiveSessionFlag(true);
+        }
+
+        /// <summary>右侧“更多”菜单与左栏会话菜单共用同一组动作；这里只转发到当前会话行。</summary>
+        private void ToggleActiveSessionFlag(bool archive)
+        {
+            if (Conversation == null || !Conversation.HasSession || Left.ActiveWorkspace == null)
+            {
+                return;
+            }
+
+            SessionRowViewModel row = Left.ActiveWorkspace.SelectedSession;
+            if (row == null || row.Session == null
+                || !string.Equals(row.Session.Id, Conversation.SessionId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (archive)
+            {
+                Left.ActiveWorkspace.ToggleSessionArchive(row);
+            }
+            else
+            {
+                Left.ActiveWorkspace.ToggleSessionPin(row);
+            }
+
+            SyncConversationSessionState();
+        }
+
+        /// <summary>把左栏当前会话行的置顶 / 归档状态同步给右侧菜单文案。</summary>
+        private void SyncConversationSessionState()
+        {
+            if (Conversation == null)
+            {
+                return;
+            }
+
+            SessionRowViewModel row = Left.ActiveWorkspace == null
+                ? null
+                : Left.ActiveWorkspace.SelectedSession;
+
+            bool matches = row != null
+                && row.Session != null
+                && string.Equals(row.Session.Id, Conversation.SessionId, StringComparison.Ordinal);
+
+            Conversation.ApplySessionFlags(
+                matches && row.IsPinned,
+                matches && row.IsArchived);
         }
 
         private void RaiseStateChanged()
@@ -942,7 +1149,9 @@ namespace MiaoWu.App.ViewModels
 
             if (model == null)
             {
-                Conversation.Detach();
+                // 没有活动工作区时必须把右栏的工作区也清掉，否则 CanSend 仍为 true。
+                Conversation.SetWorkspace(null);
+                SyncConversationSessionState();
                 return;
             }
 
@@ -950,6 +1159,7 @@ namespace MiaoWu.App.ViewModels
 
             if (string.IsNullOrEmpty(sessionId))
             {
+                SyncConversationSessionState();
                 return;
             }
 
@@ -957,6 +1167,8 @@ namespace MiaoWu.App.ViewModels
             {
                 FireAndForget(Conversation.AttachAsync(model, sessionId));
             }
+
+            SyncConversationSessionState();
         }
 
         private void OnConversationSessionListChanged(object sender, EventArgs e)
@@ -970,6 +1182,8 @@ namespace MiaoWu.App.ViewModels
             {
                 OnSessionSelectionChanged(this, EventArgs.Empty);
             }
+
+            SyncConversationSessionState();
         }
 
         private void OnRuntimeSessionChanged(object sender, AgentSessionSummaryEventArgs args)

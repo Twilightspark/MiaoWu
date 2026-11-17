@@ -22,6 +22,163 @@
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibility" />
 
+        <!-- 输入框：工具集中在底部一行；工作区入口在标题栏。 -->
+        <Style x:Key="Composer.IconButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{DynamicResource Brush.Tab}"
+                                CornerRadius="{StaticResource Radius.ComposerButton}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel2}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="{StaticResource Opacity.Disabled}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Composer.SendButton" TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{DynamicResource Brush.AccentSoft}"
+                                CornerRadius="{StaticResource Radius.ComposerButton}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Accent}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.AccentHover}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.AccentPressed}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Composer.StopButton" TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{DynamicResource Brush.Danger}"
+                                CornerRadius="{StaticResource Radius.ComposerButton}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.88" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.76" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 输入框正文：去掉 TextBox 自带焦点描边，只保留外层卡片的一圈 accent。 -->
+        <Style x:Key="Composer.TextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="ComposerInputBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="0"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 模型入口：只做当前模型 + 展开箭头；真正的菜单在下方 Popup 里按提供商分区。 -->
+        <Style x:Key="Composer.ModelButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+            <Setter Property="Height" Value="26" />
+            <Setter Property="MaxWidth" Value="196" />
+            <Setter Property="Padding" Value="8,0,6,0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+        </Style>
+
+        <Style x:Key="Composer.ModelRowButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+            <Setter Property="Height" Value="{StaticResource Metric.Menu.RowHeight}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.MenuItem}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+        </Style>
+
+        <DataTemplate x:Key="Composer.ModelRow">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center"
+                           Text="{Binding DisplayName}"
+                           Style="{StaticResource Text.Chip}"
+                           Foreground="{DynamicResource Brush.Text2}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Text="{Binding Badge}"
+                           Style="{StaticResource Text.Time}" />
+            </Grid>
+        </DataTemplate>
+
         <Style x:Key="ChatItemContainer" TargetType="ListBoxItem">
             <Setter Property="Focusable" Value="False" />
             <Setter Property="Padding" Value="0" />
@@ -447,48 +604,20 @@
                      VerticalAlignment="Center"
                      Text="{Binding RenameDraft, UpdateSourceTrigger=PropertyChanged}"
                      PreviewKeyDown="OnRenameKeyDown"
-                     Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}}" />
+                     Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
 
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button Style="{StaticResource Button.Icon}"
-                        Command="{Binding NewSessionCommand}"
-                        ToolTip="新建会话"
-                        AutomationProperties.Name="新建会话">
-                    <Path Style="{StaticResource Icon}"
-                          Data="{StaticResource Ico.MessagePlus}"
-                          Fill="{DynamicResource Brush.Text3}" />
-                </Button>
+                <!-- 新建入口保留在左栏与 Ctrl+N；会话头只留「更多」，菜单与左栏会话行共用。 -->
                 <Button x:Name="MoreButton"
                         Style="{StaticResource Button.Icon}"
+                        Click="OnMoreClick"
+                        IsEnabled="{Binding HasSession}"
                         ToolTip="会话操作"
-                        AutomationProperties.Name="会话操作">
+                        AutomationProperties.Name="会话操作"
+                        ContextMenu="{StaticResource SessionRowMenu}">
                     <Path Style="{StaticResource Icon.Solid}"
                           Data="{StaticResource Ico.More}"
                           Fill="{DynamicResource Brush.Text3}" />
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="重命名"
-                                      Command="{Binding PlacementTarget.DataContext.RenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                <MenuItem.Icon>
-                                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Edit}" />
-                                </MenuItem.Icon>
-                            </MenuItem>
-                            <MenuItem Header="导出 Markdown / JSON"
-                                      Command="{Binding PlacementTarget.DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                <MenuItem.Icon>
-                                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Download}" />
-                                </MenuItem.Icon>
-                            </MenuItem>
-                            <Separator />
-                            <MenuItem Header="删除会话"
-                                      Tag="Danger"
-                                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                <MenuItem.Icon>
-                                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
-                                </MenuItem.Icon>
-                            </MenuItem>
-                        </ContextMenu>
-                    </Button.ContextMenu>
                 </Button>
             </StackPanel>
         </Grid>
@@ -515,160 +644,224 @@
             </ListBox.ItemsPanel>
         </ListBox>
 
-        <!-- 空态 -->
+        <!-- 空态：新会话不需要先点按钮，直接在下方输入即可创建。 -->
         <StackPanel Grid.Row="1"
                     Margin="28,0"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
             <TextBlock HorizontalAlignment="Center"
-                       Text="开始对话"
+                       Text="{Binding EmptyTitle}"
                        Style="{StaticResource Text.Section}" />
             <TextBlock Margin="0,6,0,0"
-                       MaxWidth="280"
+                       MaxWidth="288"
                        TextWrapping="Wrap"
                        TextAlignment="Center"
-                       Text="在下方输入消息。涉及写文件或执行命令时，MiaoWu 会先征求你的同意。"
+                       Text="{Binding EmptyBody}"
                        Style="{StaticResource Text.Empty}"
                        Foreground="{DynamicResource Brush.Text3}" />
-            <Button Margin="0,12,0,0"
-                    HorizontalAlignment="Center"
-                    Content="新建会话"
-                    Style="{StaticResource Button.Primary}"
-                    Command="{Binding NewSessionCommand}" />
         </StackPanel>
 
-        <!-- 输入框 -->
+        <!-- 输入框：正文 + 工具行。工作区入口在标题栏，权限说明不占常驻位置。 -->
         <Border x:Name="RightInputShell"
                 Grid.Row="2"
                 Height="{StaticResource Metric.Input.Height}"
                 Margin="14,0,14,14"
-                Padding="{StaticResource Pad.Input}"
-                Background="{DynamicResource Brush.Canvas}"
-                BorderBrush="{DynamicResource Brush.Line3}"
-                BorderThickness="1"
-                CornerRadius="{StaticResource Radius.Input}">
+                Padding="{StaticResource Pad.Input}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource Brush.Canvas}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Line3}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="CornerRadius" Value="{StaticResource Radius.Input}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=ComposerBox}" Value="True">
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="21" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="27" />
+                    <RowDefinition Height="{StaticResource GridLength.Input.Tools}" />
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0">
-                    <TextBlock VerticalAlignment="Center"
-                               Text="{Binding StatusText}"
-                               Style="{StaticResource Text.Time}"
-                               Foreground="{DynamicResource Brush.Text3}" />
-                    <TextBlock HorizontalAlignment="Right"
-                               VerticalAlignment="Center"
-                               Text="{Binding ContextText}"
-                               Style="{StaticResource Text.Time}" />
-                </Grid>
-
-                <Grid Grid.Row="1">
+                <!-- 正文：固定卡片高度内滚动，避免输入时整栏跳动。 -->
+                <Grid Grid.Row="0" Margin="0,0,0,8">
                     <TextBox x:Name="ComposerBox"
+                             Style="{StaticResource Composer.TextBox}"
                              Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True"
                              TextWrapping="Wrap"
                              VerticalScrollBarVisibility="Auto"
-                             BorderThickness="0"
-                             Background="Transparent"
-                             Padding="0"
+                             VerticalContentAlignment="Top"
+                             FontFamily="{StaticResource Font.Family}"
+                             FontSize="{StaticResource Font.Body.Size}"
+                             TextBlock.LineHeight="{StaticResource Font.Body.Line}"
+                             TextBlock.LineStackingStrategy="BlockLineHeight"
+                             Foreground="{DynamicResource Brush.Text}"
                              PreviewKeyDown="OnComposerKeyDown"
                              AutomationProperties.AutomationId="ComposerInput"
                              AutomationProperties.Name="消息输入框" />
                     <TextBlock Margin="2,0,0,0"
                                VerticalAlignment="Top"
                                IsHitTestVisible="False"
-                               Text="输入消息，Enter 发送"
+                               Text="{Binding ComposerPlaceholder, FallbackValue=描述你想让 MiaoWu 做的事}"
                                Style="{StaticResource Text.Body}"
                                Foreground="{DynamicResource Brush.Text3}"
                                Visibility="{Binding Draft, Converter={StaticResource EmptyStringToVisibility}}" />
                 </Grid>
 
-                <Grid Grid.Row="2">
+                <!-- 工具行：预留附件、状态、当前模型、发送。 -->
+                <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <ComboBox Grid.Column="0"
-                              Width="150"
-                              Height="22"
-                              VerticalAlignment="Center"
-                              ItemsSource="{Binding ModelOptions}"
-                              SelectedItem="{Binding SelectedModel, Mode=TwoWay}"
-                              DisplayMemberPath="DisplayName"
-                              FontSize="{StaticResource Font.Chip.Size}"
-                              AutomationProperties.Name="选择模型" />
-
-                    <StackPanel Grid.Column="1"
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Center"
-                                Orientation="Horizontal">
-                        <Path Margin="0,0,8,0"
-                              Style="{StaticResource Icon.Stroke}"
-                              Data="{StaticResource Ico.Paperclip}"
-                              Stroke="{DynamicResource Brush.Text3}"
-                              Opacity="0.45" />
-                        <Path Style="{StaticResource Icon}"
-                              Data="{StaticResource Ico.Image}"
-                              Fill="{DynamicResource Brush.Text3}"
-                              Opacity="0.45" />
-                    </StackPanel>
-
-                    <TextBlock Grid.Column="3"
-                               Margin="8,0"
-                               VerticalAlignment="Center"
-                               Text="{x:Static res:Strings.PlaceholderSendHint}"
-                               Style="{StaticResource Text.Time}" />
-
-                    <Button Grid.Column="4"
-                            Width="27"
-                            Height="27"
-                            VerticalAlignment="Center"
-                            Style="{StaticResource Button.Icon}"
-                            Command="{Binding SendCommand}"
-                            ToolTip="发送"
-                            AutomationProperties.Name="发送"
-                            Visibility="{Binding IsIdle, Converter={StaticResource BoolToVisibility}}">
-                        <Border Background="{DynamicResource Brush.Accent}"
-                                CornerRadius="{StaticResource Radius.Button}"
-                                Width="27"
-                                Height="27">
-                            <Path Width="14"
-                                  Height="14"
-                                  Style="{StaticResource Icon}"
-                                  Data="{StaticResource Ico.Send}"
-                                  Fill="{DynamicResource Brush.White}" />
-                        </Border>
+                    <Button Grid.Column="0"
+                            Style="{StaticResource Composer.IconButton}"
+                            IsEnabled="False"
+                            ToolTip="附件与文件引用将在后续版本提供"
+                            ToolTipService.ShowOnDisabled="True"
+                            AutomationProperties.Name="添加附件（暂未开放）">
+                        <Path Width="14"
+                              Height="14"
+                              Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Plus}"
+                              Fill="{DynamicResource Brush.Text2}" />
                     </Button>
 
-                    <Button Grid.Column="4"
-                            Width="27"
-                            Height="27"
+                    <TextBlock Grid.Column="1"
+                               Margin="8,0,10,0"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               MaxWidth="150"
+                               Text="{Binding HeaderText}"
+                               ToolTip="{Binding HeaderText}"
+                               Style="{StaticResource Text.Time}"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <Button x:Name="ModelPickerButton"
+                            Grid.Column="2"
                             VerticalAlignment="Center"
-                            Style="{StaticResource Button.Icon}"
-                            Command="{Binding StopCommand}"
-                            ToolTip="停止"
-                            AutomationProperties.Name="停止生成"
-                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}">
-                        <Border Background="{DynamicResource Brush.Danger}"
-                                CornerRadius="{StaticResource Radius.Button}"
-                                Width="27"
-                                Height="27">
+                            Style="{StaticResource Composer.ModelButton}"
+                            Click="OnModelPickerClick"
+                            ToolTip="{Binding ModelToolTip}"
+                            AutomationProperties.Name="选择模型">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center"
+                                       MaxWidth="148"
+                                       Text="{Binding SelectedModelName, FallbackValue=选择模型}"
+                                       Style="{StaticResource Text.Chip}"
+                                       TextTrimming="CharacterEllipsis" />
                             <Path Width="12"
                                   Height="12"
+                                  Margin="4,0,0,0"
                                   Style="{StaticResource Icon}"
-                                  Data="{StaticResource Ico.Stop}"
-                                  Fill="{DynamicResource Brush.White}" />
-                        </Border>
+                                  Data="{StaticResource Ico.ChevronDown}"
+                                  Fill="{DynamicResource Brush.Text3}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Grid.Column="3"
+                            Margin="8,0,0,0"
+                            Style="{StaticResource Composer.SendButton}"
+                            Command="{Binding SendCommand}"
+                            ToolTip="{Binding SendToolTip}"
+                            ToolTipService.ShowOnDisabled="True"
+                            AutomationProperties.Name="发送"
+                            Visibility="{Binding IsIdle, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                        <Path Width="14"
+                              Height="14"
+                              Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Send}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </Button>
+
+                    <Button Grid.Column="3"
+                            Margin="8,0,0,0"
+                            Style="{StaticResource Composer.StopButton}"
+                            Command="{Binding StopCommand}"
+                            ToolTip="停止生成"
+                            AutomationProperties.Name="停止生成"
+                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                        <Path Width="12"
+                              Height="12"
+                              Style="{StaticResource Icon}"
+                              Data="{StaticResource Ico.Stop}"
+                              Fill="{DynamicResource Brush.OnAccent}" />
                     </Button>
                 </Grid>
+
+                <!-- 模型菜单：向上展开，按提供商分区；行点击直接选中并关闭。 -->
+                <Popup x:Name="ModelPopup"
+                       Grid.RowSpan="2"
+                       Placement="Custom"
+                       PlacementTarget="{Binding ElementName=ModelPickerButton}"
+                       AllowsTransparency="True"
+                       StaysOpen="False"
+                       Focusable="False"
+                       PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}"
+                       DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                    <Border Background="Transparent"
+                            BorderBrush="{DynamicResource Brush.MenuHairline}"
+                            BorderThickness="{StaticResource Thickness.MenuHairline}"
+                            CornerRadius="{StaticResource Radius.MenuHairline}"
+                            SnapsToDevicePixels="False"
+                            UseLayoutRounding="False">
+                        <Border Style="{StaticResource Menu.Surface}"
+                                MinWidth="{StaticResource Metric.ModelPicker.Width}">
+                            <ScrollViewer MaxHeight="{StaticResource Metric.ModelPicker.MaxHeight}"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <ItemsControl ItemsSource="{Binding ModelGroups}" Focusable="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock Margin="{StaticResource Margin.ModelSection}"
+                                                               Text="{Binding ProviderName}"
+                                                               Style="{StaticResource Text.Group}" />
+                                                    <ItemsControl ItemsSource="{Binding Models}" Focusable="False">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button Style="{StaticResource Composer.ModelRowButton}"
+                                                                        Content="{Binding}"
+                                                                        ContentTemplate="{StaticResource Composer.ModelRow}"
+                                                                        Tag="{Binding}"
+                                                                        Click="OnModelRowClick"
+                                                                        ToolTip="{Binding Detail}"
+                                                                        AutomationProperties.Name="{Binding DisplayName}" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <StackPanel Visibility="{Binding HasModelGroups, Converter={StaticResource InverseBoolToVisibility}}">
+                                        <TextBlock Margin="{StaticResource Margin.ModelSection}"
+                                                   Text="{Binding ModelEmptyText}"
+                                                   Style="{StaticResource Text.Meta}"
+                                                   TextWrapping="Wrap" />
+                                        <Button Margin="8,2,8,4"
+                                                HorizontalAlignment="Left"
+                                                Content="打开模型设置"
+                                                Style="{StaticResource Button.Ghost}"
+                                                Click="OnOpenModelSettingsClick" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </Border>
+                </Popup>
             </Grid>
         </Border>
     </Grid>

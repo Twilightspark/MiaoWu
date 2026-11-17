@@ -169,7 +169,7 @@
     <sys:Double x:Key="Metric.Message.Gap">17</sys:Double>
     <sys:Double x:Key="Metric.Input.AttachmentRow">21</sys:Double>
     <sys:Double x:Key="Metric.Input.BodyRow">20</sys:Double>
-    <sys:Double x:Key="Metric.Input.ToolsRow">27</sys:Double>
+    <sys:Double x:Key="Metric.Input.ToolsRow">28</sys:Double>
     <sys:Double x:Key="Metric.Doc.CodeRadius">6</sys:Double>
     <sys:Double x:Key="Metric.Doc.BulletIndent">16</sys:Double>
     <sys:Double x:Key="Metric.Window.Min.Width">1080</sys:Double>
@@ -211,10 +211,12 @@
     <sys:Double x:Key="Metric.Doc.PadTop">28</sys:Double>
     <sys:Double x:Key="Metric.Doc.PadX">44</sys:Double>
     <sys:Double x:Key="Metric.Doc.Width">648</sys:Double>
-    <sys:Double x:Key="Metric.Input.Height">118</sys:Double>
+    <sys:Double x:Key="Metric.Input.Height">132</sys:Double>
+    <sys:Double x:Key="Metric.ModelPicker.Width">248</sys:Double>
+    <sys:Double x:Key="Metric.ModelPicker.MaxHeight">280</sys:Double>
     <sys:Double x:Key="Metric.Notification.Width">384</sys:Double>
     <sys:Double x:Key="Metric.Notification.Right">16</sys:Double>
-    <sys:Double x:Key="Metric.Notification.Bottom">118</sys:Double>
+    <sys:Double x:Key="Metric.Notification.Bottom">158</sys:Double>
     <sys:Double x:Key="Metric.Notification.BottomCollapsed">18</sys:Double>
     <sys:Double x:Key="Metric.Notification.Gap">9</sys:Double>
 
@@ -242,7 +244,8 @@
     <CornerRadius x:Key="Radius.Row">7</CornerRadius>
     <CornerRadius x:Key="Radius.Tree">5</CornerRadius>
     <CornerRadius x:Key="Radius.Button">6</CornerRadius>
-    <CornerRadius x:Key="Radius.Input">12</CornerRadius>
+    <CornerRadius x:Key="Radius.Input">16</CornerRadius>
+    <CornerRadius x:Key="Radius.ComposerButton">14</CornerRadius>
     <CornerRadius x:Key="Radius.Notification">12</CornerRadius>
     <CornerRadius x:Key="Radius.Segment">6</CornerRadius>
     <CornerRadius x:Key="Radius.SegmentItem">5</CornerRadius>
@@ -281,11 +284,15 @@
     <Thickness x:Key="Pad.Menu">5</Thickness>
     <Thickness x:Key="Pad.MenuItem">10,0,10,0</Thickness>
     <Thickness x:Key="Margin.MenuItem">0,1</Thickness>
+    <Thickness x:Key="Margin.ModelSection">8,8,8,4</Thickness>
     <Thickness x:Key="Margin.MenuSeparator">10,4</Thickness>
     <Thickness x:Key="Thickness.MenuHairline">0.5</Thickness>
     <Thickness x:Key="Pad.TextBox">8,6</Thickness>
     <Thickness x:Key="Pad.Field">4,4</Thickness>
-    <Thickness x:Key="Pad.Input">6,14,14,14</Thickness>
+    <Thickness x:Key="Pad.Input">12,14,12,14</Thickness>
+    <!-- 通知栈底距 = 输入框 132 + 输入框外边距 14 + 栈间距 12 -->
+    <Thickness x:Key="Margin.Notification">0,0,16,158</Thickness>
+    <Thickness x:Key="Margin.NotificationCollapsed">0,0,16,18</Thickness>
     <Thickness x:Key="Pad.Code">12,10</Thickness>
     <Thickness x:Key="Margin.H2">0,20,0,8</Thickness>
     <Thickness x:Key="Margin.Focus">-2</Thickness>
@@ -300,8 +307,9 @@
     <sys:Double x:Key="Opacity.TabClosePressed">0.8</sys:Double>
     <sys:Double x:Key="Opacity.TabCloseDisabled">0.25</sys:Double>
 
-    <!-- GridLength：用于分隔条列宽 -->
+    <!-- GridLength：用于分隔条列宽与输入框行高 -->
     <GridLength x:Key="GridLength.Splitter">4</GridLength>
+    <GridLength x:Key="GridLength.Input.Tools">28</GridLength>
     <!-- 菜单项图标槽：14（图标）+ 8（间距） -->
     <GridLength x:Key="GridLength.Menu.Icon">22</GridLength>
 
