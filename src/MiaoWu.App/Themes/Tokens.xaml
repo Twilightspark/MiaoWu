@@ -227,6 +227,8 @@
     <sys:Double x:Key="Metric.Notification.Bottom">158</sys:Double>
     <sys:Double x:Key="Metric.Notification.BottomCollapsed">18</sys:Double>
     <sys:Double x:Key="Metric.Notification.Gap">9</sys:Double>
+    <!-- 通知栈的最大高度：超过后整栈滚动，而不是把正文截断 -->
+    <sys:Double x:Key="Metric.Notification.StackMaxHeight">440</sys:Double>
 
     <!-- 菜单卡片：小面积浮层，用 0.5px 发丝环代替弥散投影 -->
     <sys:Double x:Key="Metric.Menu.MinWidth">180</sys:Double>
@@ -305,7 +307,6 @@
     <Thickness x:Key="Margin.Chat.Assistant">14,10,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Tool">14,6,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Notice">14,10,14,0</Thickness>
-    <Thickness x:Key="Margin.Chat.Approval">14,10,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Caption">0,0,0,4</Thickness>
     <Thickness x:Key="Margin.Chat.Footer">0,2,0,0</Thickness>
     <Thickness x:Key="Pad.Bubble">9,12</Thickness>

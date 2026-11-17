@@ -101,11 +101,6 @@ namespace MiaoWu.App.Services
             {
                 ShowMainWindow();
             }
-
-            if (!trayAvailable && !_services.Settings.FirstLaunch)
-            {
-                MainViewModel.NotifyTrayUnavailable();
-            }
         }
 
         public void ShowMainWindow()

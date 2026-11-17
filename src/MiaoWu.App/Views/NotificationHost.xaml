@@ -13,14 +13,11 @@
     </UserControl.Resources>
 
     <!-- 根元素不要铺 Transparent：UserControl 的边界包含通知栈底距，
-         透明背景仍参与命中测试，会把下方输入框的点击整块吃掉。 -->
-    <ItemsControl ItemsSource="{Binding Notifications}"
-                  Width="{StaticResource Metric.Notification.Width}"
-                  HorizontalAlignment="Right"
-                  VerticalAlignment="Bottom"
-                  Focusable="False">
-        <ItemsControl.Style>
-            <Style TargetType="ItemsControl">
+         透明背景仍参与命中测试，会把下方输入框的点击整块吃掉。
+         正文完整换行显示，不设 MaxHeight；条数多到超过可用高度时整栈可滚动。 -->
+    <Grid Focusable="False">
+        <Grid.Style>
+            <Style TargetType="Grid">
                 <Setter Property="Margin" Value="{StaticResource Margin.Notification}" />
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsRightPaneCollapsed}" Value="True">
@@ -28,95 +25,137 @@
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
-        </ItemsControl.Style>
-        <ItemsControl.ItemTemplate>
-            <DataTemplate>
-                <Border Margin="0,9,0,0"
-                        Padding="12,10"
-                        Background="{DynamicResource Brush.Canvas}"
-                        BorderBrush="{DynamicResource Brush.Line2}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource Radius.Notification}">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+        </Grid.Style>
 
-                        <Grid Grid.Row="0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Path x:Name="NoticeIcon"
-                                  Width="14"
-                                  Height="14"
-                                  VerticalAlignment="Top"
-                                  Margin="0,3,0,0"
-                                  Style="{StaticResource Icon}"
-                                  Data="{StaticResource Ico.Check}"
-                                  Fill="{DynamicResource Brush.Success}" />
-                            <TextBlock Grid.Column="1"
-                                       Margin="8,0,0,0"
-                                       Text="{Binding Title}"
-                                       Style="{StaticResource Text.H3}"
-                                       TextWrapping="Wrap" />
-                            <Button Grid.Column="2"
-                                    Width="20"
-                                    Height="20"
-                                    Style="{StaticResource Button.Icon}"
-                                    Command="{Binding DismissCommand}"
-                                    AutomationProperties.Name="关闭通知">
-                                <Path Width="12"
-                                      Height="12"
-                                      Style="{StaticResource Icon}"
-                                      Data="{StaticResource Ico.Close}"
-                                      Fill="{DynamicResource Brush.Text3}" />
-                            </Button>
-                        </Grid>
+        <ScrollViewer x:Name="NoticeScroll"
+                      MaxHeight="{StaticResource Metric.Notification.StackMaxHeight}"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Bottom"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      Focusable="False">
+            <ItemsControl ItemsSource="{Binding Notifications}" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,9,0,0"
+                                Padding="12,10"
+                                Background="{DynamicResource Brush.Canvas}"
+                                BorderBrush="{DynamicResource Brush.Line2}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Notification}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="1"
-                                   Margin="22,4,0,0"
-                                   Text="{Binding Body}"
-                                   Style="{StaticResource Text.Meta}"
-                                   TextWrapping="Wrap"
-                                   MaxHeight="72" />
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Path x:Name="NoticeIcon"
+                                          Width="14"
+                                          Height="14"
+                                          VerticalAlignment="Top"
+                                          Margin="0,3,0,0"
+                                          Style="{StaticResource Icon}"
+                                          Data="{StaticResource Ico.Check}"
+                                          Fill="{DynamicResource Brush.Success}" />
+                                    <TextBlock Grid.Column="1"
+                                               Margin="8,0,0,0"
+                                               Text="{Binding Title}"
+                                               Style="{StaticResource Text.H3}"
+                                               TextWrapping="Wrap" />
+                                    <!-- 审批必须显式允许或拒绝，不给“关掉就算”的出口。 -->
+                                    <Button Grid.Column="2"
+                                            Width="20"
+                                            Height="20"
+                                            Style="{StaticResource Button.Icon}"
+                                            Command="{Binding DismissCommand}"
+                                            Visibility="{Binding IsNotice, Converter={StaticResource BoolToVisibility}}"
+                                            AutomationProperties.Name="关闭通知">
+                                        <Path Width="12"
+                                              Height="12"
+                                              Style="{StaticResource Icon}"
+                                              Data="{StaticResource Ico.Close}"
+                                              Fill="{DynamicResource Brush.Text3}" />
+                                    </Button>
+                                </Grid>
 
-                        <StackPanel Grid.Row="2"
-                                    Margin="22,8,0,0"
-                                    Orientation="Horizontal"
-                                    Visibility="{Binding IsApproval, Converter={StaticResource BoolToVisibility}}">
-                            <Button Content="允许一次"
-                                    Style="{StaticResource Button.Primary}"
-                                    Command="{Binding AllowOnceCommand}" />
-                            <Button Margin="6,0,0,0"
-                                    Content="本会话允许"
-                                    Style="{StaticResource Button.Ghost}"
-                                    Command="{Binding AllowSessionCommand}"
-                                    Visibility="{Binding CanApproveForSession, Converter={StaticResource BoolToVisibility}}" />
-                            <Button Margin="6,0,0,0"
-                                    Content="拒绝"
-                                    Style="{StaticResource Button.Ghost}"
-                                    Command="{Binding DenyCommand}" />
-                        </StackPanel>
+                                <TextBlock Grid.Row="1"
+                                           Margin="22,4,0,0"
+                                           Text="{Binding Body}"
+                                           Style="{StaticResource Text.Reasoning}"
+                                           Foreground="{DynamicResource Brush.Text2}"
+                                           TextWrapping="Wrap" />
 
-                        <TextBlock Grid.Row="2"
-                                   Margin="22,6,0,0"
-                                   Text="{Binding ResolutionText}"
-                                   Style="{StaticResource Text.Meta}"
-                                   Foreground="{DynamicResource Brush.Text3}"
-                                   Visibility="{Binding IsResolved, Converter={StaticResource BoolToVisibility}}" />
-                    </Grid>
-                </Border>
-                <DataTemplate.Triggers>
-                    <DataTrigger Binding="{Binding IsApproval}" Value="True">
-                        <Setter TargetName="NoticeIcon" Property="Data" Value="{StaticResource Ico.Warning}" />
-                        <Setter TargetName="NoticeIcon" Property="Fill" Value="{DynamicResource Brush.Warning}" />
-                    </DataTrigger>
-                </DataTemplate.Triggers>
-            </DataTemplate>
-        </ItemsControl.ItemTemplate>
-    </ItemsControl>
+                                <StackPanel Grid.Row="2"
+                                            Margin="22,8,0,0"
+                                            Orientation="Horizontal"
+                                            Visibility="{Binding ShowApprovalActions, Converter={StaticResource BoolToVisibility}}">
+                                    <Button Content="允许一次"
+                                            Style="{StaticResource Button.Primary}"
+                                            Command="{Binding AllowOnceCommand}" />
+                                    <Button Margin="6,0,0,0"
+                                            Content="本会话允许"
+                                            Style="{StaticResource Button.Ghost}"
+                                            Command="{Binding AllowSessionCommand}"
+                                            Visibility="{Binding CanApproveForSession, Converter={StaticResource BoolToVisibility}}" />
+                                    <Button Margin="6,0,0,0"
+                                            Content="{Binding DiffToggleLabel}"
+                                            Style="{StaticResource Button.Ghost}"
+                                            Command="{Binding ToggleDiffCommand}"
+                                            Visibility="{Binding HasDiff, Converter={StaticResource BoolToVisibility}}" />
+                                    <Button Margin="6,0,0,0"
+                                            Content="拒绝"
+                                            Style="{StaticResource Button.Ghost}"
+                                            Command="{Binding DenyCommand}" />
+                                </StackPanel>
+
+                                <!-- 改动预览留在通知里：审批不再进消息流，diff 只能在这里看。 -->
+                                <Border Grid.Row="3"
+                                        Margin="22,8,0,0"
+                                        Padding="8,6"
+                                        Background="{DynamicResource Brush.CodeBackground}"
+                                        CornerRadius="{StaticResource Radius.Code}"
+                                        Visibility="{Binding IsDiffVisible, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBox MaxHeight="180"
+                                             Padding="0"
+                                             BorderThickness="0"
+                                             Background="Transparent"
+                                             IsReadOnly="True"
+                                             AcceptsReturn="True"
+                                             TextWrapping="NoWrap"
+                                             HorizontalScrollBarVisibility="Auto"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontFamily="{StaticResource Font.Family.Code}"
+                                             FontSize="{StaticResource Font.Code.Size}"
+                                             TextBlock.LineHeight="{StaticResource Font.Code.Line}"
+                                             Text="{Binding Diff, Mode=OneWay}" />
+                                </Border>
+
+                                <TextBlock Grid.Row="4"
+                                           Margin="22,6,0,0"
+                                           Text="{Binding ResolutionText}"
+                                           Style="{StaticResource Text.Meta}"
+                                           Foreground="{DynamicResource Brush.Text3}"
+                                           Visibility="{Binding IsResolved, Converter={StaticResource BoolToVisibility}}" />
+                            </Grid>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsApproval}" Value="True">
+                                <Setter TargetName="NoticeIcon" Property="Data" Value="{StaticResource Ico.Warning}" />
+                                <Setter TargetName="NoticeIcon" Property="Fill" Value="{DynamicResource Brush.Warning}" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

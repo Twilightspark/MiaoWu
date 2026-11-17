@@ -12,13 +12,17 @@ namespace MiaoWu.App.Views
 {
     /// <summary>
     /// 右栏对话视图的纯视图逻辑：Enter 发送、Shift+Enter 换行、
-    /// 流式输出时若用户停在底部则自动跟随滚动。
+    /// 消息流只在用户停在底部时跟随新内容；用户上滚后不再被拉回底部。
     /// </summary>
     public partial class ConversationPaneView : UserControl
     {
+        /// <summary>距底多少像素内仍算“贴底”，避免 1px 抖动导致跟随中断。</summary>
+        private const double BottomTolerance = 6;
+
         private ConversationViewModel _viewModel;
         private ScrollViewer _scroller;
         private bool _stickToBottom = true;
+        private bool _scrollQueued;
 
         public ConversationPaneView()
         {
@@ -86,12 +90,42 @@ namespace MiaoWu.App.Views
 
         private void OnItemsChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
-            if (!_stickToBottom)
+            if (e.Action == NotifyCollectionChangedAction.Reset)
             {
+                // 会话切换 / 重放会把列表清空重建，新会话从底部开始看。
+                _stickToBottom = true;
+                QueueScrollToEnd();
                 return;
             }
 
-            Dispatcher.BeginInvoke(new Action(ScrollToEnd), DispatcherPriority.Background);
+            // 自己刚发出的提问一定可见；其余新增内容只在原本贴底时跟随。
+            if (ContainsUserMessage(e.NewItems))
+            {
+                _stickToBottom = true;
+            }
+
+            if (_stickToBottom)
+            {
+                QueueScrollToEnd();
+            }
+        }
+
+        private static bool ContainsUserMessage(System.Collections.IList items)
+        {
+            if (items == null)
+            {
+                return false;
+            }
+
+            foreach (object item in items)
+            {
+                if (item is UserChatItemViewModel)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void ScrollToEnd()
@@ -103,6 +137,44 @@ namespace MiaoWu.App.Views
             }
         }
 
+        /// <summary>合并同一轮布局里的多次跟随请求，避免流式输出时反复排队。</summary>
+        private void QueueScrollToEnd()
+        {
+            if (_scrollQueued)
+            {
+                return;
+            }
+
+            _scrollQueued = true;
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    _scrollQueued = false;
+                    ScrollToEnd();
+                }),
+                DispatcherPriority.Background);
+        }
+
+        private bool IsAtBottom()
+        {
+            if (_scroller == null)
+            {
+                return true;
+            }
+
+            double scrollable = _scroller.ScrollableHeight;
+            return scrollable <= 0 || _scroller.VerticalOffset >= scrollable - BottomTolerance;
+        }
+
+        /// <summary>滚轮上滚时立即脱离贴底，后续流式内容不再把视口拽回底部。</summary>
+        private void OnMessageListPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (e.Delta > 0)
+            {
+                _stickToBottom = false;
+            }
+        }
+
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             if (_scroller != null)
@@ -111,12 +183,21 @@ namespace MiaoWu.App.Views
                 _scroller = null;
             }
 
+            _scrollQueued = false;
             HookViewModel(null);
         }
+
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             HookViewModel(e.NewValue as ConversationViewModel);
-            Dispatcher.BeginInvoke(new Action(HookScroller), DispatcherPriority.Loaded);
+            _stickToBottom = true;
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    HookScroller();
+                    QueueScrollToEnd();
+                }),
+                DispatcherPriority.Loaded);
         }
 
         private void HookViewModel(ConversationViewModel viewModel)
@@ -151,15 +232,32 @@ namespace MiaoWu.App.Views
 
         private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            if (e.ExtentHeightChange == 0)
+            if (_scroller == null)
             {
-                _stickToBottom = e.VerticalOffset >= e.ExtentHeight - e.ViewportHeight - 24;
                 return;
             }
 
-            if (_stickToBottom && _scroller != null)
+            bool atBottom = IsAtBottom();
+
+            if (e.VerticalChange < 0)
             {
-                _scroller.ScrollToEnd();
+                // 用户往上滚：立即脱离跟随，直到自己滚回底部。
+                _stickToBottom = false;
+            }
+            else if (e.VerticalChange > 0)
+            {
+                _stickToBottom = atBottom;
+            }
+            else if (e.ExtentHeightChange == 0 && e.ViewportHeightChange == 0)
+            {
+                _stickToBottom = atBottom;
+            }
+
+            // 内容长高（流式输出、工具输出展开）时，贴底就继续跟随；
+            // 不贴底则保持用户当前的位置，不抢滚动条。
+            if (_stickToBottom && !atBottom)
+            {
+                QueueScrollToEnd();
             }
         }
 

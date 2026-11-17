@@ -16,10 +16,37 @@ namespace MiaoWu.App.ViewModels
     public abstract class MarkdownBlockViewModel : ObservableObject
     {
         private bool _isFindMatch;
+        private bool _isLast;
 
         public abstract string PlainText { get; }
 
-        public abstract Thickness Margin { get; }
+        /// <summary>块自身的上下外边距；最后一块会把底部外边距收掉。</summary>
+        protected abstract Thickness BlockMargin { get; }
+
+        /// <summary>
+        /// 是否为容器里的最后一块。末尾不再留底部外边距，
+        /// 否则每条消息 / 每份文档结尾都会多出一条空白。
+        /// </summary>
+        public bool IsLast
+        {
+            get { return _isLast; }
+            set
+            {
+                if (SetProperty(ref _isLast, value))
+                {
+                    OnPropertyChanged(nameof(Margin));
+                }
+            }
+        }
+
+        public Thickness Margin
+        {
+            get
+            {
+                Thickness margin = BlockMargin;
+                return _isLast ? new Thickness(margin.Left, margin.Top, margin.Right, 0) : margin;
+            }
+        }
 
         public bool IsFindMatch
         {
@@ -61,7 +88,7 @@ namespace MiaoWu.App.ViewModels
 
         public override string PlainText { get; }
 
-        public override Thickness Margin
+        protected override Thickness BlockMargin
         {
             get { return _margin; }
         }
@@ -86,7 +113,7 @@ namespace MiaoWu.App.ViewModels
 
         public override string PlainText { get; }
 
-        public override Thickness Margin
+        protected override Thickness BlockMargin
         {
             get { return new Thickness(0, 0, 0, 10); }
         }
@@ -141,7 +168,7 @@ namespace MiaoWu.App.ViewModels
 
         public override string PlainText { get; }
 
-        public override Thickness Margin
+        protected override Thickness BlockMargin
         {
             get { return new Thickness(0, 0, 0, 10); }
         }
@@ -166,6 +193,11 @@ namespace MiaoWu.App.ViewModels
                 text += blockViewModel.PlainText + "\n";
             }
 
+            if (Blocks.Count > 0)
+            {
+                Blocks[Blocks.Count - 1].IsLast = true;
+            }
+
             PlainText = text;
         }
 
@@ -173,7 +205,7 @@ namespace MiaoWu.App.ViewModels
 
         public override string PlainText { get; }
 
-        public override Thickness Margin
+        protected override Thickness BlockMargin
         {
             get { return new Thickness(0, 0, 0, 10); }
         }
@@ -184,10 +216,11 @@ namespace MiaoWu.App.ViewModels
         public MarkdownCodeViewModel(MarkdownCodeBlock code, IClipboardService clipboard)
         {
             Language = code.Language;
-            Text = code.Text;
+            // 解析器会把围栏内的最后一行也补上换行；直接绑定会多渲染一条空行。
+            Text = TrimTrailingNewLines(code.Text);
             HasLanguage = !string.IsNullOrEmpty(code.Language);
             CopyCommand = new RelayCommand(() => Copy(clipboard));
-            PlainText = code.Text ?? string.Empty;
+            PlainText = Text;
         }
 
         public string Language { get; }
@@ -207,7 +240,7 @@ namespace MiaoWu.App.ViewModels
 
         public override string PlainText { get; }
 
-        public override Thickness Margin
+        protected override Thickness BlockMargin
         {
             get { return new Thickness(0, 0, 0, 12); }
         }
@@ -224,6 +257,11 @@ namespace MiaoWu.App.ViewModels
                 IsCopied = true;
                 OnPropertyChanged(nameof(CopyLabel));
             }
+        }
+
+        private static string TrimTrailingNewLines(string text)
+        {
+            return string.IsNullOrEmpty(text) ? text : text.TrimEnd('\r', '\n');
         }
     }
 
@@ -271,7 +309,7 @@ namespace MiaoWu.App.ViewModels
 
         public override string PlainText { get; }
 
-        public override Thickness Margin
+        protected override Thickness BlockMargin
         {
             get { return new Thickness(0, 0, 0, 12); }
         }
@@ -284,7 +322,7 @@ namespace MiaoWu.App.ViewModels
             get { return string.Empty; }
         }
 
-        public override Thickness Margin
+        protected override Thickness BlockMargin
         {
             get { return new Thickness(0, 14, 0, 14); }
         }
@@ -314,6 +352,11 @@ namespace MiaoWu.App.ViewModels
 
                 Blocks.Add(blockViewModel);
                 first = false;
+            }
+
+            if (Blocks.Count > 0)
+            {
+                Blocks[Blocks.Count - 1].IsLast = true;
             }
 
             MetaText = preview.MetaText;

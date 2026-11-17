@@ -668,19 +668,6 @@ namespace MiaoWu.App.ViewModels
             ClosePrompt.SetTrayAvailability(available);
         }
 
-        /// <summary>启动时提示托盘不可用及替代入口；只在服务已装配时显示。</summary>
-        public void NotifyTrayUnavailable()
-        {
-            AddNotification(new NotificationViewModel(
-                "系统托盘图标不可用",
-                "当前以受限权限运行（例如从 VS Code 或沙箱终端启动），Windows 不会显示托盘图标。"
-                + "关闭窗口将最小化到任务栏。请从资源管理器直接运行 MiaoWu.exe；"
-                + "若图标仍收在任务栏 ^ 中，可在“设置 > 个性化 > 任务栏 > 其他系统托盘图标”打开 MiaoWu。",
-                false,
-                RemoveNotification,
-                autoDismissAfter: TimeSpan.FromSeconds(12)));
-        }
-
         /// <summary>窗口隐藏时断开重量级订阅，只保留左栏由 SessionChanged 更新。</summary>
         public void SuspendConversation()
         {
@@ -1151,14 +1138,17 @@ namespace MiaoWu.App.ViewModels
             if (args.Kind == ToolApprovalChangeKind.Requested)
             {
                 AddNotification(new NotificationViewModel(
-                    "需要审批 · " + request.Title,
+                    BuildApprovalTitle(request),
                     request.Target + (string.IsNullOrWhiteSpace(request.Summary) ? string.Empty : "\n" + request.Summary),
                     true,
                     RemoveNotification,
                     ResolveApproval,
                     request.SessionId,
                     request.RequestId,
-                    request.CanApproveForSession));
+                    request.CanApproveForSession,
+                    null,
+                    request.Diff,
+                    request.CanShowDiff));
                 return;
             }
 
@@ -1173,6 +1163,17 @@ namespace MiaoWu.App.ViewModels
             }
 
             HasPendingApproval = _services.Approvals.GetPendingCount() > 0;
+        }
+
+        /// <summary>审批标题带上风险级别：通知是审批的唯一入口，风险要和动作放在一起。</summary>
+        private static string BuildApprovalTitle(ToolApprovalRequest request)
+        {
+            string risk = request.Risk == ToolRisk.High
+                ? "高风险"
+                : (request.Risk == ToolRisk.Medium ? "中风险" : null);
+            return string.IsNullOrEmpty(risk)
+                ? "需要审批 · " + request.Title
+                : "需要审批 · " + request.Title + " · " + risk;
         }
 
         private void AddNotification(NotificationViewModel notification)

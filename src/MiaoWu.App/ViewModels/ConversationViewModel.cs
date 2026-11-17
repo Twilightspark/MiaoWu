@@ -107,8 +107,6 @@ namespace MiaoWu.App.ViewModels
             new Dictionary<string, AssistantChatItemViewModel>(StringComparer.Ordinal);
         private readonly Dictionary<string, ToolCardViewModel> _toolCards =
             new Dictionary<string, ToolCardViewModel>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, ApprovalCardViewModel> _approvalCards =
-            new Dictionary<string, ApprovalCardViewModel>(StringComparer.Ordinal);
         private readonly DispatcherTimer _markdownTimer;
 
         private SessionEventPump _pump;
@@ -173,7 +171,6 @@ namespace MiaoWu.App.ViewModels
             _markdownTimer.Tick += OnMarkdownTick;
             _markdownTimer.Start();
 
-            _app.Approvals.Changed += OnApprovalChanged;
             _app.ProvidersChanged += OnProvidersChanged;
             RefreshModelOptions();
         }
@@ -681,7 +678,6 @@ namespace MiaoWu.App.ViewModels
             _userItems.Clear();
             _assistantItems.Clear();
             _toolCards.Clear();
-            _approvalCards.Clear();
             IsRunning = false;
             StatusText = null;
             UsageText = null;
@@ -1071,7 +1067,6 @@ namespace MiaoWu.App.ViewModels
         {
             _markdownTimer.Stop();
             _markdownTimer.Tick -= OnMarkdownTick;
-            _app.Approvals.Changed -= OnApprovalChanged;
             _app.ProvidersChanged -= OnProvidersChanged;
             Detach();
         }
@@ -1091,7 +1086,6 @@ namespace MiaoWu.App.ViewModels
             _userItems.Clear();
             _assistantItems.Clear();
             _toolCards.Clear();
-            _approvalCards.Clear();
 
             _title = snapshot.Title;
             IsRunning = snapshot.State == AgentSessionState.Running || snapshot.State == AgentSessionState.Cancelling;
@@ -1105,11 +1099,6 @@ namespace MiaoWu.App.ViewModels
             foreach (ToolExecution execution in snapshot.ToolExecutions ?? new List<ToolExecution>())
             {
                 ApplyToolExecution(execution);
-            }
-
-            foreach (ToolApprovalTicket ticket in _app.Approvals.GetPending(snapshot.SessionId))
-            {
-                AddApprovalCard(ticket.Request);
             }
 
             OnPropertyChanged(nameof(Title));
@@ -1564,71 +1553,6 @@ namespace MiaoWu.App.ViewModels
         }
 
         // ---------------------------------------------------------------
-        // 审批
-        // ---------------------------------------------------------------
-
-        private void OnApprovalChanged(object sender, ToolApprovalEventArgs args)
-        {
-            if (args == null || args.Ticket == null)
-            {
-                return;
-            }
-
-            _dispatcher.BeginInvoke(new Action(() =>
-            {
-                ToolApprovalRequest request = args.Ticket.Request;
-                if (request == null || !string.Equals(request.SessionId, _sessionId, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                if (args.Kind == ToolApprovalChangeKind.Requested)
-                {
-                    AddApprovalCard(request);
-                    IsRunning = true;
-                    return;
-                }
-
-                ApprovalCardViewModel card;
-                if (request.RequestId != null && _approvalCards.TryGetValue(request.RequestId, out card))
-                {
-                    card.MarkResolved(args.Kind == ToolApprovalChangeKind.Cancelled
-                        ? "已取消"
-                        : "已处理");
-                }
-            }));
-        }
-
-        private void AddApprovalCard(ToolApprovalRequest request)
-        {
-            if (request == null || request.RequestId == null || _approvalCards.ContainsKey(request.RequestId))
-            {
-                return;
-            }
-
-            var card = new ApprovalCardViewModel(
-                request,
-                ResolveApproval,
-                _clock());
-
-            Items.Add(card);
-            _approvalCards[request.RequestId] = card;
-            OnPropertyChanged(nameof(IsEmpty));
-        }
-
-        private void ResolveApproval(string requestId, ToolApprovalOutcome outcome)
-        {
-            try
-            {
-                _app.Approvals.TryResolve(requestId, outcome, outcome == ToolApprovalOutcome.Deny ? "用户拒绝。" : null);
-            }
-            catch (Exception exception)
-            {
-                AddNotice("审批失败", exception.Message, true);
-            }
-        }
-
-        // ---------------------------------------------------------------
         // 其他
         // ---------------------------------------------------------------
 
@@ -1792,12 +1716,6 @@ namespace MiaoWu.App.ViewModels
             if (tool != null && tool.CallId != null)
             {
                 _toolCards.Remove(tool.CallId);
-            }
-
-            var approval = item as ApprovalCardViewModel;
-            if (approval != null)
-            {
-                _approvalCards.Remove(approval.RequestId);
             }
         }
 

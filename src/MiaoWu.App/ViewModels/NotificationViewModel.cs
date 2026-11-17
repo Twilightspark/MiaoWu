@@ -6,8 +6,8 @@ using MiaoWu.Core.Agents.Tools;
 namespace MiaoWu.App.ViewModels
 {
     /// <summary>
-    /// 右下角通知。审批通知不自动消失；完成通知 4 秒后自动消失。
-    /// 最多 3 条由 MainWindowViewModel 维护。
+    /// 右下角通知。审批通知不自动消失、不提供关闭按钮（必须显式允许或拒绝）；
+    /// 完成通知 4 秒后自动消失。最多 3 条由 MainWindowViewModel 维护。
     /// </summary>
     public sealed class NotificationViewModel : ObservableObject
     {
@@ -16,6 +16,7 @@ namespace MiaoWu.App.ViewModels
         private readonly DispatcherTimer _timer;
         private bool _isResolved;
         private string _resolutionText;
+        private bool _isDiffVisible;
 
         public NotificationViewModel(
             string title,
@@ -26,7 +27,9 @@ namespace MiaoWu.App.ViewModels
             string sessionId = null,
             string requestId = null,
             bool canApproveForSession = false,
-            TimeSpan? autoDismissAfter = null)
+            TimeSpan? autoDismissAfter = null,
+            string diff = null,
+            bool canShowDiff = false)
         {
             Id = Guid.NewGuid().ToString("N");
             Title = title;
@@ -35,6 +38,8 @@ namespace MiaoWu.App.ViewModels
             SessionId = sessionId;
             RequestId = requestId;
             CanApproveForSession = canApproveForSession;
+            Diff = diff;
+            HasDiff = canShowDiff && !string.IsNullOrWhiteSpace(diff);
             _dismiss = dismiss;
             _resolveApproval = resolveApproval;
 
@@ -48,6 +53,7 @@ namespace MiaoWu.App.ViewModels
             DenyCommand = new RelayCommand(
                 () => Resolve(ToolApprovalOutcome.Deny),
                 () => IsApproval && !_isResolved);
+            ToggleDiffCommand = new RelayCommand(() => IsDiffVisible = !IsDiffVisible);
 
             if (!isApproval)
             {
@@ -68,6 +74,7 @@ namespace MiaoWu.App.ViewModels
 
         public bool IsApproval { get; }
 
+        /// <summary>非审批通知可以手动关闭；审批通知必须显式处理。</summary>
         public bool IsNotice
         {
             get { return !IsApproval; }
@@ -79,6 +86,28 @@ namespace MiaoWu.App.ViewModels
 
         public bool CanApproveForSession { get; }
 
+        /// <summary>审批附带的 unified diff；为空表示这一条没有可看的改动。</summary>
+        public string Diff { get; }
+
+        public bool HasDiff { get; }
+
+        public bool IsDiffVisible
+        {
+            get { return _isDiffVisible; }
+            set
+            {
+                if (SetProperty(ref _isDiffVisible, value))
+                {
+                    OnPropertyChanged(nameof(DiffToggleLabel));
+                }
+            }
+        }
+
+        public string DiffToggleLabel
+        {
+            get { return _isDiffVisible ? "收起改动" : "查看改动"; }
+        }
+
         public bool IsResolved
         {
             get { return _isResolved; }
@@ -87,6 +116,7 @@ namespace MiaoWu.App.ViewModels
                 if (SetProperty(ref _isResolved, value))
                 {
                     OnPropertyChanged(nameof(IsPending));
+                    OnPropertyChanged(nameof(ShowApprovalActions));
                     System.Windows.Input.CommandManager.InvalidateRequerySuggested();
                 }
             }
@@ -95,6 +125,12 @@ namespace MiaoWu.App.ViewModels
         public bool IsPending
         {
             get { return !_isResolved; }
+        }
+
+        /// <summary>只给尚未答复的审批显示动作按钮；答复后只留一句结果。</summary>
+        public bool ShowApprovalActions
+        {
+            get { return IsApproval && !_isResolved; }
         }
 
         public string ResolutionText
@@ -110,6 +146,8 @@ namespace MiaoWu.App.ViewModels
         public RelayCommand AllowSessionCommand { get; }
 
         public RelayCommand DenyCommand { get; }
+
+        public RelayCommand ToggleDiffCommand { get; }
 
         public void MarkResolved(string text)
         {

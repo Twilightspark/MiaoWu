@@ -144,12 +144,12 @@ namespace MiaoWu.App.ViewModels
 
         public string Text
         {
-            get { return _builder.ToString(); }
+            get { return TrimTrailingBlankLines(_builder.ToString()); }
         }
 
         public string ThinkingText
         {
-            get { return _thinking.ToString(); }
+            get { return TrimTrailingBlankLines(_thinking.ToString()); }
         }
 
         /// <summary>收起时显示的一行摘要：最近一个段落的首行，去掉 Markdown 标记并截断。</summary>
@@ -358,7 +358,7 @@ namespace MiaoWu.App.ViewModels
         {
             _isMarkdownDirty = false;
             Blocks.Clear();
-            string text = _builder.ToString();
+            string text = Text;
             if (string.IsNullOrWhiteSpace(text))
             {
                 OnPropertyChanged(nameof(HasBlocks));
@@ -391,6 +391,12 @@ namespace MiaoWu.App.ViewModels
                     })));
             }
 
+            // 最后一块不留底部外边距：消息末尾不该多出一条空白。
+            if (Blocks.Count > 0)
+            {
+                Blocks[Blocks.Count - 1].IsLast = true;
+            }
+
             OnPropertyChanged(nameof(HasBlocks));
         }
 
@@ -398,8 +404,17 @@ namespace MiaoWu.App.ViewModels
         {
             if (_clipboard != null)
             {
-                _clipboard.SetText(_builder.ToString());
+                _clipboard.SetText(Text);
             }
+        }
+
+        /// <summary>
+        /// 末尾的空行与空格不进渲染：模型常在正文/思考末尾补换行，
+        /// 直接绑到 TextBlock 会在模块底部多出一条空行。
+        /// </summary>
+        internal static string TrimTrailingBlankLines(string text)
+        {
+            return string.IsNullOrEmpty(text) ? text : text.TrimEnd('\r', '\n', ' ', '\t');
         }
 
         /// <summary>
@@ -571,7 +586,8 @@ namespace MiaoWu.App.ViewModels
             get { return _output; }
             private set
             {
-                if (SetProperty(ref _output, value))
+                // 工具输出常以换行收尾；不裁掉，展开体底部会多出一条空行。
+                if (SetProperty(ref _output, AssistantChatItemViewModel.TrimTrailingBlankLines(value)))
                 {
                     OnPropertyChanged(nameof(HasOutput));
                 }
@@ -821,109 +837,6 @@ namespace MiaoWu.App.ViewModels
         }
     }
 
-    /// <summary>内联审批卡：允许一次 / 本会话允许 / 拒绝，diff 可展开。</summary>
-    public sealed class ApprovalCardViewModel : ChatItemViewModel
-    {
-        private bool _isResolved;
-        private string _resolutionText;
-        private bool _isDiffVisible;
-
-        public ApprovalCardViewModel(
-            ToolApprovalRequest request,
-            Action<string, ToolApprovalOutcome> resolve,
-            DateTimeOffset timestamp)
-            : base(timestamp)
-        {
-            RequestId = request.RequestId;
-            Title = request.Title;
-            Target = request.Target;
-            Summary = request.Summary;
-            Diff = request.Diff;
-            CanApproveForSession = request.CanApproveForSession;
-            CanShowDiff = request.CanShowDiff && !string.IsNullOrWhiteSpace(request.Diff);
-            RiskText = request.Risk == ToolRisk.High ? "高风险" : "中风险";
-
-            AllowOnceCommand = new RelayCommand(() => Resolve(resolve, ToolApprovalOutcome.ApproveOnce));
-            AllowSessionCommand = new RelayCommand(
-                () => Resolve(resolve, ToolApprovalOutcome.ApproveForSession),
-                () => CanApproveForSession);
-            DenyCommand = new RelayCommand(() => Resolve(resolve, ToolApprovalOutcome.Deny));
-            ToggleDiffCommand = new RelayCommand(() => IsDiffVisible = !IsDiffVisible);
-        }
-
-        public string RequestId { get; }
-
-        public string Title { get; }
-
-        public string Target { get; }
-
-        public string Summary { get; }
-
-        public string Diff { get; }
-
-        public string RiskText { get; }
-
-        public bool CanApproveForSession { get; }
-
-        public bool CanShowDiff { get; }
-
-        public bool IsResolved
-        {
-            get { return _isResolved; }
-            private set { SetProperty(ref _isResolved, value); }
-        }
-
-        public string ResolutionText
-        {
-            get { return _resolutionText; }
-            private set { SetProperty(ref _resolutionText, value); }
-        }
-
-        /// <summary>已答复的审批不再显示按钮，只留一句“已处理”结果。</summary>
-        public bool CanDecide
-        {
-            get { return !_isResolved; }
-        }
-
-        public bool IsDiffVisible
-        {
-            get { return _isDiffVisible; }
-            set { SetProperty(ref _isDiffVisible, value); }
-        }
-
-        public RelayCommand AllowOnceCommand { get; }
-
-        public RelayCommand AllowSessionCommand { get; }
-
-        public RelayCommand DenyCommand { get; }
-
-        public RelayCommand ToggleDiffCommand { get; }
-
-        public override string AutomationName
-        {
-            get { return "审批：" + Title; }
-        }
-
-        public void MarkResolved(string text)
-        {
-            IsResolved = true;
-            ResolutionText = text;
-            OnPropertyChanged(nameof(CanDecide));
-            CommandManager.InvalidateRequerySuggested();
-        }
-
-        private void Resolve(Action<string, ToolApprovalOutcome> resolve, ToolApprovalOutcome outcome)
-        {
-            if (IsResolved || resolve == null)
-            {
-                return;
-            }
-
-            resolve(RequestId, outcome);
-            MarkResolved(outcome == ToolApprovalOutcome.Deny ? "已拒绝" : "已允许");
-        }
-    }
-
     /// <summary>错误/提示卡：失败、已中断、达到上限等。</summary>
     public sealed class NoticeChatItemViewModel : ChatItemViewModel
     {
@@ -935,7 +848,7 @@ namespace MiaoWu.App.ViewModels
             : base(timestamp)
         {
             Title = title;
-            Body = body;
+            Body = AssistantChatItemViewModel.TrimTrailingBlankLines(body);
             IsError = isError;
         }
 

@@ -553,93 +553,6 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- 审批卡：不进输入区时留在消息流里，但保持琥珀色与明确的风险措辞。 -->
-        <DataTemplate DataType="{x:Type vm:ApprovalCardViewModel}">
-            <Border Margin="{StaticResource Margin.Chat.Approval}"
-                    Padding="12,10"
-                    Background="{DynamicResource Brush.WarningSoft}"
-                    BorderBrush="{DynamicResource Brush.Warning}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource Radius.Card}">
-                <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Path Width="16"
-                              Height="16"
-                              VerticalAlignment="Center"
-                              Style="{StaticResource Icon}"
-                              Fill="{DynamicResource Brush.Warning}"
-                              Data="{StaticResource Ico.Warning}" />
-                        <TextBlock Grid.Column="1"
-                                   Margin="6,0,0,0"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding Title}"
-                                   Style="{StaticResource Text.H3}" />
-                        <TextBlock Grid.Column="2"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding RiskText}"
-                                   Style="{StaticResource Text.Meta}"
-                                   Foreground="{DynamicResource Brush.Warning}" />
-                    </Grid>
-
-                    <TextBlock Margin="0,6,0,0"
-                               Text="{Binding Target}"
-                               Style="{StaticResource Text.Code}"
-                               TextWrapping="Wrap" />
-                    <TextBlock Margin="0,3,0,0"
-                               Text="{Binding Summary}"
-                               Style="{StaticResource Text.Reasoning}"
-                               TextWrapping="Wrap" />
-
-                    <StackPanel Margin="0,8,0,0" Orientation="Horizontal"
-                                Visibility="{Binding CanDecide, Converter={StaticResource BoolToVisibility}}">
-                        <Button Content="允许一次"
-                                Style="{StaticResource Button.Primary}"
-                                Command="{Binding AllowOnceCommand}" />
-                        <Button Margin="8,0,0,0"
-                                Content="本会话允许"
-                                Style="{StaticResource Button.Ghost}"
-                                Command="{Binding AllowSessionCommand}"
-                                Visibility="{Binding CanApproveForSession, Converter={StaticResource BoolToVisibility}}" />
-                        <Button Margin="8,0,0,0"
-                                Content="查看 diff"
-                                Style="{StaticResource Button.Ghost}"
-                                Command="{Binding ToggleDiffCommand}"
-                                Visibility="{Binding CanShowDiff, Converter={StaticResource BoolToVisibility}}" />
-                        <Button Margin="8,0,0,0"
-                                Content="拒绝"
-                                Style="{StaticResource Button.Ghost}"
-                                Command="{Binding DenyCommand}" />
-                    </StackPanel>
-
-                    <TextBlock Margin="0,8,0,0"
-                               Text="{Binding ResolutionText}"
-                               Style="{StaticResource Text.Meta}"
-                               Visibility="{Binding IsResolved, Converter={StaticResource BoolToVisibility}}" />
-
-                    <TextBox Margin="0,8,0,0"
-                             MaxHeight="180"
-                             Padding="0"
-                             BorderThickness="0"
-                             Background="Transparent"
-                             IsReadOnly="True"
-                             AcceptsReturn="True"
-                             TextWrapping="NoWrap"
-                             HorizontalScrollBarVisibility="Auto"
-                             VerticalScrollBarVisibility="Auto"
-                             FontFamily="{StaticResource Font.Family.Code}"
-                             FontSize="{StaticResource Font.Code.Size}"
-                             TextBlock.LineHeight="{StaticResource Font.Code.Line}"
-                             Text="{Binding Diff, Mode=OneWay}"
-                             Visibility="{Binding IsDiffVisible, Converter={StaticResource BoolToVisibility}}" />
-                </StackPanel>
-            </Border>
-        </DataTemplate>
-
         <!-- 错误/提示卡：只留一条左侧色条与两行字，不再占一张大卡片 -->
         <DataTemplate DataType="{x:Type vm:NoticeChatItemViewModel}">
             <Border Margin="{StaticResource Margin.Chat.Notice}"
@@ -712,7 +625,8 @@
             </StackPanel>
         </Grid>
 
-        <!-- 消息列表 -->
+        <!-- 消息列表：像素滚动，拖动滚动条是连续的；是否跟随新内容由视图判断贴底，
+             用户上滚后不再自动拉回（见 ConversationPaneView.xaml.cs）。 -->
         <ListBox x:Name="MessageList"
                  Grid.Row="1"
                  ItemsSource="{Binding Items}"
@@ -720,10 +634,12 @@
                  Background="Transparent"
                  BorderThickness="0"
                  Padding="0"
+                 PreviewMouseWheel="OnMessageListPreviewMouseWheel"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  ScrollViewer.CanContentScroll="True"
                  VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.ScrollUnit="Pixel"
                  VirtualizingPanel.VirtualizationMode="Recycling"
                  AutomationProperties.AutomationId="ConversationMessages"
                  AutomationProperties.Name="对话消息">
