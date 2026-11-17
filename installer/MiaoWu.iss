@@ -5,10 +5,10 @@
 ; 构建：
 ;   1. scripts\publish.ps1 -Configuration Release
 ;   2. 安装 Inno Setup 6，运行 ISCC.exe installer\MiaoWu.iss
-; 产物：.artifacts\installer\MiaoWu-0.2.1-setup.exe
+; 产物：.artifacts\installer\MiaoWu-0.2.2-setup.exe
 
 #define MyAppName "MiaoWu"
-#define MyAppVersion "0.2.1"
+#define MyAppVersion "0.2.2"
 #define MyAppPublisher "MiaoWu"
 #define MyAppExeName "MiaoWu.exe"
 #define MyAppDataDir "{userprofile}\.miaowu"
