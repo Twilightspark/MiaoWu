@@ -95,6 +95,8 @@ namespace MiaoWu.Infrastructure.Storage
                 value.LeftPaneWidth = GetDouble(ui, "leftPaneWidth", value.LeftPaneWidth);
                 value.RightPaneWidth = GetDouble(ui, "rightPaneWidth", value.RightPaneWidth);
                 value.IsRightPaneCollapsed = GetBool(ui, "rightPaneCollapsed", false);
+                value.Theme = GetString(ui, "theme") ?? value.Theme;
+                value.Language = GetString(ui, "language") ?? value.Language;
                 value.ActiveWorkspaceId = GetString(ui, "activeWorkspaceId");
                 value.ActiveSessionId = GetString(ui, "activeSessionId");
                 value.ActiveFilePath = GetString(ui, "activeFilePath");
@@ -141,7 +143,7 @@ namespace MiaoWu.Infrastructure.Storage
             value.HistoryLimit = GetInt(node, "historyLimit", value.HistoryLimit);
             value.MaxConcurrentRequests = GetInt(node, "maxConcurrentRequests", value.MaxConcurrentRequests);
             value.MaxHotSessions = GetInt(node, "maxHotSessions", value.MaxHotSessions);
-            value.KeepRunningInTray = GetBool(node, "keepRunningInTray", value.KeepRunningInTray);
+            value.CloseAction = ReadCloseAction(node);
             value.RequestTimeoutSeconds = GetInt(node, "requestTimeoutSeconds", value.RequestTimeoutSeconds);
             value.IdleTimeoutSeconds = GetInt(node, "idleTimeoutSeconds", value.IdleTimeoutSeconds);
             value.ToolsEnabled = GetBool(node, "toolsEnabled", value.ToolsEnabled);
@@ -190,6 +192,28 @@ namespace MiaoWu.Infrastructure.Storage
             return AgentSettings.Normalize(value);
         }
 
+        /// <summary>
+        /// 读取关闭行为。新字段缺失时兼容旧 keepRunningInTray：旧版明确取消勾选
+        /// （false）表示“关闭即退出”，迁移为 Exit；true/缺失回落到 Ask，
+        /// 让升级后的用户第一次关窗能看到新的选择浮层。
+        /// </summary>
+        private static CloseWindowAction ReadCloseAction(JsonValue node)
+        {
+            JsonValue action = node.Get("closeAction");
+            if (action != null && action.Kind == JsonKind.String)
+            {
+                return CloseWindowActionText.Parse(action.AsString());
+            }
+
+            JsonValue legacy = node.Get("keepRunningInTray");
+            if (legacy != null && legacy.Kind == JsonKind.Boolean && !legacy.AsBoolean(true))
+            {
+                return CloseWindowAction.Exit;
+            }
+
+            return CloseWindowAction.Ask;
+        }
+
         public void Save(AppSettings settings)
         {
             if (settings == null)
@@ -219,6 +243,8 @@ namespace MiaoWu.Infrastructure.Storage
             ui["leftPaneWidth"] = JsonValue.From(value.LeftPaneWidth);
             ui["rightPaneWidth"] = JsonValue.From(value.RightPaneWidth);
             ui["rightPaneCollapsed"] = JsonValue.From(value.IsRightPaneCollapsed);
+            ui["theme"] = StringValue(value.Theme);
+            ui["language"] = StringValue(value.Language);
             ui["activeWorkspaceId"] = StringValue(value.ActiveWorkspaceId);
             ui["activeSessionId"] = StringValue(value.ActiveSessionId);
             ui["activeFilePath"] = StringValue(value.ActiveFilePath);
@@ -265,7 +291,7 @@ namespace MiaoWu.Infrastructure.Storage
             agent["historyLimit"] = JsonValue.From(agentValue.HistoryLimit);
             agent["maxConcurrentRequests"] = JsonValue.From(agentValue.MaxConcurrentRequests);
             agent["maxHotSessions"] = JsonValue.From(agentValue.MaxHotSessions);
-            agent["keepRunningInTray"] = JsonValue.From(agentValue.KeepRunningInTray);
+            agent["closeAction"] = JsonValue.From(CloseWindowActionText.ToJson(agentValue.CloseAction));
             agent["requestTimeoutSeconds"] = JsonValue.From(agentValue.RequestTimeoutSeconds);
             agent["idleTimeoutSeconds"] = JsonValue.From(agentValue.IdleTimeoutSeconds);
             agent["toolsEnabled"] = JsonValue.From(agentValue.ToolsEnabled);

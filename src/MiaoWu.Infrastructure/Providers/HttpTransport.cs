@@ -192,5 +192,58 @@ namespace MiaoWu.Infrastructure.Providers
 
             return value + "/v1/messages";
         }
+
+        /// <summary>
+        /// 模型列表的候选地址。OpenAI 用 <c>/v1/models</c>，DeepSeek 等把版本前缀放在
+        /// Base URL 里、直接用 <c>/models</c>，因此按顺序尝试，404 时再换下一个。
+        /// </summary>
+        public static IReadOnlyList<string> ModelsListCandidates(string baseUrl)
+        {
+            string value = NormalizeBaseUrl(baseUrl);
+            const string completions = "/chat/completions";
+            if (value.EndsWith(completions, StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(0, value.Length - completions.Length);
+            }
+
+            const string messages = "/messages";
+            if (value.EndsWith(messages, StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(0, value.Length - messages.Length);
+            }
+
+            if (value.EndsWith("/models", StringComparison.OrdinalIgnoreCase))
+            {
+                return new[] { value };
+            }
+
+            if (EndsWithVersionSegment(value))
+            {
+                return new[] { value + "/models" };
+            }
+
+            return new[] { value + "/v1/models", value + "/models" };
+        }
+
+        private static bool EndsWithVersionSegment(string url)
+        {
+            int slash = url.LastIndexOf('/');
+            string segment = slash < 0 ? url : url.Substring(slash + 1);
+            if (segment.Length < 2 || (segment[0] != 'v' && segment[0] != 'V'))
+            {
+                return false;
+            }
+
+            for (int i = 1; i < segment.Length; i++)
+            {
+                char c = segment[i];
+                if (!char.IsLetterOrDigit(c))
+                {
+                    return false;
+                }
+            }
+
+            return char.IsDigit(segment[1]);
+        }
     }
 }

@@ -84,6 +84,8 @@ namespace MiaoWu.Tests.Storage
             settings.Ui.LeftPaneWidth = 280;
             settings.Ui.RightPaneWidth = 460;
             settings.Ui.IsRightPaneCollapsed = true;
+            settings.Ui.Theme = "dark";
+            settings.Ui.Language = "en-US";
             settings.Ui.WindowPlacementSaved = true;
             settings.Ui.WindowMaximized = true;
             settings.Ui.ActiveWorkspaceId = "w1";
@@ -103,6 +105,8 @@ namespace MiaoWu.Tests.Storage
             Assert.Equal(280, reloaded.Ui.LeftPaneWidth);
             Assert.Equal(460, reloaded.Ui.RightPaneWidth);
             Assert.True(reloaded.Ui.IsRightPaneCollapsed);
+            Assert.Equal("dark", reloaded.Ui.Theme);
+            Assert.Equal("en-US", reloaded.Ui.Language);
             Assert.True(reloaded.Ui.WindowPlacementSaved);
             Assert.True(reloaded.Ui.WindowMaximized);
             Assert.Equal("w1", reloaded.Ui.ActiveWorkspaceId);
@@ -191,6 +195,81 @@ namespace MiaoWu.Tests.Storage
 
             Assert.True(File.Exists(_path));
             Assert.Empty(Directory.GetFiles(_directory, "*.tmp-*"));
+        }
+
+        [Fact]
+        public void CloseActionDefaultsToAsk()
+        {
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.Equal(CloseWindowAction.Ask, settings.Agent.CloseAction);
+        }
+
+        [Fact]
+        public void CloseActionRoundTripsThroughConfig()
+        {
+            var store = new SettingsStore(_path);
+            AppSettings settings = store.Load();
+            settings.Agent.CloseAction = CloseWindowAction.MinimizeToTray;
+            store.Save(settings);
+
+            JsonValue root = JsonParser.Parse(File.ReadAllText(_path));
+            Assert.Equal("minimizeToTray", root.Get("agent").Get("closeAction").AsString());
+            Assert.Equal(
+                CloseWindowAction.MinimizeToTray,
+                new SettingsStore(_path).Load().Agent.CloseAction);
+
+            settings.Agent.CloseAction = CloseWindowAction.Exit;
+            store.Save(settings);
+            Assert.Equal(CloseWindowAction.Exit, new SettingsStore(_path).Load().Agent.CloseAction);
+        }
+
+        [Fact]
+        public void UnknownCloseActionFallsBackToAsk()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"agent\":{\"closeAction\":\"bogus\"}}");
+
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.Equal(CloseWindowAction.Ask, settings.Agent.CloseAction);
+        }
+
+        [Fact]
+        public void LegacyKeepRunningInTrayFalseMigratesToExit()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"agent\":{\"keepRunningInTray\":false}}");
+
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.Equal(CloseWindowAction.Exit, settings.Agent.CloseAction);
+        }
+
+        [Fact]
+        public void LegacyKeepRunningInTrayTrueMigratesToAsk()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"agent\":{\"keepRunningInTray\":true}}");
+
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.Equal(CloseWindowAction.Ask, settings.Agent.CloseAction);
+        }
+
+        [Fact]
+        public void ExplicitCloseActionWinsOverLegacyFlag()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"agent\":{\"closeAction\":\"ask\",\"keepRunningInTray\":false}}");
+
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.Equal(CloseWindowAction.Ask, settings.Agent.CloseAction);
         }
     }
 }

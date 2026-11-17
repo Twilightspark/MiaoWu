@@ -436,5 +436,10 @@
         <views:OverlayView Grid.RowSpan="2"
                            Panel.ZIndex="220"
                            DataContext="{Binding Overlay}" />
+
+        <!-- 关闭确认盖在设置浮层之上；ShellView 隐藏时随主窗口一起不可见。 -->
+        <views:ClosePromptView Grid.RowSpan="2"
+                               Panel.ZIndex="300"
+                               DataContext="{Binding ClosePrompt}" />
     </Grid>
 </UserControl>

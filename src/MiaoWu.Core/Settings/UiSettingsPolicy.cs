@@ -45,6 +45,8 @@ namespace MiaoWu.Core.Settings
             WindowHeight = 900;
             LeftPaneWidth = 262;
             RightPaneWidth = 428;
+            Theme = "light";
+            Language = "zh-CN";
             OpenTabs = new List<DocumentTab>();
         }
 
@@ -65,6 +67,15 @@ namespace MiaoWu.Core.Settings
         public double RightPaneWidth { get; set; }
 
         public bool IsRightPaneCollapsed { get; set; }
+
+        /// <summary>
+        /// 预留的外观偏好："light" | "dark" | "system"。当前只保存选择，
+        /// 深色与跟随系统在后续版本生效。
+        /// </summary>
+        public string Theme { get; set; }
+
+        /// <summary>预留的界面语言偏好："zh-CN" | "en-US"。当前只保存选择。</summary>
+        public string Language { get; set; }
 
         public string ActiveWorkspaceId { get; set; }
 
@@ -167,6 +178,8 @@ namespace MiaoWu.Core.Settings
             ui.LeftPaneWidth = Clamp(ui.LeftPaneWidth, effective.LeftMin, effective.LeftMax, 262);
             ui.RightPaneWidth = Clamp(ui.RightPaneWidth, effective.RightMin, effective.RightMax, 428);
             ui.DocumentScrollOffset = Clamp(ui.DocumentScrollOffset, 0, double.MaxValue, 0);
+            ui.Theme = NormalizeChoice(ui.Theme, "light", "dark", "system");
+            ui.Language = NormalizeChoice(ui.Language, "zh-CN", "en-US");
 
             if (ui.OpenTabs == null)
             {
@@ -283,6 +296,24 @@ namespace MiaoWu.Core.Settings
         private static string Trim(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        /// <summary>把预留选项收敛到已知值；空值或损坏值回退到第一个候选。</summary>
+        private static string NormalizeChoice(string value, params string[] allowed)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                string trimmed = value.Trim();
+                foreach (string candidate in allowed)
+                {
+                    if (string.Equals(candidate, trimmed, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            return allowed[0];
         }
     }
 }

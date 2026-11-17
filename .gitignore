@@ -20,6 +20,8 @@ AGENTS.md
 # ---- Agent runtime & local tooling ----
 .agent/
 .agents/
+/install-miaowu.ps1
+/install-miaowu.cmd
 
 # ---- Test output ----
 TestResults/

@@ -3,6 +3,62 @@ using System.Collections.Generic;
 
 namespace MiaoWu.Core.Settings
 {
+    /// <summary>
+    /// 关闭主窗口时的行为。Ask 每次弹窗询问；其余两项是用户勾选“记住”后的直接动作。
+    /// </summary>
+    public enum CloseWindowAction
+    {
+        Ask = 0,
+        MinimizeToTray = 1,
+        Exit = 2
+    }
+
+    /// <summary>关闭行为与 config.json 字符串值之间的转换，读写两侧共用同一套拼写。</summary>
+    public static class CloseWindowActionText
+    {
+        public const string Ask = "ask";
+        public const string MinimizeToTray = "minimizeToTray";
+        public const string Exit = "exit";
+
+        public static string ToJson(CloseWindowAction action)
+        {
+            switch (action)
+            {
+                case CloseWindowAction.MinimizeToTray:
+                    return MinimizeToTray;
+                case CloseWindowAction.Exit:
+                    return Exit;
+                default:
+                    return Ask;
+            }
+        }
+
+        /// <summary>未知/损坏值回落到 Ask，保证旧配置仍能启动并重新询问。</summary>
+        public static CloseWindowAction Parse(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return CloseWindowAction.Ask;
+            }
+
+            string value = text.Trim();
+            if (string.Equals(value, MinimizeToTray, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "tray", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "minimize", StringComparison.OrdinalIgnoreCase))
+            {
+                return CloseWindowAction.MinimizeToTray;
+            }
+
+            if (string.Equals(value, Exit, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "close", StringComparison.OrdinalIgnoreCase))
+            {
+                return CloseWindowAction.Exit;
+            }
+
+            return CloseWindowAction.Ask;
+        }
+    }
+
     /// <summary>工具输出预算。P3 起统一收敛到 2000 行 / 50 KB。</summary>
     public sealed class ToolOutputSettings
     {
@@ -36,7 +92,7 @@ namespace MiaoWu.Core.Settings
             HistoryLimit = 200;
             MaxConcurrentRequests = 4;
             MaxHotSessions = 8;
-            KeepRunningInTray = true;
+            CloseAction = CloseWindowAction.Ask;
             RequestTimeoutSeconds = 120;
             IdleTimeoutSeconds = 60;
             ToolsEnabled = true;
@@ -70,7 +126,8 @@ namespace MiaoWu.Core.Settings
 
         public int MaxHotSessions { get; set; }
 
-        public bool KeepRunningInTray { get; set; }
+        /// <summary>关闭窗口时是询问、最小化到托盘还是退出；Ask 为默认。</summary>
+        public CloseWindowAction CloseAction { get; set; }
 
         public int RequestTimeoutSeconds { get; set; }
 
@@ -122,7 +179,7 @@ namespace MiaoWu.Core.Settings
                 HistoryLimit = HistoryLimit,
                 MaxConcurrentRequests = MaxConcurrentRequests,
                 MaxHotSessions = MaxHotSessions,
-                KeepRunningInTray = KeepRunningInTray,
+                CloseAction = CloseAction,
                 RequestTimeoutSeconds = RequestTimeoutSeconds,
                 IdleTimeoutSeconds = IdleTimeoutSeconds,
                 ToolsEnabled = ToolsEnabled,
@@ -165,6 +222,11 @@ namespace MiaoWu.Core.Settings
             value.HistoryLimit = Clamp(value.HistoryLimit, 10, 5000, 200);
             value.MaxConcurrentRequests = Clamp(value.MaxConcurrentRequests, 1, 8, 4);
             value.MaxHotSessions = Clamp(value.MaxHotSessions, 1, 32, 8);
+            if (!Enum.IsDefined(typeof(CloseWindowAction), value.CloseAction))
+            {
+                value.CloseAction = CloseWindowAction.Ask;
+            }
+
             value.RequestTimeoutSeconds = Clamp(value.RequestTimeoutSeconds, 15, 600, 120);
             value.IdleTimeoutSeconds = Clamp(value.IdleTimeoutSeconds, 10, 600, 60);
             value.MaxTurnsPerRun = Clamp(value.MaxTurnsPerRun, 1, 60, 24);

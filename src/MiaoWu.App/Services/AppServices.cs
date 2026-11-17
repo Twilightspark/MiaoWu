@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Agents;
 using MiaoWu.Core.Agents.Tools;
@@ -30,6 +31,7 @@ namespace MiaoWu.App.Services
     public sealed class AppServices : IDisposable
     {
         private readonly object _gate = new object();
+        private readonly ModelCatalogClient _modelCatalog;
         private bool _disposed;
 
         public AppServices(IAppPaths paths)
@@ -39,10 +41,12 @@ namespace MiaoWu.App.Services
 
         /// <summary>
         /// apis 仅供离屏快照/集成测试注入脚本 Provider；生产路径传 null，使用两种真实协议。
+        /// modelCatalog 同样只供离屏探针注入，生产路径传 null，按当前 transport 新建。
         /// </summary>
-        public AppServices(IAppPaths paths, IModelApi[] apis)
+        public AppServices(IAppPaths paths, IModelApi[] apis, ModelCatalogClient modelCatalog = null)
         {
             Paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            _modelCatalog = modelCatalog;
 
             SettingsStore = new SettingsStore(paths);
             if (!File.Exists(paths.SettingsFilePath))
@@ -167,6 +171,20 @@ namespace MiaoWu.App.Services
 
         /// <summary>Provider 或模型目录变化；设置页保存后触发，UI 刷新模型胶囊。</summary>
         public event EventHandler ProvidersChanged;
+
+        /// <summary>
+        /// 读取供应商 /models 列表。每次都用当前 <see cref="Http"/>，代理切换后不会拿到旧连接。
+        /// 网络与 HTTP 错误以异常抛出，由设置页转成表单提示。
+        /// </summary>
+        public Task<IReadOnlyList<ModelCatalogEntry>> ListModelsAsync(
+            string baseUrl,
+            string api,
+            string apiKey,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            ModelCatalogClient client = _modelCatalog ?? new ModelCatalogClient(Http);
+            return client.ListAsync(baseUrl, api, apiKey, cancellationToken);
+        }
 
         /// <summary>把当前设置写回 config.json。异常向上抛，由调用方提示。</summary>
         public void SaveSettings()

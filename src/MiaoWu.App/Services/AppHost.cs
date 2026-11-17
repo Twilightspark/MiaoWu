@@ -14,6 +14,9 @@ namespace MiaoWu.App.Services
     /// </summary>
     public sealed class AppHost : IDisposable
     {
+        private const string TrayTooltipRunning = "MiaoWu · 本地智能体工作台";
+        private const string TrayTooltipBackground = "MiaoWu · 后台运行中";
+
         private readonly AppServices _services;
         private readonly AccessibilityService _accessibility;
         private MainWindow _mainWindow;
@@ -68,19 +71,47 @@ namespace MiaoWu.App.Services
             _services.CleanupToolOutputCache();
             CreateTray();
 
-            // 首次启动即使配置了“只显示托盘”也先显示主窗口的引导页。
-            if (!_services.Settings.FirstLaunch && _services.Settings.Agent.StartMinimized)
+            bool trayAvailable = _tray != null && _tray.IsAvailable;
+            MainViewModel.SetTrayAvailability(trayAvailable);
+            if (!trayAvailable)
             {
+                _services.Logger.Warn(
+                    "app.tray",
+                    "当前进程完整性低于 Medium（常见于 VS Code/沙箱/受限终端），"
+                    + "Windows 不注册托盘图标；关闭窗口将降级为最小化到任务栏。"
+                    + "请从资源管理器直接运行 MiaoWu.exe 以获得托盘图标。");
+            }
+            else
+            {
+                _services.Logger.Info(
+                    "app.tray",
+                    "托盘图标已创建（进程完整性 Medium 及以上）。");
+            }
+
+            // 首次启动即使配置了“只显示托盘”也先显示主窗口的引导页。
+            // 托盘不可用时也不能静默隐藏，否则窗口没有可见入口。
+            if (!_services.Settings.FirstLaunch
+                && _services.Settings.Agent.StartMinimized
+                && trayAvailable)
+            {
+                UpdateTrayTooltip(true);
                 _tray.ShowBalloon("MiaoWu 正在后台运行", "双击托盘图标打开主窗口。");
             }
             else
             {
                 ShowMainWindow();
             }
+
+            if (!trayAvailable && !_services.Settings.FirstLaunch)
+            {
+                MainViewModel.NotifyTrayUnavailable();
+            }
         }
 
         public void ShowMainWindow()
         {
+            UpdateTrayTooltip(false);
+
             if (_mainWindow != null && _mainWindow.IsVisible)
             {
                 if (_mainWindow.WindowState == WindowState.Minimized)
@@ -185,13 +216,25 @@ namespace MiaoWu.App.Services
 
         private void OnHiddenToTray(object sender, EventArgs e)
         {
+            UpdateTrayTooltip(true);
+
             if (_hiddenNoticeShown || _tray == null)
             {
                 return;
             }
 
             _hiddenNoticeShown = true;
-            _tray.ShowBalloon("MiaoWu 仍在后台运行", "关闭窗口不会中断正在生成的回答；右键托盘可退出。");
+            _tray.ShowBalloon(
+                "MiaoWu 仍在后台运行",
+                "关闭窗口不会中断正在生成的回答；若任务栏未显示图标，请点击 ^ 并固定 MiaoWu。");
+        }
+
+        private void UpdateTrayTooltip(bool background)
+        {
+            if (_tray != null)
+            {
+                _tray.UpdateTooltip(background ? TrayTooltipBackground : TrayTooltipRunning);
+            }
         }
 
         private void CreateTray()
@@ -201,7 +244,7 @@ namespace MiaoWu.App.Services
                 return;
             }
 
-            _tray = new TrayService("MiaoWu · 本地智能体工作台");
+            _tray = new TrayService(TrayTooltipRunning);
             _tray.OpenRequested += (sender, args) => ShowMainWindow();
             _tray.NewSessionRequested += (sender, args) =>
             {

@@ -94,7 +94,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                                <Setter TargetName="Bd" Property="BorderThickness" Value="{StaticResource Metric.Focus.Stroke}" />
+                                <Setter TargetName="Bd" Property="BorderThickness" Value="{StaticResource Thickness.Focus}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="{StaticResource Opacity.Disabled}" />

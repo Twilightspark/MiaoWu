@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\MiaoWu.Core\MiaoWu.Core.csproj" />
     <ProjectReference Include="..\..\src\MiaoWu.Infrastructure\MiaoWu.Infrastructure.csproj" />
   </ItemGroup>

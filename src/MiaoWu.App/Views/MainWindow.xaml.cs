@@ -5,6 +5,7 @@ using System.Windows.Threading;
 using MiaoWu.App.Services;
 using MiaoWu.App.ViewModels;
 using MiaoWu.Core.Layout;
+using MiaoWu.Core.Settings;
 
 namespace MiaoWu.App.Views
 {
@@ -39,6 +40,7 @@ namespace MiaoWu.App.Views
             _saveTimer.Tick += OnSaveTimerTick;
 
             _viewModel.StateChanged += OnViewModelStateChanged;
+            _viewModel.ClosePrompt.Decided += OnClosePromptDecided;
             StateChanged += OnWindowStateChanged;
             SizeChanged += OnWindowSizeChanged;
             SourceInitialized += OnSourceInitialized;
@@ -157,6 +159,7 @@ namespace MiaoWu.App.Views
             if (_viewModel != null)
             {
                 _viewModel.StateChanged -= OnViewModelStateChanged;
+                _viewModel.ClosePrompt.Decided -= OnClosePromptDecided;
 
                 // 尺寸已由正常状态下的 SizeChanged 记录；关闭时只保存，不再回写窗口边界。
                 _viewModel.TrySaveState();
@@ -184,18 +187,98 @@ namespace MiaoWu.App.Views
                 return;
             }
 
-            if (_viewModel.KeepRunningInTray)
+            switch (CloseWindowPolicy.Resolve(_viewModel.CloseAction, _viewModel.TrayAvailable))
             {
-                e.Cancel = true;
-                _viewModel.TrySaveState();
-                _viewModel.SuspendConversation();
-                Hide();
-                _viewModel.NotifyHiddenToTray();
+                case CloseWindowDisposition.HideToTray:
+                    e.Cancel = true;
+                    HideToTray();
+                    return;
+
+                case CloseWindowDisposition.MinimizeToTaskbar:
+                    e.Cancel = true;
+                    MinimizeToTaskbar();
+                    return;
+
+                case CloseWindowDisposition.Exit:
+                    e.Cancel = true;
+                    _viewModel.RequestExit();
+                    return;
+
+                default:
+                    // Ask：保留窗口，在窗口内弹确认；最小化状态下先还原再问。
+                    e.Cancel = true;
+                    if (WindowState == WindowState.Minimized)
+                    {
+                        WindowState = WindowState.Normal;
+                    }
+
+                    Activate();
+                    _viewModel.ClosePrompt.Open();
+                    return;
+            }
+        }
+
+        private void OnClosePromptDecided(object sender, ClosePromptDecidedEventArgs e)
+        {
+            if (_viewModel == null || e == null)
+            {
                 return;
             }
 
-            e.Cancel = true;
-            _viewModel.RequestExit();
+            if (e.Choice == ClosePromptChoice.Cancel)
+            {
+                return;
+            }
+
+            if (e.Remember)
+            {
+                _viewModel.RememberCloseAction(e.Choice == ClosePromptChoice.MinimizeToTray
+                    ? CloseWindowAction.MinimizeToTray
+                    : CloseWindowAction.Exit);
+            }
+
+            if (e.Choice == ClosePromptChoice.MinimizeToTray)
+            {
+                MinimizeFromClose();
+            }
+            else
+            {
+                _viewModel.RequestExit();
+            }
+        }
+
+        /// <summary>
+        /// 托盘可用时隐藏到托盘；低完整性进程无法注册托盘图标，
+        /// 由 <see cref="CloseWindowPolicy"/> 降级为最小化到任务栏。
+        /// </summary>
+        private void MinimizeFromClose()
+        {
+            CloseWindowDisposition disposition = CloseWindowPolicy.Resolve(
+                CloseWindowAction.MinimizeToTray,
+                _viewModel.TrayAvailable);
+
+            if (disposition == CloseWindowDisposition.HideToTray)
+            {
+                HideToTray();
+            }
+            else
+            {
+                MinimizeToTaskbar();
+            }
+        }
+
+        private void HideToTray()
+        {
+            _viewModel.TrySaveState();
+            _viewModel.SuspendConversation();
+            Hide();
+            _viewModel.NotifyHiddenToTray();
+        }
+
+        private void MinimizeToTaskbar()
+        {
+            _viewModel.TrySaveState();
+            WindowState = WindowState.Minimized;
         }
 
         private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

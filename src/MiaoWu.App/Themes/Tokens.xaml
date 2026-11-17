@@ -47,6 +47,8 @@
     <Color x:Key="Color.DiffHunk">#F4F6F8</Color>
     <Color x:Key="Color.FindMatch">#F6EFD9</Color>
     <Color x:Key="Color.Scrim">#331A1E23</Color>
+    <!-- 菜单卡片的发丝环：CSS `0 0 0 .5px #0000000A`，约 4% 黑，无模糊无偏移 -->
+    <Color x:Key="Color.MenuShadow">#0A000000</Color>
 
     <!-- 窗口按钮 -->
     <Color x:Key="Color.WindowButtonHover">#F0F2F4</Color>
@@ -81,6 +83,7 @@
     <SolidColorBrush x:Key="Brush.WarningSoft" Color="{StaticResource Color.WarningSoft}" />
     <SolidColorBrush x:Key="Brush.Danger" Color="{StaticResource Color.Danger}" />
     <SolidColorBrush x:Key="Brush.DangerSoft" Color="{StaticResource Color.DangerSoft}" />
+    <SolidColorBrush x:Key="Brush.MenuHairline" Color="{StaticResource Color.MenuShadow}" />
     <SolidColorBrush x:Key="Brush.Success" Color="{StaticResource Color.Success}" />
     <SolidColorBrush x:Key="Brush.Info" Color="{StaticResource Color.Info}" />
     <SolidColorBrush x:Key="Brush.DiffAdd" Color="{StaticResource Color.DiffAdd}" />
@@ -181,6 +184,7 @@
     <sys:Double x:Key="Metric.ScrollBar.Size">10</sys:Double>
     <sys:Double x:Key="Metric.ScrollThumb.Thickness">6</sys:Double>
     <sys:Double x:Key="Metric.Button.Primary.Height">28</sys:Double>
+    <sys:Double x:Key="Metric.Field.Height">36</sys:Double>
     <sys:Double x:Key="Metric.Hit.Min">24</sys:Double>
     <sys:Double x:Key="Metric.FocusRadius.Button">8</sys:Double>
     <sys:Double x:Key="Metric.FocusRadius.Row">9</sys:Double>
@@ -214,6 +218,11 @@
     <sys:Double x:Key="Metric.Notification.BottomCollapsed">18</sys:Double>
     <sys:Double x:Key="Metric.Notification.Gap">9</sys:Double>
 
+    <!-- 菜单卡片：小面积浮层，用 0.5px 发丝环代替弥散投影 -->
+    <sys:Double x:Key="Metric.Menu.MinWidth">180</sys:Double>
+    <sys:Double x:Key="Metric.Menu.RowHeight">30</sys:Double>
+    <sys:Double x:Key="Metric.Menu.Icon">14</sys:Double>
+
     <!-- 首次启动引导：主窗口内两栏，左品牌、右表单 -->
     <sys:Double x:Key="Metric.Onboarding.Icon">84</sys:Double>
     <sys:Double x:Key="Metric.Onboarding.Left.Width">320</sys:Double>
@@ -226,6 +235,9 @@
 
     <!-- 圆角 -->
     <CornerRadius x:Key="Radius.Card">8</CornerRadius>
+    <CornerRadius x:Key="Radius.Menu">10</CornerRadius>
+    <CornerRadius x:Key="Radius.MenuHairline">10.5</CornerRadius>
+    <CornerRadius x:Key="Radius.MenuItem">6</CornerRadius>
     <CornerRadius x:Key="Radius.Code">6</CornerRadius>
     <CornerRadius x:Key="Radius.Row">7</CornerRadius>
     <CornerRadius x:Key="Radius.Tree">5</CornerRadius>
@@ -266,7 +278,13 @@
     <Thickness x:Key="Pad.Button.NavAccent">9,0</Thickness>
     <Thickness x:Key="Pad.Segment">10,0</Thickness>
     <Thickness x:Key="Pad.ToolTip">8,5</Thickness>
+    <Thickness x:Key="Pad.Menu">5</Thickness>
+    <Thickness x:Key="Pad.MenuItem">10,0,10,0</Thickness>
+    <Thickness x:Key="Margin.MenuItem">0,1</Thickness>
+    <Thickness x:Key="Margin.MenuSeparator">10,4</Thickness>
+    <Thickness x:Key="Thickness.MenuHairline">0.5</Thickness>
     <Thickness x:Key="Pad.TextBox">8,6</Thickness>
+    <Thickness x:Key="Pad.Field">4,4</Thickness>
     <Thickness x:Key="Pad.Input">6,14,14,14</Thickness>
     <Thickness x:Key="Pad.Code">12,10</Thickness>
     <Thickness x:Key="Margin.H2">0,20,0,8</Thickness>
@@ -284,6 +302,8 @@
 
     <!-- GridLength：用于分隔条列宽 -->
     <GridLength x:Key="GridLength.Splitter">4</GridLength>
+    <!-- 菜单项图标槽：14（图标）+ 8（间距） -->
+    <GridLength x:Key="GridLength.Menu.Icon">22</GridLength>
 
     <!-- 动效 -->
     <sys:Double x:Key="Motion.PanelMs">180</sys:Double>

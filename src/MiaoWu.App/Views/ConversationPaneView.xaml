@@ -468,12 +468,25 @@
                     <Button.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="重命名"
-                                      Command="{Binding PlacementTarget.DataContext.RenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                      Command="{Binding PlacementTarget.DataContext.RenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Edit}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
                             <MenuItem Header="导出 Markdown / JSON"
-                                      Command="{Binding PlacementTarget.DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                      Command="{Binding PlacementTarget.DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Download}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
                             <Separator />
                             <MenuItem Header="删除会话"
-                                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                      Tag="Danger"
+                                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

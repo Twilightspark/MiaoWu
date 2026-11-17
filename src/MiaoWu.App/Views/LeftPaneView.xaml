@@ -22,34 +22,78 @@
         <!-- 行菜单同时供 hover 按钮左键与整行右键使用；x:Shared=False 让每个宿主拿到独立实例。 -->
         <ContextMenu x:Key="WorkspaceRowMenu" x:Shared="False">
             <MenuItem Header="{Binding PlacementTarget.DataContext.PinActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Pin}" />
+                </MenuItem.Icon>
+            </MenuItem>
             <MenuItem Header="{x:Static res:Strings.RenameWorkspace}"
-                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Edit}" />
+                </MenuItem.Icon>
+            </MenuItem>
             <MenuItem Header="{x:Static res:Strings.ClearWorkspaceSessions}"
-                      Command="{Binding PlacementTarget.DataContext.ClearSessionsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Tag="Danger"
+                      Command="{Binding PlacementTarget.DataContext.ClearSessionsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
+                </MenuItem.Icon>
+            </MenuItem>
             <Separator />
             <MenuItem Header="{x:Static res:Strings.DeleteWorkspace}"
-                      Command="{Binding PlacementTarget.DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Tag="Danger"
+                      Command="{Binding PlacementTarget.DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
+                </MenuItem.Icon>
+            </MenuItem>
         </ContextMenu>
 
         <ContextMenu x:Key="SessionRowMenu" x:Shared="False">
             <MenuItem Header="{Binding PlacementTarget.DataContext.PinActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Command="{Binding PlacementTarget.DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Pin}" />
+                </MenuItem.Icon>
+            </MenuItem>
             <MenuItem Header="{x:Static res:Strings.RenameSessionTitle}"
-                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Edit}" />
+                </MenuItem.Icon>
+            </MenuItem>
             <MenuItem Header="{Binding PlacementTarget.DataContext.ArchiveActionText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Command="{Binding PlacementTarget.DataContext.ToggleArchiveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Command="{Binding PlacementTarget.DataContext.ToggleArchiveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.ArrowDownToLine}" />
+                </MenuItem.Icon>
+            </MenuItem>
             <Separator />
             <MenuItem Header="{x:Static res:Strings.DeleteSession}"
-                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Tag="Danger"
+                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
+                </MenuItem.Icon>
+            </MenuItem>
         </ContextMenu>
 
         <ContextMenu x:Key="FileRowMenu" x:Shared="False">
             <MenuItem Header="{x:Static res:Strings.RenameFile}"
-                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Command="{Binding PlacementTarget.DataContext.BeginRenameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Edit}" />
+                </MenuItem.Icon>
+            </MenuItem>
             <Separator />
             <MenuItem Header="{x:Static res:Strings.DeleteFile}"
-                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      Tag="Danger"
+                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                <MenuItem.Icon>
+                    <Path Style="{StaticResource Icon.Menu}" Data="{StaticResource Ico.Trash}" />
+                </MenuItem.Icon>
+            </MenuItem>
         </ContextMenu>
 
         <Style x:Key="WorkspaceRowBorder" TargetType="Border">
@@ -190,7 +234,9 @@
 
         <!-- 工作区列表 + 每个工作区自己的会话/文件面板（外层可滚动） -->
         <Grid Grid.Row="3">
+            <!-- 覆盖式滚动条：轨道落在右侧 12px 留白内，出现/消失都不改变会话与文件列表的可用宽度。 -->
             <ScrollViewer x:Name="WorkspaceScroll"
+                          Style="{StaticResource ScrollViewer.Overlay}"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           PreviewMouseWheel="OnWorkspacePreviewMouseWheel"

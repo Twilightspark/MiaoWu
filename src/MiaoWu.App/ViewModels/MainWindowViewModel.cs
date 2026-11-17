@@ -51,6 +51,7 @@ namespace MiaoWu.App.ViewModels
         private bool _isOnboarding;
         private bool _hasPendingApproval;
         private bool _isExiting;
+        private bool _trayAvailable = true;
         private string _lastSaveError;
 
         public MainWindowViewModel(
@@ -156,6 +157,7 @@ namespace MiaoWu.App.ViewModels
                 now());
 
             Overlay = new OverlayViewModel();
+            ClosePrompt = new ClosePromptViewModel();
             Notifications = new ObservableCollection<NotificationViewModel>();
 
             ToggleRightPaneCommand = new RelayCommand(ToggleRightPane);
@@ -163,7 +165,6 @@ namespace MiaoWu.App.ViewModels
             CloseSettingsCommand = new RelayCommand(CloseSettings);
             NewSessionCommand = new RelayCommand(RequestNewSession);
             ExportSessionCommand = new RelayCommand(() => ConversationCommand("export"));
-            ShowLogsCommand = new RelayCommand(ShowLogs);
             ExitCommand = new RelayCommand(RequestExit);
 
             Left.StateChanged += OnChildStateChanged;
@@ -231,6 +232,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(Left));
             OnPropertyChanged(nameof(Canvas));
             OnPropertyChanged(nameof(Overlay));
+            OnPropertyChanged(nameof(ClosePrompt));
             OnPropertyChanged(nameof(Conversation));
             OnPropertyChanged(nameof(Settings));
             OnPropertyChanged(nameof(Onboarding));
@@ -258,6 +260,9 @@ namespace MiaoWu.App.ViewModels
 
         public OverlayViewModel Overlay { get; }
 
+        /// <summary>关闭确认浮层；仅当 CloseAction=Ask 时打开。</summary>
+        public ClosePromptViewModel ClosePrompt { get; }
+
         public ConversationViewModel Conversation { get; }
 
         public SettingsViewModel Settings { get; }
@@ -281,8 +286,6 @@ namespace MiaoWu.App.ViewModels
         public RelayCommand NewSessionCommand { get; }
 
         public RelayCommand ExportSessionCommand { get; }
-
-        public RelayCommand ShowLogsCommand { get; }
 
         public RelayCommand ExitCommand { get; }
 
@@ -309,9 +312,52 @@ namespace MiaoWu.App.ViewModels
             private set { SetProperty(ref _isExiting, value); }
         }
 
-        public bool KeepRunningInTray
+        public CloseWindowAction CloseAction
         {
-            get { return _services != null && _services.Settings.Agent.KeepRunningInTray; }
+            get
+            {
+                AgentSettings agent = _services != null ? _services.Settings.Agent : _settings.Agent;
+                return agent == null ? CloseWindowAction.Ask : agent.CloseAction;
+            }
+        }
+
+        /// <summary>
+        /// 记住关闭选择并立即落盘。服务未装配（离屏快照）时只更新内存模型，
+        /// 不写 config.json；设置页打开时同步刷新下拉选中项。
+        /// </summary>
+        public void RememberCloseAction(CloseWindowAction action)
+        {
+            if (action == CloseWindowAction.Ask)
+            {
+                return;
+            }
+
+            if (_services != null)
+            {
+                _services.Settings.Agent.CloseAction = action;
+                try
+                {
+                    _services.SaveSettings();
+                }
+                catch (Exception exception)
+                {
+                    if (_services.Logger != null)
+                    {
+                        _services.Logger.Warn(
+                            "app.closeAction",
+                            "保存关闭行为失败：" + exception.Message);
+                    }
+                }
+            }
+            else
+            {
+                _settings.Agent.CloseAction = action;
+            }
+
+            if (Settings != null)
+            {
+                Settings.NotifyCloseActionChanged();
+            }
         }
 
         public bool IsRightPaneCollapsed
@@ -602,6 +648,32 @@ namespace MiaoWu.App.ViewModels
         public void NotifyHiddenToTray()
         {
             HiddenToTray?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>托盘图标是否可用；低完整性进程由 AppHost 置为 false。</summary>
+        public bool TrayAvailable
+        {
+            get { return _trayAvailable; }
+        }
+
+        public void SetTrayAvailability(bool available)
+        {
+            _trayAvailable = available;
+            OnPropertyChanged(nameof(TrayAvailable));
+            ClosePrompt.SetTrayAvailability(available);
+        }
+
+        /// <summary>启动时提示托盘不可用及替代入口；只在服务已装配时显示。</summary>
+        public void NotifyTrayUnavailable()
+        {
+            AddNotification(new NotificationViewModel(
+                "系统托盘图标不可用",
+                "当前以受限权限运行（例如从 VS Code 或沙箱终端启动），Windows 不会显示托盘图标。"
+                + "关闭窗口将最小化到任务栏。请从资源管理器直接运行 MiaoWu.exe；"
+                + "若图标仍收在任务栏 ^ 中，可在“设置 > 个性化 > 任务栏 > 其他系统托盘图标”打开 MiaoWu。",
+                false,
+                RemoveNotification,
+                autoDismissAfter: TimeSpan.FromSeconds(12)));
         }
 
         /// <summary>窗口隐藏时断开重量级订阅，只保留左栏由 SessionChanged 更新。</summary>
@@ -1056,15 +1128,6 @@ namespace MiaoWu.App.ViewModels
         public bool HasNotifications
         {
             get { return Notifications.Count > 0; }
-        }
-
-        private void ShowLogs()
-        {
-            ShowSettings();
-            if (Settings != null)
-            {
-                Settings.SelectPage(SettingsPage.Data);
-            }
         }
 
         private void ConversationCommand(string command)

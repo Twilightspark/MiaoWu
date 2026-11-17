@@ -8,7 +8,7 @@ using MiaoWu.Infrastructure.Storage;
 namespace MiaoWu.Infrastructure.Providers
 {
     /// <summary>
-    /// data/providers.json 的读写。损坏时备份并回退到默认目录；
+    /// data/providers.json 的读写。文件缺失、损坏或为空时返回空目录，不自动种预置供应商；
     /// 保存时保留未知根字段，避免版本降级丢配置。
     /// </summary>
     public sealed class ProviderConfigStore
@@ -36,7 +36,7 @@ namespace MiaoWu.Infrastructure.Providers
             if (!File.Exists(_filePath))
             {
                 _root = null;
-                return ProviderPresets.CreateDefault();
+                return new ProviderCatalog();
             }
 
             JsonValue root;
@@ -48,14 +48,14 @@ namespace MiaoWu.Infrastructure.Providers
             {
                 AtomicFile.BackupCorrupt(_filePath, "corrupt");
                 _root = null;
-                return ProviderPresets.CreateDefault();
+                return new ProviderCatalog();
             }
 
             if (root == null || root.Kind != JsonKind.Object)
             {
                 AtomicFile.BackupCorrupt(_filePath, "corrupt");
                 _root = null;
-                return ProviderPresets.CreateDefault();
+                return new ProviderCatalog();
             }
 
             _root = root;
@@ -76,11 +76,6 @@ namespace MiaoWu.Infrastructure.Providers
                         catalog.Providers.Add(provider);
                     }
                 }
-            }
-
-            if (catalog.Providers.Count == 0)
-            {
-                return ProviderPresets.CreateDefault();
             }
 
             return catalog;

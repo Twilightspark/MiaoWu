@@ -1,14 +1,14 @@
-; MiaoWu v0.1.2 — Inno Setup 6 脚本
+; MiaoWu v0.2.0 — Inno Setup 6 脚本
 ; 目标：每用户安装（不需要管理员）、.NET Framework 4.8 检测、开始菜单、
 ; 卸载时询问是否保留用户目录\.miaowu 数据。
 ;
 ; 构建：
 ;   1. scripts\publish.ps1 -Configuration Release
 ;   2. 安装 Inno Setup 6，运行 ISCC.exe installer\MiaoWu.iss
-; 产物：.artifacts\installer\MiaoWu-0.1.2-setup.exe
+; 产物：.artifacts\installer\MiaoWu-0.2.0-setup.exe
 
 #define MyAppName "MiaoWu"
-#define MyAppVersion "0.1.2"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "MiaoWu"
 #define MyAppExeName "MiaoWu.exe"
 #define MyAppDataDir "{userprofile}\.miaowu"

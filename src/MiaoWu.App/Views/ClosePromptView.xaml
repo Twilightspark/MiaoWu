@@ -1,0 +1,69 @@
+<UserControl x:Class="MiaoWu.App.Views.ClosePromptView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignWidth="1440"
+             d:DesignHeight="900"
+             x:Name="Root"
+             Focusable="False"
+             Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"
+             AutomationProperties.AutomationId="ClosePrompt"
+             AutomationProperties.Name="关闭确认">
+
+    <Grid>
+        <Border Background="{DynamicResource Brush.Scrim}"
+                MouseLeftButtonDown="OnScrimClick" />
+
+        <Border Width="430"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource Brush.Canvas}"
+                BorderBrush="{DynamicResource Brush.Line2}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource Radius.Notification}">
+            <StackPanel Margin="22,20,22,18">
+                <TextBlock Text="关闭 MiaoWu？"
+                           Style="{StaticResource Text.Section}" />
+
+                <TextBlock Margin="0,8,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding Description}"
+                           Style="{StaticResource Text.Body}"
+                           Foreground="{DynamicResource Brush.Text2}" />
+
+                <CheckBox Margin="0,14,0,0"
+                          Content="记住我的选择，下次不再询问"
+                          IsChecked="{Binding RememberChoice}"
+                          AutomationProperties.AutomationId="ClosePromptRemember" />
+
+                <StackPanel Margin="0,18,0,0"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                    <Button Content="取消"
+                            Style="{StaticResource Button.Ghost}"
+                            Command="{Binding CancelCommand}"
+                            AutomationProperties.AutomationId="ClosePromptCancel"
+                            AutomationProperties.Name="取消关闭" />
+
+                    <Button Margin="6,0,0,0"
+                            Content="退出应用"
+                            Style="{StaticResource Button.Ghost}"
+                            Foreground="{DynamicResource Brush.Danger}"
+                            Command="{Binding ExitCommand}"
+                            AutomationProperties.AutomationId="ClosePromptExit"
+                            AutomationProperties.Name="退出应用" />
+
+                    <Button x:Name="MinimizeButton"
+                            Margin="6,0,0,0"
+                            Content="{Binding MinimizeLabel}"
+                            Style="{StaticResource Button.Primary}"
+                            Command="{Binding MinimizeToTrayCommand}"
+                            AutomationProperties.AutomationId="ClosePromptMinimize"
+                            AutomationProperties.Name="{Binding MinimizeAutomationName}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

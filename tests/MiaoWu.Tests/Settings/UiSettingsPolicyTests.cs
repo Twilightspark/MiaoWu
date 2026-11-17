@@ -158,5 +158,35 @@ namespace MiaoWu.Tests.Settings
             Assert.Equal(0, settings.Ui.DocumentScrollOffset);
             Assert.Equal(0, settings.Ui.OpenTabs[0].ScrollOffset);
         }
+
+        [Fact]
+        public void ReservedThemeAndLanguageDefaultToLightAndChinese()
+        {
+            AppSettings settings = UiSettingsPolicy.Normalize(null, Limits);
+
+            Assert.Equal("light", settings.Ui.Theme);
+            Assert.Equal("zh-CN", settings.Ui.Language);
+        }
+
+        [Theory]
+        [InlineData("dark", "en-US", "dark", "en-US")]
+        [InlineData("SYSTEM", "ZH-cn", "system", "zh-CN")]
+        [InlineData("neon", "fr-FR", "light", "zh-CN")]
+        [InlineData(null, null, "light", "zh-CN")]
+        public void ReservedThemeAndLanguageAreValidated(
+            string theme,
+            string language,
+            string expectedTheme,
+            string expectedLanguage)
+        {
+            var settings = new AppSettings();
+            settings.Ui.Theme = theme;
+            settings.Ui.Language = language;
+
+            UiSettingsPolicy.Normalize(settings, Limits);
+
+            Assert.Equal(expectedTheme, settings.Ui.Theme);
+            Assert.Equal(expectedLanguage, settings.Ui.Language);
+        }
     }
 }

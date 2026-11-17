@@ -60,14 +60,24 @@ namespace MiaoWu.Tests.Providers
         }
 
         [Fact]
-        public void CorruptFileFallsBackToPresets()
+        public void MissingFileReturnsEmptyCatalog()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "miaowu-providers-" + Guid.NewGuid().ToString("N") + ".json");
+            ProviderCatalog catalog = new ProviderConfigStore(path).Load();
+
+            Assert.Empty(catalog.Providers);
+            Assert.False(File.Exists(path));
+        }
+
+        [Fact]
+        public void CorruptFileFallsBackToEmptyCatalog()
         {
             string path = Path.Combine(Path.GetTempPath(), "miaowu-providers-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {
                 File.WriteAllText(path, "{ not json", System.Text.Encoding.UTF8);
                 ProviderCatalog catalog = new ProviderConfigStore(path).Load();
-                Assert.True(catalog.Providers.Count >= 3);
+                Assert.Empty(catalog.Providers);
             }
             finally
             {

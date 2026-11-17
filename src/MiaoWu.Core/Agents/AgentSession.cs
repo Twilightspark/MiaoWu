@@ -770,7 +770,7 @@ namespace MiaoWu.Core.Agents
                     {
                         Kind = AgentErrorKind.Auth,
                         Code = "missing_api_key",
-                        Message = "尚未配置 API Key。请打开设置 → 模型与 Provider 填写密钥。",
+                        Message = "尚未配置 API Key。请打开设置 → 模型填写密钥。",
                         Retryable = false
                     });
                 }
@@ -1382,7 +1382,7 @@ namespace MiaoWu.Core.Agents
                     throw new AgentRunException(new AgentError
                     {
                         Kind = AgentErrorKind.NotFound,
-                        Message = "没有可用的模型。请打开设置 → 模型与 Provider 添加模型。",
+                        Message = "没有可用的模型。请打开设置 → 模型添加供应商与模型。",
                         Retryable = false
                     });
                 }

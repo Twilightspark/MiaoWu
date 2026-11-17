@@ -25,7 +25,8 @@ namespace MiaoWu.App.ViewModels
             Action<string, ToolApprovalOutcome> resolveApproval = null,
             string sessionId = null,
             string requestId = null,
-            bool canApproveForSession = false)
+            bool canApproveForSession = false,
+            TimeSpan? autoDismissAfter = null)
         {
             Id = Guid.NewGuid().ToString("N");
             Title = title;
@@ -52,7 +53,7 @@ namespace MiaoWu.App.ViewModels
             {
                 _timer = new DispatcherTimer(DispatcherPriority.Background)
                 {
-                    Interval = TimeSpan.FromSeconds(4)
+                    Interval = autoDismissAfter ?? TimeSpan.FromSeconds(4)
                 };
                 _timer.Tick += OnTimerTick;
                 _timer.Start();

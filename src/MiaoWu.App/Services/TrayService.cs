@@ -18,12 +18,16 @@ namespace MiaoWu.App.Services
 
         public TrayService(string tooltip)
         {
-            Icon icon = LoadIcon();
-            string text = string.IsNullOrWhiteSpace(tooltip) ? "MiaoWu" : tooltip;
-            if (text.Length > 63)
+            // 低完整性进程的 Shell_NotifyIcon 会被系统拒绝（Access Denied），
+            // 此时不创建幽灵 NotifyIcon，由 AppHost 降级为“最小化到任务栏”。
+            IsAvailable = ProcessIntegrity.IsAtLeastMedium();
+            if (!IsAvailable)
             {
-                text = text.Substring(0, 63);
+                return;
             }
+
+            Icon icon = LoadIcon();
+            string text = NormalizeTooltip(tooltip);
 
             var menu = new ContextMenuStrip();
             _showItem = new ToolStripMenuItem("打开主窗口");
@@ -64,6 +68,9 @@ namespace MiaoWu.App.Services
 
         public event EventHandler ExitRequested;
 
+        /// <summary>当前进程是否具备注册托盘图标的权限；false 时为低完整性/受限环境。</summary>
+        public bool IsAvailable { get; private set; }
+
         public void ShowBalloon(string title, string text)
         {
             try
@@ -72,6 +79,23 @@ namespace MiaoWu.App.Services
                 {
                     _icon.ShowBalloonTip(2500, title, text, ToolTipIcon.Info);
                 }
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>更新悬停提示；Win7 的 NotifyIcon.Text 上限 63 字符，超长截断。</summary>
+        public void UpdateTooltip(string tooltip)
+        {
+            if (_disposed || _icon == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _icon.Text = NormalizeTooltip(tooltip);
             }
             catch (Exception)
             {
@@ -123,6 +147,12 @@ namespace MiaoWu.App.Services
             }
 
             return SystemIcons.Application;
+        }
+
+        private static string NormalizeTooltip(string tooltip)
+        {
+            string text = string.IsNullOrWhiteSpace(tooltip) ? "MiaoWu" : tooltip;
+            return text.Length > 63 ? text.Substring(0, 63) : text;
         }
     }
 }
