@@ -899,11 +899,13 @@
                                     <Button Margin="0,24,0,0"
                                             MinWidth="120"
                                             HorizontalAlignment="Center"
-                                            Content="检查更新"
                                             Style="{StaticResource Button.Primary}"
-                                            Foreground="{DynamicResource Brush.White}"
                                             Command="{Binding CheckUpdateCommand}"
-                                            AutomationProperties.Name="检查更新" />
+                                            AutomationProperties.Name="检查更新">
+                                        <!-- 文字显式取“主题色表面上的白字”，不依赖按钮样式的 Foreground 继承。 -->
+                                        <TextBlock Text="检查更新"
+                                                   Foreground="{StaticResource Brush.OnAccent}" />
+                                    </Button>
                                     <TextBlock Margin="0,8,0,0"
                                                HorizontalAlignment="Center"
                                                Text="{Binding UpdateStatus}"
