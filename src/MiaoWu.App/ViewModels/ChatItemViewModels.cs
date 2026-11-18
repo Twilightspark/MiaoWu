@@ -111,6 +111,7 @@ namespace MiaoWu.App.ViewModels
         private bool _isFailed;
         private bool _isInterrupted;
         private bool _hasThinking;
+        private bool _isThinkingMoved;
         private bool _isThinkingExpanded;
         private bool _isMarkdownDirty;
         private bool _continuesWithTools;
@@ -141,6 +142,12 @@ namespace MiaoWu.App.ViewModels
         public bool HasText
         {
             get { return _builder.Length > 0; }
+        }
+
+        /// <summary>裁掉尾部空白后仍有正文；只有换行的过程步骤不应占一行。</summary>
+        public bool HasVisibleText
+        {
+            get { return Text.Length > 0; }
         }
 
         public bool ShowRetry
@@ -192,7 +199,34 @@ namespace MiaoWu.App.ViewModels
         public bool HasThinking
         {
             get { return _hasThinking; }
-            private set { SetProperty(ref _hasThinking, value); }
+            private set
+            {
+                if (SetProperty(ref _hasThinking, value))
+                {
+                    OnPropertyChanged(nameof(ShowThinking));
+                }
+            }
+        }
+
+        /// <summary>
+        /// 最后一轮的思考会移到执行过程组里单独成行；移走后正文行不再重复渲染思考。
+        /// </summary>
+        public bool IsThinkingMoved
+        {
+            get { return _isThinkingMoved; }
+            set
+            {
+                if (SetProperty(ref _isThinkingMoved, value))
+                {
+                    OnPropertyChanged(nameof(ShowThinking));
+                }
+            }
+        }
+
+        /// <summary>正文行是否显示思考折叠块；最后一个答案的思考归属过程组。</summary>
+        public bool ShowThinking
+        {
+            get { return _hasThinking && !_isThinkingMoved; }
         }
 
         public bool IsThinkingExpanded
@@ -271,6 +305,7 @@ namespace MiaoWu.App.ViewModels
             _isMarkdownDirty = true;
             OnPropertyChanged(nameof(Text));
             OnPropertyChanged(nameof(HasText));
+            OnPropertyChanged(nameof(HasVisibleText));
             OnPropertyChanged(nameof(ShowFooter));
         }
 
@@ -339,6 +374,7 @@ namespace MiaoWu.App.ViewModels
             IsMarkdownDirty = true;
             OnPropertyChanged(nameof(Text));
             OnPropertyChanged(nameof(HasText));
+            OnPropertyChanged(nameof(HasVisibleText));
             OnPropertyChanged(nameof(HasError));
             OnPropertyChanged(nameof(ShowRetry));
             OnPropertyChanged(nameof(ShowFooter));
@@ -533,6 +569,52 @@ namespace MiaoWu.App.ViewModels
             return string.IsNullOrWhiteSpace(message.ProviderId)
                 ? message.ModelId
                 : message.ProviderId + "/" + message.ModelId;
+        }
+    }
+
+    /// <summary>
+    /// 最后一轮答案里的思考：从正文行里拆出来，作为执行过程组的成员单独一行。
+    /// 这样组收起后思考跟着“已完成”一起收起，不会在答案上方留一条孤立的思考行。
+    /// </summary>
+    public sealed class ProcessThinkingViewModel : ChatItemViewModel
+    {
+        private bool _isThinkingExpanded;
+
+        public ProcessThinkingViewModel(
+            AssistantChatItemViewModel owner,
+            string text,
+            string preview,
+            DateTimeOffset timestamp)
+            : base(timestamp)
+        {
+            Owner = owner;
+            ThinkingText = AssistantChatItemViewModel.TrimTrailingBlankLines(text);
+            ThinkingPreview = preview ?? string.Empty;
+            ToggleThinkingCommand = new RelayCommand(() => IsThinkingExpanded = !IsThinkingExpanded);
+        }
+
+        public AssistantChatItemViewModel Owner { get; }
+
+        public string ThinkingText { get; }
+
+        public string ThinkingPreview { get; }
+
+        public bool IsThinkingExpanded
+        {
+            get { return _isThinkingExpanded; }
+            set { SetProperty(ref _isThinkingExpanded, value); }
+        }
+
+        public RelayCommand ToggleThinkingCommand { get; }
+
+        public override string AutomationName
+        {
+            get
+            {
+                return string.IsNullOrWhiteSpace(ThinkingPreview)
+                    ? "思考"
+                    : "思考：" + ThinkingPreview;
+            }
         }
     }
 
@@ -1265,6 +1347,12 @@ namespace MiaoWu.App.ViewModels
 
             foreach (ChatItemViewModel member in _members)
             {
+                if (member is ProcessThinkingViewModel)
+                {
+                    thinking++;
+                    continue;
+                }
+
                 var assistant = member as AssistantChatItemViewModel;
                 if (assistant != null)
                 {

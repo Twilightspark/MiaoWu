@@ -109,6 +109,8 @@ namespace MiaoWu.App.ViewModels
             new Dictionary<string, ToolCardViewModel>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<ChatItemViewModel, ProcessGroupViewModel> _groupOf =
             new Dictionary<ChatItemViewModel, ProcessGroupViewModel>();
+        private readonly Dictionary<AssistantChatItemViewModel, ProcessThinkingViewModel> _thinkingRows =
+            new Dictionary<AssistantChatItemViewModel, ProcessThinkingViewModel>();
         private readonly DispatcherTimer _markdownTimer;
         private readonly DispatcherTimer _clockTimer;
 
@@ -681,6 +683,7 @@ namespace MiaoWu.App.ViewModels
                 _assistantItems.Clear();
                 _toolCards.Clear();
                 _groupOf.Clear();
+                _thinkingRows.Clear();
                 _openGroup = null;
                 ApplySessionFlags(false, false);
                 StatusText = "打开会话失败：" + exception.Message;
@@ -724,6 +727,7 @@ namespace MiaoWu.App.ViewModels
             _assistantItems.Clear();
             _toolCards.Clear();
             _groupOf.Clear();
+            _thinkingRows.Clear();
             _openGroup = null;
             IsRunning = false;
             ResetSessionClock();
@@ -950,6 +954,16 @@ namespace MiaoWu.App.ViewModels
             }
 
             int index = Items.IndexOf(assistant);
+            ProcessThinkingViewModel thinkingRow;
+            if (index > 0 && _thinkingRows.TryGetValue(assistant, out thinkingRow))
+            {
+                int thinkingIndex = Items.IndexOf(thinkingRow);
+                if (thinkingIndex >= 0 && thinkingIndex < index)
+                {
+                    index = thinkingIndex;
+                }
+            }
+
             if (index >= 0)
             {
                 // 过程组可能在删除成员时同步移除组头；每轮重算目标下标，别按旧 count 删到别人。
@@ -1140,6 +1154,7 @@ namespace MiaoWu.App.ViewModels
             _assistantItems.Clear();
             _toolCards.Clear();
             _groupOf.Clear();
+            _thinkingRows.Clear();
             _openGroup = null;
 
             _title = snapshot.Title;
@@ -1276,6 +1291,7 @@ namespace MiaoWu.App.ViewModels
                     && _assistantItems.TryGetValue(cancelled.AssistantMessageId, out assistant))
                 {
                     assistant.MarkInterrupted();
+                    MoveFinalThinking(assistant);
                 }
 
                 CloseProcessGroup(true, cancelled.Timestamp, false, true);
@@ -1296,6 +1312,7 @@ namespace MiaoWu.App.ViewModels
                     && _assistantItems.TryGetValue(failed.AssistantMessageId, out assistant))
                 {
                     assistant.MarkFailed(message);
+                    MoveFinalThinking(assistant);
                     CloseProcessGroup(true, failed.Timestamp, true);
                     AddFailedNotice(failed.Error, failed.AssistantMessageId);
                 }
@@ -1760,6 +1777,52 @@ namespace MiaoWu.App.ViewModels
         // ---------------------------------------------------------------
 
         /// <summary>
+        /// 最后一轮答案里的思考不留在正文行上：复制成过程组的一行，正文行只留答案。
+        /// 组头收回「已完成」时思考一起收起，展开时它排在这一轮过程成员的末尾。
+        /// </summary>
+        private void MoveFinalThinking(AssistantChatItemViewModel assistant)
+        {
+            if (assistant == null || !assistant.HasThinking || assistant.IsThinkingMoved)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(assistant.ThinkingText))
+            {
+                return;
+            }
+
+            ProcessThinkingViewModel row;
+            if (!_thinkingRows.TryGetValue(assistant, out row))
+            {
+                row = new ProcessThinkingViewModel(
+                    assistant,
+                    assistant.ThinkingText,
+                    assistant.ThinkingPreview,
+                    assistant.Timestamp);
+                row.IsThinkingExpanded = assistant.IsThinkingExpanded;
+                int index = Items.IndexOf(assistant);
+                Items.Insert(index < 0 ? Items.Count : index, row);
+                _thinkingRows[assistant] = row;
+            }
+
+            assistant.IsThinkingMoved = true;
+
+            ProcessGroupViewModel group = _openGroup;
+            if (group == null)
+            {
+                group = new ProcessGroupViewModel(row.Timestamp, IsRunning);
+                group.Emptied += OnGroupEmptied;
+                int index = Items.IndexOf(row);
+                Items.Insert(index < 0 ? Items.Count : index, group);
+                _openGroup = group;
+            }
+
+            group.Add(row);
+            _groupOf[row] = group;
+        }
+
+        /// <summary>
         /// 助手行刚建出来时还不知道它会不会以工具调用收尾；Apply / 落定后调用这里，
         /// 是过程就收进当前组，是最终答案就关掉当前组。
         /// </summary>
@@ -1789,12 +1852,14 @@ namespace MiaoWu.App.ViewModels
 
                 _groupOf.Remove(assistant);
                 existing.Remove(assistant);
+                MoveFinalThinking(assistant);
                 CloseProcessGroup(true, closeAt);
                 return;
             }
 
             if (!assistant.IsProcessOnly)
             {
+                MoveFinalThinking(assistant);
                 CloseProcessGroup(true, closeAt);
                 return;
             }
@@ -1885,6 +1950,7 @@ namespace MiaoWu.App.ViewModels
             _assistantItems.Clear();
             _toolCards.Clear();
             _groupOf.Clear();
+            _thinkingRows.Clear();
             _openGroup = null;
             OnPropertyChanged(nameof(IsEmpty));
         }
@@ -2019,6 +2085,12 @@ namespace MiaoWu.App.ViewModels
             if (tool != null && tool.CallId != null)
             {
                 _toolCards.Remove(tool.CallId);
+            }
+
+            var thinking = item as ProcessThinkingViewModel;
+            if (thinking != null)
+            {
+                _thinkingRows.Remove(thinking.Owner);
             }
         }
 
