@@ -146,6 +146,8 @@
     <sys:Double x:Key="Font.Chip.Line">20</sys:Double>
     <sys:Double x:Key="Font.Reasoning.Line">20</sys:Double>
     <sys:Double x:Key="Font.Empty.Line">20</sys:Double>
+    <!-- 过程组头：DSH 的 TurnProcess 是 24 行高，比正文行高多 2 -->
+    <sys:Double x:Key="Font.ChatProcess.Line">24</sys:Double>
 
     <!-- 窗口与布局 -->
     <sys:Double x:Key="Metric.Default.Window.Width">1440</sys:Double>
@@ -173,6 +175,8 @@
 
     <!-- 会话消息流：用户右气泡 / 助手左正文 / 24 高过程行 -->
     <sys:Double x:Key="Metric.Chat.Row">24</sys:Double>
+    <!-- DSH 的 TurnProcess 控件：24 文字行 + 8 底距 + 1 发丝线 = 33 -->
+    <sys:Double x:Key="Metric.Chat.ProcessHeader">33</sys:Double>
     <sys:Double x:Key="Metric.Chat.Icon">14</sys:Double>
     <sys:Double x:Key="Metric.Chat.Chevron">12</sys:Double>
     <sys:Double x:Key="Metric.Chat.StatusDot">6</sys:Double>
@@ -310,6 +314,7 @@
     <!-- 执行过程组头与组内成员：成员缩进 22（16 图标 + 6 间距），与 DSH 的组体对齐 -->
     <Thickness x:Key="Margin.Chat.Process">14,6,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.ProcessMember">36,4,14,0</Thickness>
+    <Thickness x:Key="Thickness.Chat.ProcessRule">0,0,0,1</Thickness>
     <Thickness x:Key="Margin.Chat.Notice">14,10,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Caption">0,0,0,4</Thickness>
     <Thickness x:Key="Margin.Chat.Footer">0,2,0,0</Thickness>

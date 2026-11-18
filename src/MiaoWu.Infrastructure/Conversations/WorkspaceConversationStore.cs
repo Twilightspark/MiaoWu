@@ -952,6 +952,7 @@ namespace MiaoWu.Infrastructure.Conversations
             }
 
             message.Status = AgentMessageStatus.Completed;
+            message.CompletedAt = timestamp;
             message.StopReason = ConversationJson.ParseStopReason(
                 ConversationJson.GetString(evt, "stopReason"));
 

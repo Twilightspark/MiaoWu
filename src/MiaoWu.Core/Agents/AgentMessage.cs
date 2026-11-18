@@ -109,6 +109,12 @@ namespace MiaoWu.Core.Agents
 
         public DateTimeOffset CreatedAt { get; set; }
 
+        /// <summary>
+        /// 助手消息完成 / 失败的落定时刻。运行时由会话写入、回放时由
+        /// <c>message.completed</c> 事件时间补齐；旧数据可能为空，调用方回退 <see cref="CreatedAt"/>。
+        /// </summary>
+        public DateTimeOffset? CompletedAt { get; set; }
+
         public TokenUsage Usage { get; set; }
 
         public StopReason? StopReason { get; set; }
@@ -133,6 +139,7 @@ namespace MiaoWu.Core.Agents
                 ProviderId = ProviderId,
                 ModelId = ModelId,
                 CreatedAt = CreatedAt,
+                CompletedAt = CompletedAt,
                 Usage = Usage == null ? null : Usage.Clone(),
                 StopReason = StopReason,
                 ErrorMessage = ErrorMessage,

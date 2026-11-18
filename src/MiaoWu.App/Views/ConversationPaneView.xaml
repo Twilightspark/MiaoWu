@@ -246,6 +246,57 @@
             </Style.Triggers>
         </Style>
 
+        <!-- DSH 的 TurnProcess 行：没有图标、没有底色，只有一行 tertiary 状态文字 + 14 箭头。
+             容器 33 高 = 24 文字行 + 8 底距 + 1 发丝线；悬停只把文字抬到 secondary。 -->
+        <Style x:Key="Chat.TurnRow" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Transparent}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,0,0,8" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 过程组头的箭头：始终可见；展开时旋转 180°，与 DSH 的 data-open 一致 -->
+        <Style x:Key="Chat.TurnChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
+            <Setter Property="Width" Value="{StaticResource Metric.Chat.Icon}" />
+            <Setter Property="Height" Value="{StaticResource Metric.Chat.Icon}" />
+            <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeDown}" />
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter Property="LayoutTransform">
+                        <Setter.Value>
+                            <RotateTransform Angle="180" />
+                        </Setter.Value>
+                    </Setter>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- 思考行的箭头：随思考开合换向；收起时只在悬停出现 -->
         <Style x:Key="Chat.ThinkingChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
             <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
@@ -611,77 +662,45 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- 执行过程组：一行摘要 + 可展开的成员行。成员是平铺在列表里的助手步骤/工具卡，
-             组收起时它们只是折叠成 0 高，因此重试与快照回放仍按原顺序工作。 -->
+        <!-- 执行过程组：DSH 的 TurnProcess 行（状态 + 用时 + 箭头）+ 可展开的成员行。
+             成员是平铺在列表里的助手步骤/工具卡，组收起时折叠成 0 高，因此重试与快照回放仍按原顺序工作。 -->
         <DataTemplate DataType="{x:Type vm:ProcessGroupViewModel}">
             <StackPanel Margin="{StaticResource Margin.Chat.Process}">
-                <Button x:Name="ProcessRow"
-                        Style="{StaticResource Chat.Row}"
-                        Command="{Binding ToggleExpandedCommand}"
-                        ToolTip="展开或收起执行过程"
-                        AutomationProperties.Name="{Binding AutomationName}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                <Border x:Name="ProcessHeader"
+                        Height="{StaticResource Metric.Chat.ProcessHeader}"
+                        BorderThickness="{StaticResource Thickness.Chat.ProcessRule}"
+                        BorderBrush="{DynamicResource Brush.Line3}">
+                    <Button x:Name="ProcessRow"
+                            Style="{StaticResource Chat.TurnRow}"
+                            Command="{Binding ToggleExpandedCommand}"
+                            ToolTip="{Binding HeaderToolTip}"
+                            AutomationProperties.Name="{Binding AutomationName}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ProcessLabel"
+                                       VerticalAlignment="Center"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                       TextWrapping="NoWrap"
+                                       AutomationProperties.LiveSetting="Polite">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+                                        <Setter Property="FontSize" Value="{StaticResource Font.Body.Size}" />
+                                        <Setter Property="LineHeight" Value="{StaticResource Font.ChatProcess.Line}" />
+                                        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+                                    </Style>
+                                </TextBlock.Style>
+                                <Run Text="{Binding HeaderLabel, Mode=OneWay}" />
+                                <Run FontFamily="{StaticResource Font.Family.Code}"
+                                     Text="{Binding HeaderDuration, Mode=OneWay}" />
+                            </TextBlock>
 
-                        <Grid Width="{StaticResource Metric.Icon}"
-                              Height="{StaticResource Metric.Icon}">
-                            <Path x:Name="ProcessToolIcon"
-                                  Style="{StaticResource Chat.Icon}"
-                                  Data="{Binding FirstToolName, Converter={StaticResource ToolIcon}}"
-                                  Visibility="{Binding HasTool, Converter={StaticResource BoolToVisibility}}" />
-                            <Path x:Name="ProcessThinkIcon"
-                                  Style="{StaticResource Chat.Icon}"
-                                  Data="{StaticResource Ico.Think}"
-                                  Visibility="{Binding HasTool, Converter={StaticResource InverseBoolToVisibility}}" />
-                        </Grid>
-
-                        <TextBlock Grid.Column="1"
-                                   Margin="6,0,8,0"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding Summary}"
-                                   Style="{StaticResource Text.Body}"
-                                   Foreground="{DynamicResource Brush.Text2}"
-                                   TextTrimming="CharacterEllipsis" />
-
-                        <TextBlock Grid.Column="2"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding StatusText}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Meta}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding StatusText}" Value="运行中">
-                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding StatusText}" Value="有失败">
-                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Danger}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-
-                        <Path Grid.Column="3"
-                              Margin="6,0,0,0"
-                              Style="{StaticResource Chat.Chevron}" />
-                    </Grid>
-                </Button>
+                            <Path x:Name="ProcessChevron"
+                                  Margin="4,0,0,0"
+                                  Style="{StaticResource Chat.TurnChevron}" />
+                        </StackPanel>
+                    </Button>
+                </Border>
             </StackPanel>
-            <DataTemplate.Triggers>
-                <!-- 悬停时活动图标淡出、箭头淡入（DSH 的 DisclosureRow 做法） -->
-                <DataTrigger Binding="{Binding IsMouseOver, ElementName=ProcessRow}" Value="True">
-                    <Setter TargetName="ProcessToolIcon" Property="Opacity" Value="0" />
-                    <Setter TargetName="ProcessThinkIcon" Property="Opacity" Value="0" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=ProcessRow}" Value="True">
-                    <Setter TargetName="ProcessToolIcon" Property="Opacity" Value="0" />
-                    <Setter TargetName="ProcessThinkIcon" Property="Opacity" Value="0" />
-                </DataTrigger>
-            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- 错误/提示卡：只留一条左侧色条与两行字，不再占一张大卡片 -->

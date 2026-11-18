@@ -1004,15 +1004,21 @@ namespace MiaoWu.App.ViewModels
 
         private bool _isExpanded;
         private string _summary = "执行过程";
-        private string _statusText;
-        private string _firstToolName;
-        private bool _hasTool;
+        private string _headerLabel = "运行中，用时 ";
+        private string _headerDuration = "1秒";
+        private bool _isCompleted;
+        private bool _failed;
+        private bool _stopped;
+        private readonly DateTimeOffset _startedAt;
+        private DateTimeOffset _completedAt;
 
         public ProcessGroupViewModel(DateTimeOffset timestamp, bool expanded)
             : base(timestamp)
         {
+            _startedAt = timestamp;
             _isExpanded = expanded;
             ToggleExpandedCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+            UpdateHeader(timestamp);
         }
 
         /// <summary>成员清空（重试裁掉整轮）时通知持有者把组头和组一起移除。</summary>
@@ -1047,7 +1053,7 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        /// <summary>组头摘要：思考 · 读取 2 项 · 运行 1 条命令。</summary>
+        /// <summary>组内活动摘要：思考 · 读取 2 项 · 运行 1 条命令（组头 tooltip 与读屏用）。</summary>
         public string Summary
         {
             get { return _summary; }
@@ -1055,33 +1061,60 @@ namespace MiaoWu.App.ViewModels
             {
                 if (SetProperty(ref _summary, value))
                 {
+                    OnPropertyChanged(nameof(HeaderToolTip));
                     OnPropertyChanged(nameof(AutomationName));
                 }
             }
         }
 
-        public string StatusText
+        /// <summary>悬停提示：状态 + 组内活动摘要，组头本身只显示状态与用时。</summary>
+        public string HeaderToolTip
         {
-            get { return _statusText; }
-            private set { SetProperty(ref _statusText, value); }
+            get { return _summary; }
         }
 
-        /// <summary>组头是否用第一件工具的族图标；摘要以“思考”开头时改用 think 图标。</summary>
-        public bool HasTool
+        /// <summary>组头状态词（不含时长），对齐 DSH 的「已完成，用时 」。</summary>
+        public string HeaderLabel
         {
-            get { return _hasTool; }
-            private set { SetProperty(ref _hasTool, value); }
+            get { return _headerLabel; }
+            private set
+            {
+                if (SetProperty(ref _headerLabel, value))
+                {
+                    OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(AutomationName));
+                }
+            }
         }
 
-        public string FirstToolName
+        /// <summary>组头时长片段：<c>12秒</c> / <c>1分5秒</c> / <c>1小时2分3秒</c>。</summary>
+        public string HeaderDuration
         {
-            get { return _firstToolName; }
-            private set { SetProperty(ref _firstToolName, value); }
+            get { return _headerDuration; }
+            private set
+            {
+                if (SetProperty(ref _headerDuration, value))
+                {
+                    OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(AutomationName));
+                }
+            }
+        }
+
+        public string HeaderText
+        {
+            get { return _headerLabel + _headerDuration; }
+        }
+
+        /// <summary>整轮结束时才算完成；历史回放同样按消息时间戳得到真实用时。</summary>
+        public bool IsCompleted
+        {
+            get { return _isCompleted; }
         }
 
         public override string AutomationName
         {
-            get { return "执行过程：" + _summary; }
+            get { return "执行过程：" + HeaderText + "，" + _summary; }
         }
 
         public void Add(ChatItemViewModel member)
@@ -1120,20 +1153,101 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// 整轮结束：记录收尾时刻与结局，组头从「运行中」切到「已完成 / 处理失败 / 已停止」。
+        /// 失败与停止按 DSH 规则不显示用时。
+        /// </summary>
+        public void Complete(DateTimeOffset at, bool failed = false, bool stopped = false)
+        {
+            if (_isCompleted)
+            {
+                return;
+            }
+
+            _isCompleted = true;
+            _failed = failed;
+            _stopped = stopped;
+            _completedAt = at < _startedAt ? _startedAt : at;
+            UpdateHeader(_completedAt);
+        }
+
         /// <summary>整轮结束时自动收起；用户手动展开的历史组不受影响。</summary>
         public void CollapseAfterTurn()
         {
             IsExpanded = false;
         }
 
+        /// <summary>运行中每秒刷新「用时」；已完成的组不再变动。</summary>
+        public void RefreshElapsed(DateTimeOffset now)
+        {
+            if (!_isCompleted)
+            {
+                UpdateHeader(now);
+            }
+        }
+
+        /// <summary>
+        /// DSH 的时长写法：只保留有效单位（秒 / 分 / 小时），单位紧贴数字。
+        /// 不足一秒按一秒算，避免刚建组时显示 0秒。
+        /// </summary>
+        internal static string FormatRunDuration(TimeSpan value)
+        {
+            long total = (long)Math.Floor(value.TotalSeconds);
+            if (total < 1)
+            {
+                total = 1;
+            }
+
+            long hours = total / 3600;
+            long minutes = (total % 3600) / 60;
+            long seconds = total % 60;
+            var text = new StringBuilder();
+            if (hours > 0)
+            {
+                text.Append(hours).Append("小时");
+            }
+
+            if (total >= 60)
+            {
+                text.Append(minutes).Append("分");
+            }
+
+            text.Append(seconds).Append("秒");
+            return text.ToString();
+        }
+
+        private void UpdateHeader(DateTimeOffset now)
+        {
+            string label;
+            string duration;
+            if (_stopped)
+            {
+                label = "已停止";
+                duration = string.Empty;
+            }
+            else if (_failed)
+            {
+                label = "处理失败";
+                duration = string.Empty;
+            }
+            else if (_isCompleted)
+            {
+                label = "已完成，用时 ";
+                duration = FormatRunDuration(_completedAt - _startedAt);
+            }
+            else
+            {
+                label = "运行中，用时 ";
+                duration = FormatRunDuration(now - _startedAt);
+            }
+
+            HeaderLabel = label;
+            HeaderDuration = duration;
+        }
+
         private void OnMemberPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(AssistantChatItemViewModel.IsStreaming)
-                || e.PropertyName == nameof(AssistantChatItemViewModel.HasThinking)
-                || e.PropertyName == nameof(AssistantChatItemViewModel.IsFailed)
-                || e.PropertyName == nameof(ToolCardViewModel.IsPending)
-                || e.PropertyName == nameof(ToolCardViewModel.IsError)
-                || e.PropertyName == nameof(ToolCardViewModel.IsBlocked))
+            if (e.PropertyName == nameof(AssistantChatItemViewModel.HasThinking))
             {
                 Refresh();
             }
@@ -1148,9 +1262,6 @@ namespace MiaoWu.App.ViewModels
             int command = 0;
             int skill = 0;
             int other = 0;
-            bool running = false;
-            bool failed = false;
-            string firstTool = null;
 
             foreach (ChatItemViewModel member in _members)
             {
@@ -1162,8 +1273,6 @@ namespace MiaoWu.App.ViewModels
                         thinking++;
                     }
 
-                    running |= assistant.IsStreaming;
-                    failed |= assistant.IsFailed;
                     continue;
                 }
 
@@ -1172,14 +1281,6 @@ namespace MiaoWu.App.ViewModels
                 {
                     continue;
                 }
-
-                if (firstTool == null)
-                {
-                    firstTool = tool.ToolName;
-                }
-
-                running |= tool.IsPending;
-                failed |= tool.IsError || tool.IsBlocked;
 
                 string name = tool.ToolName ?? string.Empty;
                 if (name == "read_file" || name == "list_dir")
@@ -1245,10 +1346,6 @@ namespace MiaoWu.App.ViewModels
             }
 
             Summary = parts.Count == 0 ? "执行过程" : string.Join(" · ", parts);
-            StatusText = running ? "运行中" : (failed ? "有失败" : "完成");
-            // 摘要以“思考”开头时用 think 图标；纯工具过程才用第一件工具的族图标。
-            HasTool = firstTool != null && thinking == 0;
-            FirstToolName = firstTool;
         }
     }
 }

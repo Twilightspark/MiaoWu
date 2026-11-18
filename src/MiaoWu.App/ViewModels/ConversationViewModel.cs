@@ -836,7 +836,7 @@ namespace MiaoWu.App.ViewModels
 
                 string clientId = "m_" + Guid.NewGuid().ToString("N").Substring(0, 12);
                 var optimistic = new UserChatItemViewModel(clientId, text, _clock(), _clipboard);
-                CloseProcessGroup(true);
+                CloseProcessGroup(true, optimistic.Timestamp);
                 Items.Add(optimistic);
                 _userItems[clientId] = optimistic;
                 Draft = string.Empty;
@@ -1156,6 +1156,16 @@ namespace MiaoWu.App.ViewModels
                 ApplyToolExecution(execution);
             }
 
+            // 快照末尾如果还挂着过程组（例如中途取消、工具后没有最终答案），
+            // 用最后一条消息的时刻收尾，避免组头一直停在“运行中”。
+            if (!IsRunning)
+            {
+                DateTimeOffset at = Items.Count > 0
+                    ? Items[Items.Count - 1].Timestamp
+                    : DateTimeOffset.UtcNow;
+                CloseProcessGroup(true, at);
+            }
+
             OnPropertyChanged(nameof(Title));
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(HasRetryTarget));
@@ -1172,7 +1182,7 @@ namespace MiaoWu.App.ViewModels
                     || stateChanged.State == AgentSessionState.Cancelling;
                 if (!IsRunning)
                 {
-                    CloseProcessGroup(true);
+                    CloseProcessGroup(true, stateChanged.Timestamp);
                 }
 
                 StatusText = stateChanged.State == AgentSessionState.Cancelling
@@ -1228,7 +1238,7 @@ namespace MiaoWu.App.ViewModels
                 {
                     assistant.Apply(completed.Message, true);
                     assistant.MarkCompleted(completed.StopReason);
-                    SyncProcessMembership(assistant);
+                    SyncProcessMembership(assistant, completed.Message.CompletedAt ?? completed.Timestamp);
                 }
                 else
                 {
@@ -1243,7 +1253,7 @@ namespace MiaoWu.App.ViewModels
             if (runCompleted != null)
             {
                 IsRunning = false;
-                CloseProcessGroup(true);
+                CloseProcessGroup(true, runCompleted.Timestamp);
                 StatusText = runCompleted.StopReason == StopReason.Length
                     ? "已达到输出上限"
                     : null;
@@ -1268,7 +1278,7 @@ namespace MiaoWu.App.ViewModels
                     assistant.MarkInterrupted();
                 }
 
-                CloseProcessGroup(true);
+                CloseProcessGroup(true, cancelled.Timestamp, false, true);
                 RaiseHasRetry();
                 return;
             }
@@ -1286,13 +1296,13 @@ namespace MiaoWu.App.ViewModels
                     && _assistantItems.TryGetValue(failed.AssistantMessageId, out assistant))
                 {
                     assistant.MarkFailed(message);
-                    CloseProcessGroup(true);
+                    CloseProcessGroup(true, failed.Timestamp, true);
                     AddFailedNotice(failed.Error, failed.AssistantMessageId);
                 }
                 else
                 {
                     // 连助手行都没建起来（请求在 step 之前就失败）时，至少留一个可重试的提示。
-                    CloseProcessGroup(true);
+                    CloseProcessGroup(true, failed.Timestamp, true);
                     Items.Add(new NoticeChatItemViewModel("生成失败", message, true, _clock())
                     {
                         ActionText = "重试",
@@ -1354,7 +1364,7 @@ namespace MiaoWu.App.ViewModels
                 case AgentMessageRole.User:
                     if (!_userItems.ContainsKey(message.Id))
                     {
-                        CloseProcessGroup(true);
+                        CloseProcessGroup(true, message.CreatedAt);
                         var item = new UserChatItemViewModel(message.Id, message.GetText(), message.CreatedAt, _clipboard);
                         Items.Add(item);
                         _userItems[message.Id] = item;
@@ -1391,7 +1401,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             item.Apply(message, live);
-            SyncProcessMembership(item);
+            SyncProcessMembership(item, message.CompletedAt ?? message.CreatedAt);
             EnsureToolCardsForMessage(message);
 
             if (!live)
@@ -1615,8 +1625,9 @@ namespace MiaoWu.App.ViewModels
 
         private void AddNotice(string title, string body, bool isError)
         {
-            CloseProcessGroup(true);
-            Items.Add(new NoticeChatItemViewModel(title, body, isError, _clock()));
+            DateTimeOffset now = _clock();
+            CloseProcessGroup(true, now);
+            Items.Add(new NoticeChatItemViewModel(title, body, isError, now));
             OnPropertyChanged(nameof(IsEmpty));
         }
 
@@ -1752,12 +1763,14 @@ namespace MiaoWu.App.ViewModels
         /// 助手行刚建出来时还不知道它会不会以工具调用收尾；Apply / 落定后调用这里，
         /// 是过程就收进当前组，是最终答案就关掉当前组。
         /// </summary>
-        private void SyncProcessMembership(AssistantChatItemViewModel assistant)
+        private void SyncProcessMembership(AssistantChatItemViewModel assistant, DateTimeOffset? at = null)
         {
             if (assistant == null)
             {
                 return;
             }
+
+            DateTimeOffset closeAt = at ?? assistant.Timestamp;
 
             // MessageStarted 先建一个空的流式行；此时还不知道这一步会不会以工具收尾，
             // 不能拿它去关闭上一组，否则每个工具步骤都会被拆成两组。
@@ -1776,13 +1789,13 @@ namespace MiaoWu.App.ViewModels
 
                 _groupOf.Remove(assistant);
                 existing.Remove(assistant);
-                CloseProcessGroup(true);
+                CloseProcessGroup(true, closeAt);
                 return;
             }
 
             if (!assistant.IsProcessOnly)
             {
-                CloseProcessGroup(true);
+                CloseProcessGroup(true, closeAt);
                 return;
             }
 
@@ -1817,14 +1830,18 @@ namespace MiaoWu.App.ViewModels
             _groupOf[card] = group;
         }
 
-        /// <summary>一轮结束 / 最终答案 / 新的用户消息：当前组收起，后续过程另起一组。</summary>
-        private void CloseProcessGroup(bool collapse)
+        /// <summary>
+        /// 一轮结束 / 最终答案 / 新的用户消息：当前组收起并记下收尾时刻与结局，
+        /// 后续过程另起一组。时刻必须由调用方传入，回放时才能得到真实用时。
+        /// </summary>
+        private void CloseProcessGroup(bool collapse, DateTimeOffset at, bool failed = false, bool stopped = false)
         {
             if (_openGroup == null)
             {
                 return;
             }
 
+            _openGroup.Complete(at, failed, stopped);
             if (collapse)
             {
                 _openGroup.CollapseAfterTurn();
@@ -1881,6 +1898,10 @@ namespace MiaoWu.App.ViewModels
             if (HasSession)
             {
                 UpdateClockTexts();
+                if (_openGroup != null)
+                {
+                    _openGroup.RefreshElapsed(new DateTimeOffset(_clock()));
+                }
             }
         }
 

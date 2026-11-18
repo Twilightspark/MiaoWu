@@ -116,6 +116,14 @@ namespace MiaoWu.Tests.Conversations
             Assert.Equal("你好！有什么可以帮你？", transcript.Messages[1].GetText());
             Assert.Equal(20, transcript.Messages[1].Usage.GetTotal());
             Assert.Equal(StopReason.Stop, transcript.Messages[1].StopReason);
+            Assert.NotNull(transcript.Messages[1].CompletedAt);
+            string completedLine = File.ReadAllLines(SessionFile("s_01"))
+                .First(line => line.Contains("\"message.completed\""));
+            DateTimeOffset completedAt = DateTimeOffset.Parse(
+                JsonParser.Parse(completedLine).Get("ts").AsString(),
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind);
+            Assert.Equal(completedAt, transcript.Messages[1].CompletedAt);
 
             ConversationIndex index = Load(store);
             ConversationIndexEntry entry = Assert.Single(index.Sessions);

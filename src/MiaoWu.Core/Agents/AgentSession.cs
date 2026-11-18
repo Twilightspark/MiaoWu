@@ -919,6 +919,7 @@ namespace MiaoWu.Core.Agents
             }
 
             assistant.Status = AgentMessageStatus.Completed;
+            assistant.CompletedAt = Now;
             assistant.StopReason = assistant.StopReason ?? StopReason.Stop;
 
             lock (_gate)
