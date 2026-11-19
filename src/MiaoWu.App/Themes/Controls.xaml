@@ -202,6 +202,20 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
+    <!-- 过程行文字：思考标题与工具动作名共用 12/24，摘要用 tertiary。
+         思考行与工具行必须是同一档字号，否则展开过程组时一行大一行小。 -->
+    <Style x:Key="Text.ChatProcess" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource Font.ChatProcess.Size}" />
+        <Setter Property="LineHeight" Value="{StaticResource Font.ChatProcess.Line}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style x:Key="Text.ChatProcessPreview" TargetType="TextBlock" BasedOn="{StaticResource Text.ChatProcess}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+    </Style>
+
     <Style x:Key="Text.ListRow" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{StaticResource Font.List.Size}" />
         <Setter Property="LineHeight" Value="{StaticResource Font.List.Line}" />

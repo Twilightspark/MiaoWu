@@ -146,7 +146,9 @@
     <sys:Double x:Key="Font.Chip.Line">20</sys:Double>
     <sys:Double x:Key="Font.Reasoning.Line">20</sys:Double>
     <sys:Double x:Key="Font.Empty.Line">20</sys:Double>
-    <!-- 过程组头：DSH 的 TurnProcess 是 24 行高，比正文行高多 2 -->
+    <!-- 过程行与组头：DSH 的 TurnProcess / DisclosureRow 都是 24 行高。
+         过程行文字比正文小一档（13 → 12），思考行与工具行共用这一档。 -->
+    <sys:Double x:Key="Font.ChatProcess.Size">12</sys:Double>
     <sys:Double x:Key="Font.ChatProcess.Line">24</sys:Double>
 
     <!-- 窗口与布局 -->
@@ -313,7 +315,9 @@
     <Thickness x:Key="Margin.Chat.Tool">14,6,14,0</Thickness>
     <!-- 执行过程组头与组内成员：成员缩进 22（16 图标 + 6 间距），与 DSH 的组体对齐 -->
     <Thickness x:Key="Margin.Chat.Process">14,6,14,0</Thickness>
-    <Thickness x:Key="Margin.Chat.ProcessMember">36,4,14,0</Thickness>
+    <!-- 组内成员：缩进 22（36 = 组头 14 + 22），只留 4 底距，
+         行间距由成员自己承担，避免思考行与工具行之间叠加出空档。 -->
+    <Thickness x:Key="Margin.Chat.ProcessMember">36,0,14,4</Thickness>
     <Thickness x:Key="Thickness.Chat.ProcessRule">0,0,0,1</Thickness>
     <Thickness x:Key="Margin.Chat.Notice">14,10,14,0</Thickness>
     <Thickness x:Key="Margin.Chat.Caption">0,0,0,4</Thickness>

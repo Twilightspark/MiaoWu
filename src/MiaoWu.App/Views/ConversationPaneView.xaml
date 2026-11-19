@@ -223,9 +223,9 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- 思考折叠行：与工具行同高 -->
+        <!-- 思考折叠行：与工具行同高、同字号；行距由过程成员统一给 -->
         <Style x:Key="Chat.Disclosure" TargetType="Button" BasedOn="{StaticResource Chat.Row}">
-            <Setter Property="Margin" Value="0,0,0,2" />
+            <Setter Property="Margin" Value="0" />
         </Style>
 
         <!-- 展开箭头：收起指向右、展开指向下；默认隐形，悬停或展开时出现 -->
@@ -364,7 +364,7 @@
         <DataTemplate DataType="{x:Type vm:AssistantChatItemViewModel}">
             <StackPanel x:Name="AssistantRoot" Margin="{StaticResource Margin.Chat.Assistant}">
 
-                <StackPanel Margin="0,0,0,4"
+                <StackPanel x:Name="ThinkingBlock"
                             Visibility="{Binding ShowThinking, Converter={StaticResource BoolToVisibility}}">
                     <Button Style="{StaticResource Chat.Disclosure}"
                             Command="{Binding ToggleThinkingCommand}"
@@ -383,13 +383,12 @@
                                        Margin="6,0,0,0"
                                        VerticalAlignment="Center"
                                        Text="思考"
-                                       Style="{StaticResource Text.Meta}"
-                                       Foreground="{DynamicResource Brush.Text2}" />
+                                       Style="{StaticResource Text.ChatProcess}" />
                             <TextBlock Grid.Column="2"
-                                       Margin="10,0,0,0"
+                                       Margin="8,0,0,0"
                                        VerticalAlignment="Center"
                                        Text="{Binding ThinkingPreview}"
-                                       Style="{StaticResource Text.Meta}"
+                                       Style="{StaticResource Text.ChatProcessPreview}"
                                        TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding IsThinkingExpanded, Converter={StaticResource InverseBoolToVisibility}}" />
                             <Path Grid.Column="3"
@@ -399,7 +398,7 @@
                     </Button>
 
                     <!-- DSH 的推理正文：组头下方缩进 22，紧凑 12/20，不再加左侧竖线 -->
-                    <TextBlock Margin="22,2,0,4"
+                    <TextBlock Margin="22,2,0,0"
                                Text="{Binding ThinkingText}"
                                Style="{StaticResource Text.Reasoning}"
                                TextWrapping="Wrap"
@@ -410,11 +409,11 @@
                               Focusable="False"
                               Visibility="{Binding HasBlocks, Converter={StaticResource BoolToVisibility}}" />
 
-                <!-- 流式首帧：Markdown 还没重建时先显示纯文本，避免出现空行 -->
+                <!-- 流式首帧：Markdown 还没重建时先显示纯文本；空步骤不占一行 -->
                 <TextBlock Text="{Binding Text}"
                            Style="{StaticResource Text.Body}"
                            TextWrapping="Wrap"
-                           Visibility="{Binding HasBlocks, Converter={StaticResource InverseBoolToVisibility}}" />
+                           Visibility="{Binding ShowPlainText, Converter={StaticResource BoolToVisibility}}" />
 
                 <TextBlock Margin="0,6,0,0"
                            Text="{Binding ErrorText}"
@@ -495,6 +494,10 @@
                             Property="Margin"
                             Value="{StaticResource Margin.Chat.ProcessMember}" />
                 </DataTrigger>
+                <!-- 答案里的思考块与正文之间留 4；组内的行距由成员自己承担，不再叠加 -->
+                <DataTrigger Binding="{Binding IsProcessMember}" Value="False">
+                    <Setter TargetName="ThinkingBlock" Property="Margin" Value="0,0,0,4" />
+                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
@@ -525,22 +528,21 @@
                                    Margin="6,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="{Binding DisplayName}"
-                                   Style="{StaticResource Text.Body}"
-                                   Foreground="{DynamicResource Brush.Text}"
+                                   Style="{StaticResource Text.ChatProcess}"
                                    TextTrimming="CharacterEllipsis" />
 
                         <TextBlock Grid.Column="2"
                                    Margin="8,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="{Binding Summary}"
-                                   Style="{StaticResource Text.Meta}"
+                                   Style="{StaticResource Text.ChatProcessPreview}"
                                    TextTrimming="CharacterEllipsis" />
 
                         <TextBlock Grid.Column="3"
                                    Margin="8,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="不可信内容"
-                                   Style="{StaticResource Text.Meta}"
+                                   Style="{StaticResource Text.ChatProcessPreview}"
                                    Foreground="{DynamicResource Brush.Warning}"
                                    Visibility="{Binding IsUntrusted, Converter={StaticResource BoolToVisibility}}" />
 
@@ -580,7 +582,7 @@
                                    VerticalAlignment="Center"
                                    Text="{Binding StatusText}">
                             <TextBlock.Style>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Meta}">
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.ChatProcessPreview}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsPending}" Value="True">
                                             <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
@@ -693,13 +695,12 @@
                                    Margin="6,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="思考"
-                                   Style="{StaticResource Text.Meta}"
-                                   Foreground="{DynamicResource Brush.Text2}" />
+                                   Style="{StaticResource Text.ChatProcess}" />
                         <TextBlock Grid.Column="2"
-                                   Margin="10,0,0,0"
+                                   Margin="8,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="{Binding ThinkingPreview}"
-                                   Style="{StaticResource Text.Meta}"
+                                   Style="{StaticResource Text.ChatProcessPreview}"
                                    TextTrimming="CharacterEllipsis"
                                    Visibility="{Binding IsThinkingExpanded, Converter={StaticResource InverseBoolToVisibility}}" />
                         <Path Grid.Column="3"
@@ -708,7 +709,7 @@
                     </Grid>
                 </Button>
 
-                <TextBlock Margin="22,2,0,4"
+                <TextBlock Margin="22,2,0,0"
                            Text="{Binding ThinkingText}"
                            Style="{StaticResource Text.Reasoning}"
                            TextWrapping="Wrap"
@@ -738,7 +739,7 @@
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
-                                        <Setter Property="FontSize" Value="{StaticResource Font.Body.Size}" />
+                                        <Setter Property="FontSize" Value="{StaticResource Font.ChatProcess.Size}" />
                                         <Setter Property="LineHeight" Value="{StaticResource Font.ChatProcess.Line}" />
                                         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
                                     </Style>

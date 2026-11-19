@@ -150,6 +150,12 @@ namespace MiaoWu.App.ViewModels
             get { return Text.Length > 0; }
         }
 
+        /// <summary>流式首帧的纯文本兜底：没有 Markdown 块且确有正文时才显示，空步骤不占行高。</summary>
+        public bool ShowPlainText
+        {
+            get { return !HasBlocks && HasVisibleText; }
+        }
+
         public bool ShowRetry
         {
             get { return _isFailed || _isInterrupted; }
@@ -306,6 +312,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(Text));
             OnPropertyChanged(nameof(HasText));
             OnPropertyChanged(nameof(HasVisibleText));
+            OnPropertyChanged(nameof(ShowPlainText));
             OnPropertyChanged(nameof(ShowFooter));
         }
 
@@ -375,6 +382,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(Text));
             OnPropertyChanged(nameof(HasText));
             OnPropertyChanged(nameof(HasVisibleText));
+            OnPropertyChanged(nameof(ShowPlainText));
             OnPropertyChanged(nameof(HasError));
             OnPropertyChanged(nameof(ShowRetry));
             OnPropertyChanged(nameof(ShowFooter));
@@ -432,6 +440,7 @@ namespace MiaoWu.App.ViewModels
             if (string.IsNullOrWhiteSpace(text))
             {
                 OnPropertyChanged(nameof(HasBlocks));
+                OnPropertyChanged(nameof(ShowPlainText));
                 return;
             }
 
@@ -468,6 +477,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             OnPropertyChanged(nameof(HasBlocks));
+            OnPropertyChanged(nameof(ShowPlainText));
         }
 
         private void CopyText()
