@@ -437,9 +437,9 @@
                     <TextBlock x:Name="RunStatus"
                                Grid.Column="0"
                                VerticalAlignment="Center"
-                               Text="{Binding FooterStatusText}"
+                               Text="{Binding StatusText}"
                                Style="{StaticResource Text.Meta}"
-                               Visibility="{Binding FooterStatusText, Converter={StaticResource NonEmptyToVisibility}}" />
+                               Visibility="{Binding StatusText, Converter={StaticResource NonEmptyToVisibility}}" />
 
                     <StackPanel Grid.Column="1"
                                 VerticalAlignment="Center"
@@ -745,7 +745,8 @@
 
                             <Path x:Name="ProcessChevron"
                                   Margin="4,0,0,0"
-                                  Style="{StaticResource Chat.TurnChevron}" />
+                                  Style="{StaticResource Chat.TurnChevron}"
+                                  Visibility="{Binding HasMembers, Converter={StaticResource BoolToVisibility}}" />
                         </StackPanel>
                     </Button>
                 </Border>

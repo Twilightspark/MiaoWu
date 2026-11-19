@@ -1162,6 +1162,7 @@ namespace MiaoWu.App.ViewModels
                 {
                     _turnUser = current;
                     current.StartTurn(current.Timestamp);
+                    EnsureTurnHeader(current);
                     if (_openGroup != null)
                     {
                         current.SetHasProcessGroup();
@@ -1192,7 +1193,7 @@ namespace MiaoWu.App.ViewModels
                     || stateChanged.State == AgentSessionState.Cancelling;
                 if (!IsRunning)
                 {
-                    CloseProcessGroup(true, stateChanged.Timestamp);
+                    CloseProcessGroup(true, new DateTimeOffset(_clock()));
                 }
 
                 StatusText = stateChanged.State == AgentSessionState.Cancelling
@@ -1249,7 +1250,7 @@ namespace MiaoWu.App.ViewModels
                 {
                     assistant.Apply(completed.Message, true);
                     assistant.MarkCompleted(completed.StopReason);
-                    SyncProcessMembership(assistant, completed.Message.CompletedAt ?? completed.Timestamp);
+                    SyncProcessMembership(assistant, completed.Message.CompletedAt ?? completed.Timestamp, true);
                 }
                 else
                 {
@@ -1265,7 +1266,7 @@ namespace MiaoWu.App.ViewModels
             {
                 IsRunning = false;
                 CompleteTurn(new DateTimeOffset(_clock()));
-                CloseProcessGroup(true, runCompleted.Timestamp);
+                CloseProcessGroup(true, new DateTimeOffset(_clock()));
                 StatusText = runCompleted.StopReason == StopReason.Length
                     ? "已达到输出上限"
                     : null;
@@ -1292,7 +1293,7 @@ namespace MiaoWu.App.ViewModels
                 }
 
                 CompleteTurn(new DateTimeOffset(_clock()), false, true);
-                CloseProcessGroup(true, cancelled.Timestamp, false, true);
+                CloseProcessGroup(true, new DateTimeOffset(_clock()), false, true);
                 RaiseHasRetry();
                 return;
             }
@@ -1312,14 +1313,14 @@ namespace MiaoWu.App.ViewModels
                     assistant.MarkFailed(message);
                     MoveFinalThinking(assistant);
                     CompleteTurn(new DateTimeOffset(_clock()), true);
-                    CloseProcessGroup(true, failed.Timestamp, true);
+                    CloseProcessGroup(true, new DateTimeOffset(_clock()), true);
                     AddFailedNotice(failed.Error, failed.AssistantMessageId);
                 }
                 else
                 {
                     // 连助手行都没建起来（请求在 step 之前就失败）时，至少留一个可重试的提示。
                     CompleteTurn(new DateTimeOffset(_clock()), true);
-                    CloseProcessGroup(true, failed.Timestamp, true);
+                    CloseProcessGroup(true, new DateTimeOffset(_clock()), true);
                     Items.Add(new NoticeChatItemViewModel("生成失败", message, true, _clock())
                     {
                         ActionText = "重试",
@@ -1419,7 +1420,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             item.Apply(message, live);
-            SyncProcessMembership(item, message.CompletedAt ?? message.CreatedAt);
+            SyncProcessMembership(item, message.CompletedAt ?? message.CreatedAt, live);
             EnsureToolCardsForMessage(message);
 
             if (!live)
@@ -1817,28 +1818,32 @@ namespace MiaoWu.App.ViewModels
                 int index = Items.IndexOf(row);
                 Items.Insert(index < 0 ? Items.Count : index, group);
                 _openGroup = group;
-                if (_turnUser != null)
-                {
-                    _turnUser.SetHasProcessGroup();
-                }
             }
 
             group.Add(row);
             _groupOf[row] = group;
+            if (_turnUser != null)
+            {
+                _turnUser.SetHasProcessGroup();
+            }
         }
 
         /// <summary>
         /// 助手行刚建出来时还不知道它会不会以工具调用收尾；Apply / 落定后调用这里，
         /// 是过程就收进当前组，是最终答案就关掉当前组。
         /// </summary>
-        private void SyncProcessMembership(AssistantChatItemViewModel assistant, DateTimeOffset? at = null)
+        private void SyncProcessMembership(AssistantChatItemViewModel assistant, DateTimeOffset? at = null, bool live = false)
         {
             if (assistant == null)
             {
                 return;
             }
 
-            DateTimeOffset closeAt = at ?? assistant.Timestamp;
+            // 实时事件的时间戳来自运行时时钟，界面计时用 <c>_clock</c>（测试里是假时钟）；
+            // 两者不混用，否则离线快照会算出小时级时长。回放则用消息里的真实时间。
+            DateTimeOffset closeAt = live
+                ? new DateTimeOffset(_clock())
+                : (at ?? assistant.Timestamp);
 
             // MessageStarted 先建一个空的流式行；此时还不知道这一步会不会以工具收尾，
             // 不能拿它去关闭上一组，否则每个工具步骤都会被拆成两组。
@@ -1877,15 +1882,15 @@ namespace MiaoWu.App.ViewModels
                 int index = Items.IndexOf(assistant);
                 Items.Insert(index < 0 ? Items.Count : index, group);
                 _openGroup = group;
-                if (_turnUser != null)
-                {
-                    _turnUser.SetHasProcessGroup();
-                }
             }
 
             group.Add(assistant);
             _groupOf[assistant] = group;
             assistant.SetInsideOpenGroup(true);
+            if (_turnUser != null)
+            {
+                _turnUser.SetHasProcessGroup();
+            }
         }
 
         /// <summary>工具卡永远属于过程：没有打开的组就在它前面补一个组头。</summary>
@@ -1898,15 +1903,15 @@ namespace MiaoWu.App.ViewModels
                 group.Emptied += OnGroupEmptied;
                 Items.Add(group);
                 _openGroup = group;
-                if (_turnUser != null)
-                {
-                    _turnUser.SetHasProcessGroup();
-                }
             }
 
             Items.Add(card);
             group.Add(card);
             _groupOf[card] = group;
+            if (_turnUser != null)
+            {
+                _turnUser.SetHasProcessGroup();
+            }
         }
 
         /// <summary>
@@ -1920,6 +1925,18 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
+            // 从轮次开始就挂着的占位组头，如果整轮没有任何过程成员，
+            // 结束时不保留一行空的「已完成」：改用问题气泡下方的完成用时。
+            if (_openGroup.Members.Count == 0)
+            {
+                ProcessGroupViewModel placeholder = _openGroup;
+                placeholder.Emptied -= OnGroupEmptied;
+                Items.Remove(placeholder);
+                _openGroup = null;
+                ResetGroupFooterFlags();
+                return;
+            }
+
             _openGroup.Complete(at, failed, stopped);
             if (collapse)
             {
@@ -1927,11 +1944,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             // 组头已经承担了这一轮的计时；组关掉后，回答行恢复时间 / 复制尾部。
-            foreach (AssistantChatItemViewModel assistant in _assistantItems.Values)
-            {
-                assistant.SetInsideOpenGroup(false);
-            }
-
+            ResetGroupFooterFlags();
             _openGroup = null;
         }
 
@@ -1996,48 +2009,46 @@ namespace MiaoWu.App.ViewModels
             if (_turnUser != null)
             {
                 _turnUser.RefreshTurn(now);
-                UpdateRunStatus(now);
             }
         }
 
-        /// <summary>生成中的助手尾部状态位：正在探索，用时 N秒。</summary>
-        private void UpdateRunStatus(DateTimeOffset now)
-        {
-            if (_turnUser == null || !_turnUser.IsTurnRunning)
-            {
-                return;
-            }
-
-            string text = "正在探索，用时 "
-                + ProcessGroupViewModel.FormatRunDuration(now - _turnUser.Timestamp);
-            AssistantChatItemViewModel streaming = Items
-                .OfType<AssistantChatItemViewModel>()
-                .LastOrDefault(a => a.IsStreaming);
-            if (streaming != null)
-            {
-                streaming.SetRunStatus(text);
-            }
-        }
-
-        /// <summary>RunStarted：把计时挂到当前问题的气泡下方；排队消息开始新一轮时重新挂。</summary>
+        /// <summary>
+        /// RunStarted：先放一行与执行过程组头同样式的占位头，计时从一开始就在这个位置，
+        /// 不再先长在助手尾部、等组出现后再跳过去。
+        /// </summary>
         private void BeginTurnTimer()
         {
-            ClearRunStatus();
             if (_turnUser != null && _turnUser.IsTurnRunning)
             {
                 return;
             }
 
             _turnUser = Items.OfType<UserChatItemViewModel>().LastOrDefault();
-            if (_turnUser != null)
+            if (_turnUser == null)
             {
-                _turnUser.StartTurn(_turnUser.Timestamp);
+                return;
             }
+
+            _turnUser.StartTurn(_turnUser.Timestamp);
+            EnsureTurnHeader(_turnUser);
+        }
+
+        private void EnsureTurnHeader(UserChatItemViewModel user)
+        {
+            if (_openGroup != null || user == null)
+            {
+                return;
+            }
+
+            var group = new ProcessGroupViewModel(user.Timestamp, true);
+            group.Emptied += OnGroupEmptied;
+            int index = Items.IndexOf(user);
+            Items.Insert(index < 0 ? Items.Count : index + 1, group);
+            _openGroup = group;
         }
 
         private void CompleteTurn(DateTimeOffset at, bool failed = false, bool stopped = false)
         {
-            ClearRunStatus();
             if (_turnUser == null)
             {
                 return;
@@ -2047,11 +2058,11 @@ namespace MiaoWu.App.ViewModels
             _turnUser = null;
         }
 
-        private void ClearRunStatus()
+        private void ResetGroupFooterFlags()
         {
             foreach (AssistantChatItemViewModel assistant in _assistantItems.Values)
             {
-                assistant.SetRunStatus(null);
+                assistant.SetInsideOpenGroup(false);
             }
         }
 

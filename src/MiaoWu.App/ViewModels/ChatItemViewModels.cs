@@ -234,7 +234,6 @@ namespace MiaoWu.App.ViewModels
         private readonly IClipboardService _clipboard;
 
         private string _statusText;
-        private string _runStatusText;
         private string _errorText;
         private string _usageText;
         private string _modelText;
@@ -393,13 +392,7 @@ namespace MiaoWu.App.ViewModels
         public bool IsStreaming
         {
             get { return _isStreaming; }
-            private set
-            {
-                if (SetProperty(ref _isStreaming, value))
-                {
-                    OnPropertyChanged(nameof(FooterStatusText));
-                }
-            }
+            private set { SetProperty(ref _isStreaming, value); }
         }
 
         public bool IsFailed
@@ -417,39 +410,7 @@ namespace MiaoWu.App.ViewModels
         public string StatusText
         {
             get { return _statusText; }
-            private set
-            {
-                if (SetProperty(ref _statusText, value))
-                {
-                    OnPropertyChanged(nameof(FooterStatusText));
-                }
-            }
-        }
-
-        /// <summary>
-        /// 助手尾部左侧的状态：生成中显示「正在探索，用时 N秒」，替换原来的「正在生成…」；
-        /// 其他时候回落到失败 / 中断 / 输出上限等静态状态。
-        /// </summary>
-        public string FooterStatusText
-        {
-            get
-            {
-                return _isStreaming && !string.IsNullOrEmpty(_runStatusText)
-                    ? _runStatusText
-                    : _statusText;
-            }
-        }
-
-        /// <summary>会话计时每秒写入运行状态；轮次结束由会话清空。</summary>
-        internal void SetRunStatus(string text)
-        {
-            if (string.Equals(_runStatusText, text, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _runStatusText = text;
-            OnPropertyChanged(nameof(FooterStatusText));
+            private set { SetProperty(ref _statusText, value); }
         }
 
         public string ErrorText
@@ -1316,6 +1277,12 @@ namespace MiaoWu.App.ViewModels
             get { return _members.Count == 0; }
         }
 
+        /// <summary>组内是否已有成员；空组只显示计时，不显示展开箭头。</summary>
+        public bool HasMembers
+        {
+            get { return _members.Count > 0; }
+        }
+
         public bool IsExpanded
         {
             get { return _isExpanded; }
@@ -1408,6 +1375,7 @@ namespace MiaoWu.App.ViewModels
             member.IsHiddenByGroup = !_isExpanded;
             member.PropertyChanged += OnMemberPropertyChanged;
             _members.Add(member);
+            OnPropertyChanged(nameof(HasMembers));
             Refresh();
         }
 
@@ -1421,6 +1389,7 @@ namespace MiaoWu.App.ViewModels
             member.PropertyChanged -= OnMemberPropertyChanged;
             member.IsProcessMember = false;
             member.IsHiddenByGroup = false;
+            OnPropertyChanged(nameof(HasMembers));
             Refresh();
 
             if (_members.Count == 0)
