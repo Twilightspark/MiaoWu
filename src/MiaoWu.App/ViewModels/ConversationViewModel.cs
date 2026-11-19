@@ -115,10 +115,7 @@ namespace MiaoWu.App.ViewModels
         private readonly DispatcherTimer _clockTimer;
 
         private ProcessGroupViewModel _openGroup;
-        private DateTime? _runStartedAt;
-        private TimeSpan _activeAccumulated;
-        private string _elapsedText = "00:00";
-        private string _runElapsedText;
+        private UserChatItemViewModel _turnUser;
 
         private SessionEventPump _pump;
         private Workspace _workspace;
@@ -318,23 +315,6 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        /// <summary>会话头的会话计时：本次打开后累计的运行时长（mm:ss / h:mm:ss）。</summary>
-        public string ElapsedText
-        {
-            get { return _elapsedText; }
-        }
-
-        /// <summary>当前这一轮的运行计时；空闲时为 null（运行状态条随之隐藏）。</summary>
-        public string RunElapsedText
-        {
-            get { return _runElapsedText; }
-        }
-
-        public string ElapsedToolTip
-        {
-            get { return "本会话累计运行时长，运行中每秒更新"; }
-        }
-
         public bool IsPinned
         {
             get { return _isPinned; }
@@ -494,10 +474,8 @@ namespace MiaoWu.App.ViewModels
             {
                 if (SetProperty(ref _isRunning, value))
                 {
-                    UpdateRunClock();
                     OnPropertyChanged(nameof(CanSend));
                     OnPropertyChanged(nameof(IsIdle));
-                    OnPropertyChanged(nameof(ShowRunningStatus));
                     OnPropertyChanged(nameof(SendToolTip));
                     CommandManager.InvalidateRequerySuggested();
                 }
@@ -507,12 +485,6 @@ namespace MiaoWu.App.ViewModels
         public bool IsIdle
         {
             get { return !_isRunning; }
-        }
-
-        /// <summary>消息流底部的运行状态条只在生成中显示，计时随每秒刷新。</summary>
-        public bool ShowRunningStatus
-        {
-            get { return _isRunning; }
         }
 
         public bool HasSession
@@ -685,6 +657,7 @@ namespace MiaoWu.App.ViewModels
                 _groupOf.Clear();
                 _thinkingRows.Clear();
                 _openGroup = null;
+                _turnUser = null;
                 ApplySessionFlags(false, false);
                 StatusText = "打开会话失败：" + exception.Message;
                 _app.Logger.Error("conversation.attach", "打开会话失败。", exception);
@@ -729,8 +702,8 @@ namespace MiaoWu.App.ViewModels
             _groupOf.Clear();
             _thinkingRows.Clear();
             _openGroup = null;
+            _turnUser = null;
             IsRunning = false;
-            ResetSessionClock();
             StatusText = null;
             UsageText = null;
             ContextText = null;
@@ -1156,6 +1129,7 @@ namespace MiaoWu.App.ViewModels
             _groupOf.Clear();
             _thinkingRows.Clear();
             _openGroup = null;
+            _turnUser = null;
 
             _title = snapshot.Title;
             IsRunning = snapshot.State == AgentSessionState.Running || snapshot.State == AgentSessionState.Cancelling;
@@ -1172,13 +1146,27 @@ namespace MiaoWu.App.ViewModels
             }
 
             // 快照末尾如果还挂着过程组（例如中途取消、工具后没有最终答案），
-            // 用最后一条消息的时刻收尾，避免组头一直停在“运行中”。
+            // 用最后一条消息的时刻收尾，避免组头一直停在“正在探索”。
             if (!IsRunning)
             {
                 DateTimeOffset at = Items.Count > 0
                     ? Items[Items.Count - 1].Timestamp
                     : DateTimeOffset.UtcNow;
                 CloseProcessGroup(true, at);
+            }
+            else
+            {
+                // 切回正在运行的会话：计时挂到当前问题下方；已有过程组时由组头接管。
+                UserChatItemViewModel current = Items.OfType<UserChatItemViewModel>().LastOrDefault();
+                if (current != null)
+                {
+                    _turnUser = current;
+                    current.StartTurn(current.Timestamp);
+                    if (_openGroup != null)
+                    {
+                        current.SetHasProcessGroup();
+                    }
+                }
             }
 
             OnPropertyChanged(nameof(Title));
@@ -1210,6 +1198,7 @@ namespace MiaoWu.App.ViewModels
             if (runStarted != null)
             {
                 IsRunning = true;
+                BeginTurnTimer();
                 StatusText = null;
                 return;
             }
@@ -1268,6 +1257,7 @@ namespace MiaoWu.App.ViewModels
             if (runCompleted != null)
             {
                 IsRunning = false;
+                CompleteTurn(new DateTimeOffset(_clock()));
                 CloseProcessGroup(true, runCompleted.Timestamp);
                 StatusText = runCompleted.StopReason == StopReason.Length
                     ? "已达到输出上限"
@@ -1294,6 +1284,7 @@ namespace MiaoWu.App.ViewModels
                     MoveFinalThinking(assistant);
                 }
 
+                CompleteTurn(new DateTimeOffset(_clock()), false, true);
                 CloseProcessGroup(true, cancelled.Timestamp, false, true);
                 RaiseHasRetry();
                 return;
@@ -1313,12 +1304,14 @@ namespace MiaoWu.App.ViewModels
                 {
                     assistant.MarkFailed(message);
                     MoveFinalThinking(assistant);
+                    CompleteTurn(new DateTimeOffset(_clock()), true);
                     CloseProcessGroup(true, failed.Timestamp, true);
                     AddFailedNotice(failed.Error, failed.AssistantMessageId);
                 }
                 else
                 {
                     // 连助手行都没建起来（请求在 step 之前就失败）时，至少留一个可重试的提示。
+                    CompleteTurn(new DateTimeOffset(_clock()), true);
                     CloseProcessGroup(true, failed.Timestamp, true);
                     Items.Add(new NoticeChatItemViewModel("生成失败", message, true, _clock())
                     {
@@ -1816,6 +1809,10 @@ namespace MiaoWu.App.ViewModels
                 int index = Items.IndexOf(row);
                 Items.Insert(index < 0 ? Items.Count : index, group);
                 _openGroup = group;
+                if (_turnUser != null)
+                {
+                    _turnUser.SetHasProcessGroup();
+                }
             }
 
             group.Add(row);
@@ -1872,6 +1869,10 @@ namespace MiaoWu.App.ViewModels
                 int index = Items.IndexOf(assistant);
                 Items.Insert(index < 0 ? Items.Count : index, group);
                 _openGroup = group;
+                if (_turnUser != null)
+                {
+                    _turnUser.SetHasProcessGroup();
+                }
             }
 
             group.Add(assistant);
@@ -1888,6 +1889,10 @@ namespace MiaoWu.App.ViewModels
                 group.Emptied += OnGroupEmptied;
                 Items.Add(group);
                 _openGroup = group;
+                if (_turnUser != null)
+                {
+                    _turnUser.SetHasProcessGroup();
+                }
             }
 
             Items.Add(card);
@@ -1952,95 +1957,87 @@ namespace MiaoWu.App.ViewModels
             _groupOf.Clear();
             _thinkingRows.Clear();
             _openGroup = null;
+            _turnUser = null;
             OnPropertyChanged(nameof(IsEmpty));
         }
 
         // ---------------------------------------------------------------
-        // 会话计时
+        // 轮次计时
         // ---------------------------------------------------------------
 
         private void OnClockTick(object sender, EventArgs e)
         {
-            if (HasSession)
+            if (!HasSession)
             {
-                UpdateClockTexts();
-                if (_openGroup != null)
-                {
-                    _openGroup.RefreshElapsed(new DateTimeOffset(_clock()));
-                }
+                return;
+            }
+
+            DateTimeOffset now = new DateTimeOffset(_clock());
+            if (_openGroup != null)
+            {
+                _openGroup.RefreshElapsed(now);
+            }
+
+            if (_turnUser != null)
+            {
+                _turnUser.RefreshTurn(now);
+                UpdateRunStatus(now);
             }
         }
 
-        /// <summary>运行开始记起点，结束把这一段折进累计时长；切换会话时归零。</summary>
-        private void UpdateRunClock()
+        /// <summary>生成中的助手尾部状态位：正在探索，用时 N秒。</summary>
+        private void UpdateRunStatus(DateTimeOffset now)
         {
-            if (_isRunning)
+            if (_turnUser == null || !_turnUser.IsTurnRunning)
             {
-                if (_runStartedAt == null)
-                {
-                    _runStartedAt = _clock();
-                }
-            }
-            else if (_runStartedAt != null)
-            {
-                _activeAccumulated += _clock() - _runStartedAt.Value;
-                _runStartedAt = null;
+                return;
             }
 
-            UpdateClockTexts();
-        }
-
-        private void UpdateClockTexts()
-        {
-            DateTime now = _clock();
-            TimeSpan active = _activeAccumulated;
-            if (_runStartedAt != null)
+            string text = "正在探索，用时 "
+                + ProcessGroupViewModel.FormatRunDuration(now - _turnUser.Timestamp);
+            AssistantChatItemViewModel streaming = Items
+                .OfType<AssistantChatItemViewModel>()
+                .LastOrDefault(a => a.IsStreaming);
+            if (streaming != null)
             {
-                active += now - _runStartedAt.Value;
-            }
-
-            string elapsed = FormatDuration(active);
-            if (!string.Equals(_elapsedText, elapsed, StringComparison.Ordinal))
-            {
-                _elapsedText = elapsed;
-                OnPropertyChanged(nameof(ElapsedText));
-            }
-
-            string run = _runStartedAt == null ? null : FormatDuration(now - _runStartedAt.Value);
-            if (!string.Equals(_runElapsedText, run, StringComparison.Ordinal))
-            {
-                _runElapsedText = run;
-                OnPropertyChanged(nameof(RunElapsedText));
+                streaming.SetRunStatus(text);
             }
         }
 
-        private void ResetSessionClock()
+        /// <summary>RunStarted：把计时挂到当前问题的气泡下方；排队消息开始新一轮时重新挂。</summary>
+        private void BeginTurnTimer()
         {
-            _runStartedAt = null;
-            _activeAccumulated = TimeSpan.Zero;
-            _elapsedText = "00:00";
-            _runElapsedText = null;
-            OnPropertyChanged(nameof(ElapsedText));
-            OnPropertyChanged(nameof(RunElapsedText));
-        }
-
-        internal static string FormatDuration(TimeSpan value)
-        {
-            if (value < TimeSpan.Zero)
+            ClearRunStatus();
+            if (_turnUser != null && _turnUser.IsTurnRunning)
             {
-                value = TimeSpan.Zero;
+                return;
             }
 
-            int total = (int)value.TotalSeconds;
-            int hours = total / 3600;
-            int minutes = (total % 3600) / 60;
-            int seconds = total % 60;
-            return hours > 0
-                ? hours.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                    + ":" + minutes.ToString("00", System.Globalization.CultureInfo.InvariantCulture)
-                    + ":" + seconds.ToString("00", System.Globalization.CultureInfo.InvariantCulture)
-                : minutes.ToString("00", System.Globalization.CultureInfo.InvariantCulture)
-                    + ":" + seconds.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+            _turnUser = Items.OfType<UserChatItemViewModel>().LastOrDefault();
+            if (_turnUser != null)
+            {
+                _turnUser.StartTurn(_turnUser.Timestamp);
+            }
+        }
+
+        private void CompleteTurn(DateTimeOffset at, bool failed = false, bool stopped = false)
+        {
+            ClearRunStatus();
+            if (_turnUser == null)
+            {
+                return;
+            }
+
+            _turnUser.CompleteTurn(at, failed, stopped);
+            _turnUser = null;
+        }
+
+        private void ClearRunStatus()
+        {
+            foreach (AssistantChatItemViewModel assistant in _assistantItems.Values)
+            {
+                assistant.SetRunStatus(null);
+            }
         }
 
         private void OnProvidersChanged(object sender, EventArgs e)

@@ -320,7 +320,6 @@
     <Thickness x:Key="Margin.Chat.ProcessMember">36,0,14,4</Thickness>
     <Thickness x:Key="Thickness.Chat.ProcessRule">0,0,0,1</Thickness>
     <Thickness x:Key="Margin.Chat.Notice">14,10,14,0</Thickness>
-    <Thickness x:Key="Margin.Chat.Caption">0,0,0,4</Thickness>
     <Thickness x:Key="Margin.Chat.Footer">0,2,0,0</Thickness>
     <Thickness x:Key="Pad.Bubble">9,12</Thickness>
     <Thickness x:Key="Pad.Chat.Body">10,8</Thickness>

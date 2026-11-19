@@ -57,6 +57,13 @@ namespace MiaoWu.App.ViewModels
         private readonly IClipboardService _clipboard;
         private string _text;
         private bool _isPending;
+        private DateTimeOffset? _turnStartedAt;
+        private DateTimeOffset? _turnEndedAt;
+        private bool _turnHasGroup;
+        private bool _turnFailed;
+        private bool _turnStopped;
+        private string _turnStatusLabel = string.Empty;
+        private string _turnDuration = string.Empty;
 
         public UserChatItemViewModel(string id, string text, DateTimeOffset timestamp, IClipboardService clipboard)
             : base(timestamp)
@@ -83,9 +90,132 @@ namespace MiaoWu.App.ViewModels
             set { SetProperty(ref _isPending, value); }
         }
 
+        /// <summary>本轮是否正在跑；结束（完成 / 失败 / 停止）后为 false。</summary>
+        public bool IsTurnRunning
+        {
+            get { return _turnStartedAt != null && _turnEndedAt == null; }
+        }
+
+        /// <summary>
+        /// 问题气泡下方的本轮用时：只在轮次结束后显示「已完成，用时 N秒」。
+        /// 运行中的「正在探索，用时 N秒」放在助手尾部状态位，避免同一屏出现两条计时；
+        /// 这一轮有执行过程组时，完成态也交给组头。
+        /// </summary>
+        public bool ShowTurnStatus
+        {
+            get { return _turnStartedAt != null && _turnEndedAt != null && !_turnHasGroup; }
+        }
+
+        /// <summary>「正在探索，用时 」/「已完成，用时 」/「处理失败」/「已停止」。</summary>
+        public string TurnStatusLabel
+        {
+            get { return _turnStatusLabel; }
+        }
+
+        /// <summary>DSH 单位时长（12秒 / 1分5秒），失败与停止为空。</summary>
+        public string TurnDuration
+        {
+            get { return _turnDuration; }
+        }
+
+        public string TurnStatusText
+        {
+            get { return _turnStatusLabel + _turnDuration; }
+        }
+
         public override string AutomationName
         {
             get { return "用户消息"; }
+        }
+
+        /// <summary>新的一轮从用户消息时刻起算；重试同一问题时重新开始。</summary>
+        public void StartTurn(DateTimeOffset at)
+        {
+            _turnStartedAt = at;
+            _turnEndedAt = null;
+            _turnHasGroup = false;
+            _turnFailed = false;
+            _turnStopped = false;
+            UpdateTurnText(at);
+            OnPropertyChanged(nameof(IsTurnRunning));
+            OnPropertyChanged(nameof(ShowTurnStatus));
+            OnPropertyChanged(nameof(TurnStatusText));
+        }
+
+        /// <summary>运行中每秒刷新用时；已结束的不再变动。</summary>
+        public void RefreshTurn(DateTimeOffset now)
+        {
+            if (IsTurnRunning)
+            {
+                UpdateTurnText(now);
+            }
+        }
+
+        /// <summary>这一轮已经建了执行过程组：组头会显示同样的状态与用时。</summary>
+        public void SetHasProcessGroup()
+        {
+            if (_turnHasGroup)
+            {
+                return;
+            }
+
+            _turnHasGroup = true;
+            OnPropertyChanged(nameof(ShowTurnStatus));
+            OnPropertyChanged(nameof(TurnStatusText));
+        }
+
+        public void CompleteTurn(DateTimeOffset at, bool failed = false, bool stopped = false)
+        {
+            if (_turnStartedAt == null || _turnEndedAt != null)
+            {
+                return;
+            }
+
+            _turnEndedAt = at < _turnStartedAt.Value ? _turnStartedAt.Value : at;
+            _turnFailed = failed;
+            _turnStopped = stopped;
+            UpdateTurnText(_turnEndedAt.Value);
+            OnPropertyChanged(nameof(IsTurnRunning));
+            OnPropertyChanged(nameof(ShowTurnStatus));
+            OnPropertyChanged(nameof(TurnStatusText));
+        }
+
+        private void UpdateTurnText(DateTimeOffset now)
+        {
+            string label;
+            string duration;
+            if (_turnStopped)
+            {
+                label = "已停止";
+                duration = string.Empty;
+            }
+            else if (_turnFailed)
+            {
+                label = "处理失败";
+                duration = string.Empty;
+            }
+            else if (_turnEndedAt != null)
+            {
+                label = "已完成，用时 ";
+                duration = ProcessGroupViewModel.FormatRunDuration(_turnEndedAt.Value - _turnStartedAt.Value);
+            }
+            else
+            {
+                label = "正在探索，用时 ";
+                duration = ProcessGroupViewModel.FormatRunDuration(now - _turnStartedAt.Value);
+            }
+
+            if (!string.Equals(_turnStatusLabel, label, StringComparison.Ordinal))
+            {
+                _turnStatusLabel = label;
+                OnPropertyChanged(nameof(TurnStatusLabel));
+            }
+
+            if (!string.Equals(_turnDuration, duration, StringComparison.Ordinal))
+            {
+                _turnDuration = duration;
+                OnPropertyChanged(nameof(TurnDuration));
+            }
         }
 
         private void CopyText()
@@ -104,6 +234,7 @@ namespace MiaoWu.App.ViewModels
         private readonly IClipboardService _clipboard;
 
         private string _statusText;
+        private string _runStatusText;
         private string _errorText;
         private string _usageText;
         private string _modelText;
@@ -244,7 +375,13 @@ namespace MiaoWu.App.ViewModels
         public bool IsStreaming
         {
             get { return _isStreaming; }
-            private set { SetProperty(ref _isStreaming, value); }
+            private set
+            {
+                if (SetProperty(ref _isStreaming, value))
+                {
+                    OnPropertyChanged(nameof(FooterStatusText));
+                }
+            }
         }
 
         public bool IsFailed
@@ -262,7 +399,39 @@ namespace MiaoWu.App.ViewModels
         public string StatusText
         {
             get { return _statusText; }
-            private set { SetProperty(ref _statusText, value); }
+            private set
+            {
+                if (SetProperty(ref _statusText, value))
+                {
+                    OnPropertyChanged(nameof(FooterStatusText));
+                }
+            }
+        }
+
+        /// <summary>
+        /// 助手尾部左侧的状态：生成中显示「正在探索，用时 N秒」，替换原来的「正在生成…」；
+        /// 其他时候回落到失败 / 中断 / 输出上限等静态状态。
+        /// </summary>
+        public string FooterStatusText
+        {
+            get
+            {
+                return _isStreaming && !string.IsNullOrEmpty(_runStatusText)
+                    ? _runStatusText
+                    : _statusText;
+            }
+        }
+
+        /// <summary>会话计时每秒写入运行状态；轮次结束由会话清空。</summary>
+        internal void SetRunStatus(string text)
+        {
+            if (string.Equals(_runStatusText, text, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _runStatusText = text;
+            OnPropertyChanged(nameof(FooterStatusText));
         }
 
         public string ErrorText
@@ -542,7 +711,8 @@ namespace MiaoWu.App.ViewModels
             switch (message.Status)
             {
                 case AgentMessageStatus.Streaming:
-                    return "正在生成…";
+                    // 运行中的状态由会话计时每秒写成「正在探索，用时 N秒」，这里不再显示「正在生成…」。
+                    return null;
                 case AgentMessageStatus.Failed:
                     return "失败";
                 case AgentMessageStatus.Interrupted:
@@ -1096,7 +1266,7 @@ namespace MiaoWu.App.ViewModels
 
         private bool _isExpanded;
         private string _summary = "执行过程";
-        private string _headerLabel = "运行中，用时 ";
+        private string _headerLabel = "正在探索，用时 ";
         private string _headerDuration = "1秒";
         private bool _isCompleted;
         private bool _failed;
@@ -1329,7 +1499,7 @@ namespace MiaoWu.App.ViewModels
             }
             else
             {
-                label = "运行中，用时 ";
+                label = "正在探索，用时 ";
                 duration = FormatRunDuration(now - _startedAt);
             }
 
