@@ -1165,6 +1165,13 @@ namespace MiaoWu.App.ViewModels
                     if (_openGroup != null)
                     {
                         current.SetHasProcessGroup();
+                        AssistantChatItemViewModel streaming = Items
+                            .OfType<AssistantChatItemViewModel>()
+                            .LastOrDefault(a => a.IsStreaming);
+                        if (streaming != null)
+                        {
+                            streaming.SetInsideOpenGroup(true);
+                        }
                     }
                 }
             }
@@ -1405,6 +1412,7 @@ namespace MiaoWu.App.ViewModels
             {
                 item = new AssistantChatItemViewModel(message.Id, _clipboard, message.CreatedAt);
                 item.RetryRequested += (sender, args) => FireAndForget(RetryAsync(item));
+                item.SetInsideOpenGroup(_openGroup != null);
                 Items.Add(item);
                 _assistantItems[message.Id] = item;
                 OnPropertyChanged(nameof(IsEmpty));
@@ -1877,6 +1885,7 @@ namespace MiaoWu.App.ViewModels
 
             group.Add(assistant);
             _groupOf[assistant] = group;
+            assistant.SetInsideOpenGroup(true);
         }
 
         /// <summary>工具卡永远属于过程：没有打开的组就在它前面补一个组头。</summary>
@@ -1915,6 +1924,12 @@ namespace MiaoWu.App.ViewModels
             if (collapse)
             {
                 _openGroup.CollapseAfterTurn();
+            }
+
+            // 组头已经承担了这一轮的计时；组关掉后，回答行恢复时间 / 复制尾部。
+            foreach (AssistantChatItemViewModel assistant in _assistantItems.Values)
+            {
+                assistant.SetInsideOpenGroup(false);
             }
 
             _openGroup = null;

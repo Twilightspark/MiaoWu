@@ -246,6 +246,7 @@ namespace MiaoWu.App.ViewModels
         private bool _isThinkingExpanded;
         private bool _isMarkdownDirty;
         private bool _continuesWithTools;
+        private bool _isInsideOpenGroup;
         private string _thinkingPreview;
 
         public AssistantChatItemViewModel(string id, IClipboardService clipboard, DateTimeOffset timestamp)
@@ -308,7 +309,24 @@ namespace MiaoWu.App.ViewModels
         /// </summary>
         public bool ShowFooter
         {
-            get { return (HasText || HasError || IsStreaming || ShowRetry) && !_continuesWithTools; }
+            get
+            {
+                return (HasText || HasError || IsStreaming || ShowRetry)
+                    && !_continuesWithTools
+                    && !_isInsideOpenGroup;
+            }
+        }
+
+        /// <summary>
+        /// 这一行是否处在展开的过程组里：组头已经显示「正在探索，用时 N秒」，
+        /// 流式步骤的尾部不再重复一条同样的计时与时间。
+        /// </summary>
+        internal void SetInsideOpenGroup(bool value)
+        {
+            if (SetProperty(ref _isInsideOpenGroup, value))
+            {
+                OnPropertyChanged(nameof(ShowFooter));
+            }
         }
 
         public bool HasError
