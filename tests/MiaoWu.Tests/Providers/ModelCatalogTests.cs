@@ -40,6 +40,30 @@ namespace MiaoWu.Tests.Providers
         }
 
         [Fact]
+        public void BuildsModelsCandidatesForOpenCodeGateway()
+        {
+            Assert.Equal(
+                new[]
+                {
+                    "https://opencode.ai/inference/go/v1/models",
+                    "https://opencode.ai/inference/go/openai/v1/models"
+                },
+                ProviderEndpoints.ModelsListCandidates("https://opencode.ai/inference/go/openai/v1"));
+
+            Assert.Equal(
+                new[]
+                {
+                    "https://opencode.ai/inference/go/v1/models",
+                    "https://opencode.ai/inference/go/anthropic/v1/models"
+                },
+                ProviderEndpoints.ModelsListCandidates("https://opencode.ai/inference/go/anthropic/v1"));
+
+            Assert.Equal(
+                new[] { "https://opencode.ai/inference/v1/models", "https://opencode.ai/inference/models" },
+                ProviderEndpoints.ModelsListCandidates("https://opencode.ai/inference"));
+        }
+
+        [Fact]
         public void ParsesOpenAiModelList()
         {
             const string json = "{\"object\":\"list\",\"data\":[" +

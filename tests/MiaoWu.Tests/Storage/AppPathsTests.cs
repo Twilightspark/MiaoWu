@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using MiaoWu.Infrastructure;
+using MiaoWu.Infrastructure.Storage;
 using Xunit;
 
 namespace MiaoWu.Tests.Storage
@@ -46,6 +47,8 @@ namespace MiaoWu.Tests.Storage
             Assert.True(Directory.Exists(paths.LogsDirectory));
             Assert.True(Directory.Exists(paths.CacheDirectory));
             Assert.True(Directory.Exists(paths.BackupsDirectory));
+            Assert.True(Directory.Exists(paths.ToolOutputCacheDirectory));
+            Assert.True(FolderAccess.IsWritable(paths.RootDirectory));
         }
     }
 }

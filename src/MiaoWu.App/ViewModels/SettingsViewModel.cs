@@ -1570,13 +1570,7 @@ namespace MiaoWu.App.ViewModels
                     continue;
                 }
 
-                Models.Add(new ModelEditorViewModel(new ModelDefinition
-                {
-                    Id = entry.Id.Trim(),
-                    Name = entry.DisplayName,
-                    ContextWindow = 128000,
-                    MaxOutputTokens = 8192
-                }));
+                Models.Add(new ModelEditorViewModel(ProviderModelCatalogMerge.CreateModel(entry)));
                 added++;
             }
 

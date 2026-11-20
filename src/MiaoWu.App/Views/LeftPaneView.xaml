@@ -303,16 +303,6 @@
                                                         VerticalAlignment="Center"
                                                         Visibility="Collapsed">
                                                 <Button Style="{StaticResource Button.Icon}"
-                                                        Command="{Binding NewSessionCommand}"
-                                                        ToolTip="{x:Static res:Strings.NewSessionInWorkspaceTooltip}"
-                                                        AutomationProperties.AutomationId="WorkspaceNewSession"
-                                                        AutomationProperties.Name="{x:Static res:Strings.NewSessionInWorkspaceTooltip}">
-                                                    <Path Style="{StaticResource Icon}"
-                                                          Data="{StaticResource Ico.MessagePlus}"
-                                                          Fill="{DynamicResource Brush.Text3}" />
-                                                </Button>
-
-                                                <Button Style="{StaticResource Button.Icon}"
                                                         ToolTip="{x:Static res:Strings.WorkspaceActions}"
                                                         AutomationProperties.AutomationId="WorkspaceMore"
                                                         AutomationProperties.Name="{x:Static res:Strings.WorkspaceActions}"
@@ -331,6 +321,33 @@
                                 <StackPanel x:Name="WorkspaceContent"
                                             Margin="{StaticResource Margin.Left.Content}"
                                             Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                        <!-- 会话视图顶部的新建入口：主题色实心按钮，图标 + 白字居中，取代工作区行悬停的 ＋ 图标 -->
+                                        <Button x:Name="WorkspaceNewSessionButton"
+                                                Height="28"
+                                                Margin="8,0,8,4"
+                                                Padding="9,0"
+                                                HorizontalAlignment="Stretch"
+                                                Style="{StaticResource Button.NavAccent}"
+                                                Command="{Binding NewSessionCommand}"
+                                                ToolTip="{x:Static res:Strings.NewSessionInWorkspaceTooltip}"
+                                                Visibility="{Binding ShowSessionList, Converter={StaticResource BoolToVisibility}}"
+                                                KeyboardNavigation.TabIndex="5"
+                                                AutomationProperties.AutomationId="WorkspaceNewSession"
+                                                AutomationProperties.Name="{x:Static res:Strings.NewSession}">
+                                            <StackPanel Orientation="Horizontal"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center">
+                                                <Path Style="{StaticResource Icon}"
+                                                      Data="{StaticResource Ico.MessagePlus}"
+                                                      Fill="{DynamicResource Brush.OnAccent}" />
+                                                <TextBlock Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Text="{x:Static res:Strings.NewSession}"
+                                                           Style="{StaticResource Text.ListRow}"
+                                                           Foreground="{DynamicResource Brush.OnAccent}" />
+                                            </StackPanel>
+                                        </Button>
+
                                         <ListBox x:Name="SessionsList"
                                                  ItemsSource="{Binding SessionRows}"
                                                  SelectedItem="{Binding SelectedSession, Mode=TwoWay}"
@@ -627,7 +644,7 @@
                                             </ListBox.ItemTemplate>
                                         </ListBox>
 
-                                        <!-- 会话空态：只保留一句提示，不放按钮 -->
+                                        <!-- 会话空态：顶部已有新建入口，这里只保留一句提示 -->
                                         <TextBlock MaxWidth="196"
                                                    Margin="0,20,0,12"
                                                    HorizontalAlignment="Center"

@@ -55,6 +55,10 @@ namespace MiaoWu.Core.Agents
         private WorkspacePathSandbox _sandbox;
         private bool _disposed;
         private bool _firstMessage = true;
+        private bool _titlePinned;
+        private bool _autoTitlePending;
+        private string _firstUserText;
+        private int _modelTitleStarted;
 
         private IConversationStore Store
         {
@@ -116,6 +120,23 @@ namespace MiaoWu.Core.Agents
             if (string.IsNullOrWhiteSpace(_modelId))
             {
                 _modelId = _options.ModelId;
+            }
+
+            // 共享的模型配置优先于会话自己的历史记录：模型是全局设置，
+            // 换到另一个会话时不应该再回到它上次用过的模型。
+            ModelSelection shared = _services.ModelSelection;
+            if (shared != null)
+            {
+                shared.Changed += OnSharedModelChanged;
+                if (!string.IsNullOrWhiteSpace(shared.ProviderId))
+                {
+                    _providerId = shared.ProviderId;
+                }
+
+                if (!string.IsNullOrWhiteSpace(shared.ModelId))
+                {
+                    _modelId = shared.ModelId;
+                }
             }
         }
 
@@ -431,6 +452,21 @@ namespace MiaoWu.Core.Agents
 
         public Task SetModelAsync(string providerId, string modelId, CancellationToken cancellationToken)
         {
+            ModelSelection shared = _services.ModelSelection;
+            if (shared != null)
+            {
+                // 模型是全局配置：在这里改等于所有会话一起改。运行中的会话不受影响，
+                // 它的本轮模型在 run 开始时已经解析好，下一条消息才用新模型。
+                string provider = string.IsNullOrWhiteSpace(providerId) ? shared.ProviderId : providerId;
+                string model = string.IsNullOrWhiteSpace(modelId) ? shared.ModelId : modelId;
+                if (!string.IsNullOrWhiteSpace(provider) && !string.IsNullOrWhiteSpace(model))
+                {
+                    shared.Set(provider, model);
+                }
+
+                return Task.CompletedTask;
+            }
+
             if (State != AgentSessionState.Idle)
             {
                 throw new AgentRunException(AgentError.Create(
@@ -455,6 +491,31 @@ namespace MiaoWu.Core.Agents
             return Task.CompletedTask;
         }
 
+        /// <summary>共享模型被任一会话改掉后，刷新本会话的摘要（下一次运行也会按它解析）。</summary>
+        private void OnSharedModelChanged(object sender, EventArgs e)
+        {
+            ModelSelection shared = _services.ModelSelection;
+            if (shared == null || _disposed)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (!string.IsNullOrWhiteSpace(shared.ProviderId))
+                {
+                    _providerId = shared.ProviderId;
+                }
+
+                if (!string.IsNullOrWhiteSpace(shared.ModelId))
+                {
+                    _modelId = shared.ModelId;
+                }
+            }
+
+            RaiseSummary();
+        }
+
         public Task RenameAsync(string title, CancellationToken cancellationToken)
         {
             string normalized = NormalizeTitle(title);
@@ -468,6 +529,8 @@ namespace MiaoWu.Core.Agents
                 _title = normalized;
                 // 用户显式改过标题后，首条消息不再自动覆盖。
                 _firstMessage = false;
+                _titlePinned = true;
+                _autoTitlePending = false;
             }
 
             Publish(new SessionTitleChangedEvent { Title = normalized });
@@ -515,6 +578,12 @@ namespace MiaoWu.Core.Agents
             }
 
             _disposed = true;
+            ModelSelection shared = _services.ModelSelection;
+            if (shared != null)
+            {
+                shared.Changed -= OnSharedModelChanged;
+            }
+
             try
             {
                 _shutdown.Cancel();
@@ -629,6 +698,7 @@ namespace MiaoWu.Core.Agents
 
             AgentMessage assistant = null;
             bool hasPartial = false;
+            Task titleTask = null;
 
             try
             {
@@ -644,6 +714,10 @@ namespace MiaoWu.Core.Agents
                 IReadOnlyList<ToolDefinition> definitions = GetToolDefinitions();
                 int maxTurns = Math.Max(1, _options.MaxTurnsPerRun);
 
+                // 一次运行只解析一次模型：中途在别的会话里换模型，从下一条消息开始生效，
+                // 不会把正在多轮执行的这一轮切成两个模型。
+                ModelDescriptor model = ResolveModel(pending.Input, out ProviderCredential credential);
+
                 while (continueRun && turnIndex < maxTurns)
                 {
                     turnIndex++;
@@ -654,7 +728,12 @@ namespace MiaoWu.Core.Agents
 
                     Publish(new TurnStartedEvent { RunId = runId, TurnIndex = turnIndex });
 
-                    ModelDescriptor model = ResolveModel(pending.Input, out ProviderCredential credential);
+                    if (turnIndex == 1)
+                    {
+                        // 首轮一开始就用这一轮实际使用的路由发标题请求：与主回答并行推进，
+                        // 但属于本轮执行的一部分，本轮结束前会等它收敛。
+                        titleTask = StartModelTitle(model, credential);
+                    }
                     string turnAssistantId = turnIndex == 1 ? assistantId : NewId("m");
                     RunTurnResult llmResult = await RunOneTurnAsync(
                         turnAssistantId,
@@ -703,6 +782,10 @@ namespace MiaoWu.Core.Agents
 
                     continueRun = willContinue;
                 }
+
+                // 首轮的标题请求在本轮执行中已经发出；这里同步收敛，
+                // 让 RunCompleted 时标题已经落定（通常它早就跑完了，只等慢网络下的超时上限）。
+                await AwaitModelTitleAsync(titleTask).ConfigureAwait(false);
 
                 await FlushStoreAsync().ConfigureAwait(false);
 
@@ -1374,6 +1457,27 @@ namespace MiaoWu.Core.Agents
                 ? input.ModelId
                 : _modelId;
 
+            // 共享模型优先于会话自己的记录；显式 input 覆盖仍排在最后（重试用）。
+            ModelSelection shared = _services.ModelSelection;
+            if (shared != null)
+            {
+                if (input == null || string.IsNullOrWhiteSpace(input.ProviderId))
+                {
+                    if (!string.IsNullOrWhiteSpace(shared.ProviderId))
+                    {
+                        providerId = shared.ProviderId;
+                    }
+                }
+
+                if (input == null || string.IsNullOrWhiteSpace(input.ModelId))
+                {
+                    if (!string.IsNullOrWhiteSpace(shared.ModelId))
+                    {
+                        modelId = shared.ModelId;
+                    }
+                }
+            }
+
             ModelDescriptor model = _services.Models.Resolve(providerId, modelId);
             if (model == null)
             {
@@ -1455,6 +1559,12 @@ namespace MiaoWu.Core.Agents
                 return;
             }
 
+            lock (_gate)
+            {
+                _firstUserText = text;
+                _autoTitlePending = _options.AutoTitle;
+            }
+
             string title = text.Length <= 24 ? text : text.Substring(0, 24) + "…";
             lock (_gate)
             {
@@ -1476,7 +1586,180 @@ namespace MiaoWu.Core.Agents
             }
         }
 
-        private async Task PersistUserMessageAsync(AgentMessage message)        {
+        /// <summary>
+        /// 首轮执行过程中，用这一轮已经记录在会话上的路由再要一个更短的标题。
+        /// 请求与主回答并行发出，由调用方在本轮结束前等待收敛，因此标题会在首个答案期间出现；
+        /// 它只改标题，不进入模型历史，失败时保留回退标题。
+        /// </summary>
+        private Task StartModelTitle(ModelDescriptor model, ProviderCredential credential)
+        {
+            if (!_options.AutoTitle || model == null || credential == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            string firstUserText;
+            lock (_gate)
+            {
+                if (_disposed || _titlePinned || !_autoTitlePending || string.IsNullOrEmpty(_firstUserText))
+                {
+                    return Task.CompletedTask;
+                }
+
+                firstUserText = _firstUserText;
+            }
+
+            if (Interlocked.CompareExchange(ref _modelTitleStarted, 1, 0) != 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            // 直接启动而不丢给 Task.Run：先同步执行到第一个真实 await，
+            // 标题请求和首轮主请求一起发出，测试里的脚本队列顺序也可预期。
+            return GenerateModelTitleAsync(model, credential, firstUserText);
+        }
+
+        /// <summary>
+        /// 等待首轮标题请求收敛。标题是锦上添花，任何失败（含超时）都只记日志，不影响本轮结果。
+        /// </summary>
+        private async Task AwaitModelTitleAsync(Task titleTask)
+        {
+            if (titleTask == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await titleTask.ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.title", "模型标题生成失败：" + exception.Message);
+            }
+        }
+
+        private async Task GenerateModelTitleAsync(
+            ModelDescriptor model,
+            ProviderCredential credential,
+            string firstUserText)
+        {
+            bool acquired = false;
+            try
+            {
+                CancellationToken lifetime = _shutdown.Token;
+                using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime))
+                {
+                    // 标题只是锦上添花：超过 15 秒就不再等，保留回退标题。
+                    timeout.CancelAfter(TimeSpan.FromSeconds(15));
+                    CancellationToken token = timeout.Token;
+
+                    IModelApi api = _services.Models == null ? null : _services.Models.GetApi(model.Api);
+                    int maxOutputTokens = model.MaxOutputTokens > 0
+                        ? Math.Min(SessionTitleGenerator.MaxOutputTokens, model.MaxOutputTokens)
+                        : SessionTitleGenerator.MaxOutputTokens;
+                    LlmRequest request = SessionTitleGenerator.BuildRequest(
+                        firstUserText,
+                        _options.SessionId,
+                        maxOutputTokens);
+                    if (api == null || request == null)
+                    {
+                        return;
+                    }
+
+                    await AcquireGateAsync(token).ConfigureAwait(false);
+                    acquired = true;
+
+                    string text = null;
+                    using (ILlmStream stream = api.Open(model, request, credential, token))
+                    {
+                        while (true)
+                        {
+                            LlmStreamEvent streamEvent = await stream.ReadAsync(token).ConfigureAwait(false);
+                            if (streamEvent == null)
+                            {
+                                break;
+                            }
+
+                            LlmFailed failed = streamEvent as LlmFailed;
+                            if (failed != null)
+                            {
+                                _services.Logger.Warn(
+                                    "session.title",
+                                    "模型标题请求失败：" + (failed.Error == null ? "未知错误" : failed.Error.Message));
+                                return;
+                            }
+
+                            LlmCompleted completed = streamEvent as LlmCompleted;
+                            if (completed != null)
+                            {
+                                text = SessionTitleGenerator.ExtractText(completed.Response);
+                            }
+                        }
+                    }
+
+                    string title = SessionTitleGenerator.Normalize(text);
+                    if (title != null)
+                    {
+                        ApplyModelTitle(title);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+                // 会话在标题请求启动瞬间被销毁；静默结束。
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.title", "模型标题生成失败：" + exception.Message);
+            }
+            finally
+            {
+                if (acquired)
+                {
+                    ReleaseGate();
+                }
+            }
+        }
+
+        private void ApplyModelTitle(string title)
+        {
+            lock (_gate)
+            {
+                if (_disposed || _titlePinned)
+                {
+                    return;
+                }
+
+                _autoTitlePending = false;
+                if (string.Equals(_title, title, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _title = title;
+            }
+
+            Publish(new SessionTitleChangedEvent { Title = title });
+            RaiseSummary();
+
+            try
+            {
+                Store.RenameAsync(_options.SessionId, title, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.title", "标题保存失败：" + exception.Message);
+            }
+        }
+
+        private async Task PersistUserMessageAsync(AgentMessage message)
+        {
             if (message == null)
             {
                 return;

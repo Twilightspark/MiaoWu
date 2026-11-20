@@ -147,6 +147,114 @@ namespace MiaoWu.Tests.Agents
         }
 
         [Fact]
+        public async Task ModelTitleReplacesFallbackUsingRecordedRoute()
+        {
+            // 标题请求在首轮执行中先于主回答发出，脚本按 先标题 / 后主回答 排队。
+            _api.EnqueueText("**修复构建失败**");
+            _api.EnqueueText("收到。");
+
+            IAgentSession session = await CreateSessionAsync("s_title", autoTitle: true);
+            AgentRun run = await session.SendAsync(
+                TextInput("帮我修复构建失败的问题"),
+                AgentSendMode.Queue,
+                CancellationToken.None);
+            await WaitAsync(run.Completion);
+
+            await WaitForAsync(
+                () => string.Equals(session.Snapshot().Title, "修复构建失败", StringComparison.Ordinal),
+                TimeSpan.FromSeconds(5));
+
+            MiaoWu.Core.Conversations.ConversationTranscript transcript =
+                await _store.LoadAsync("s_title", CancellationToken.None);
+            Assert.Equal("修复构建失败", transcript.Title);
+        }
+
+        [Fact]
+        public async Task ModelTitleIsAppliedBeforeRunCompletes()
+        {
+            _api.EnqueueText("**修复构建失败**");
+            _api.EnqueueText("收到。");
+
+            IAgentSession session = await CreateSessionAsync("s_title_sync", autoTitle: true);
+            string titleAtRunCompleted = null;
+            session.Subscribe(new RunCompletedProbe(
+                session,
+                title => titleAtRunCompleted = title));
+
+            AgentRun run = await session.SendAsync(
+                TextInput("帮我修复构建失败的问题"),
+                AgentSendMode.Queue,
+                CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            // 同步语义：本轮结束（RunCompleted）时模型标题已经落定，不再是跑完之后的后台任务。
+            Assert.Equal("修复构建失败", titleAtRunCompleted);
+        }
+
+        [Fact]
+        public async Task ModelTitleFailureKeepsFallback()
+        {
+            _api.EnqueueFailure(new AgentError
+            {
+                Kind = AgentErrorKind.Server,
+                Message = "标题服务暂不可用。",
+                Retryable = false
+            });
+            _api.EnqueueText("收到。");
+
+            IAgentSession session = await CreateSessionAsync("s_title_fail", autoTitle: true);
+            AgentRun run = await session.SendAsync(
+                TextInput("帮我检查一下发布脚本"),
+                AgentSendMode.Queue,
+                CancellationToken.None);
+            await WaitAsync(run.Completion);
+
+            await WaitForAsync(() => _api.Remaining == 0, TimeSpan.FromSeconds(5));
+            await Task.Delay(100);
+
+            Assert.Equal("帮我检查一下发布脚本", session.Snapshot().Title);
+        }
+
+        [Fact]
+        public async Task ModelTitleIsSkippedWhenAutoTitleDisabled()
+        {
+            _api.EnqueueText("收到。");
+
+            IAgentSession session = await CreateSessionAsync("s_title_off");
+            AgentRun run = await session.SendAsync(
+                TextInput("只保留回退标题"),
+                AgentSendMode.Queue,
+                CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            Assert.Equal("只保留回退标题", session.Snapshot().Title);
+            // 关闭后不会再发标题请求，队列里没有第二个脚本回合。
+            Assert.Equal(0, _api.Remaining);
+        }
+
+        [Fact]
+        public async Task ModelTitleDoesNotOverrideUserRename()
+        {
+            _api.EnqueueText("收到。");
+
+            IAgentSession session = await CreateSessionAsync("s_title_pinned", autoTitle: true);
+            await session.RenameAsync("我的标题", CancellationToken.None);
+
+            AgentRun run = await session.SendAsync(
+                TextInput("这是一条会被标题化但已经钉住的消息"),
+                AgentSendMode.Queue,
+                CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            Assert.Equal("我的标题", session.Snapshot().Title);
+            // 标题已钉住：不会再发模型标题请求，脚本队列里没有第二个回合。
+            Assert.Equal(0, _api.Remaining);
+        }
+
+        [Fact]
         public async Task FailureIsReportedAsEventAndMessageStatus()
         {
             _api.EnqueueFailure(new AgentError
@@ -280,12 +388,12 @@ namespace MiaoWu.Tests.Agents
             }
         }
 
-        private async Task<IAgentSession> CreateSessionAsync(string id)
+        private async Task<IAgentSession> CreateSessionAsync(string id, bool autoTitle = false)
         {
-            return await _runtime.GetOrCreateAsync(Options(id), CancellationToken.None);
+            return await _runtime.GetOrCreateAsync(Options(id, autoTitle), CancellationToken.None);
         }
 
-        private static AgentSessionOptions Options(string id)
+        private static AgentSessionOptions Options(string id, bool autoTitle = false)
         {
             return new AgentSessionOptions
             {
@@ -295,7 +403,9 @@ namespace MiaoWu.Tests.Agents
                 SystemPrompt = "你是测试助手。",
                 ProviderId = "p",
                 ModelId = "m",
-                HistoryLimit = 50
+                HistoryLimit = 50,
+                // 默认关闭：既有用例用脚本队列断言主请求；标题用例显式打开。
+                AutoTitle = autoTitle
             };
         }
 
@@ -391,6 +501,33 @@ namespace MiaoWu.Tests.Agents
                 lock (_gate)
                 {
                     _events.Add(evt);
+                }
+            }
+
+            public void OnOverflow()
+            {
+            }
+        }
+
+        /// <summary>
+        /// 在 RunCompleted 事件里抓一次当前标题，用来验证“本轮结束时标题已经落定”。
+        /// </summary>
+        private sealed class RunCompletedProbe : IAgentEventSink
+        {
+            private readonly IAgentSession _session;
+            private readonly Action<string> _onCompleted;
+
+            public RunCompletedProbe(IAgentSession session, Action<string> onCompleted)
+            {
+                _session = session;
+                _onCompleted = onCompleted;
+            }
+
+            public void OnEvent(AgentEvent evt)
+            {
+                if (evt is RunCompletedEvent && _onCompleted != null)
+                {
+                    _onCompleted(_session.Snapshot().Title);
                 }
             }
 

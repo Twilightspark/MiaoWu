@@ -196,6 +196,8 @@ namespace MiaoWu.Infrastructure.Providers
         /// <summary>
         /// 模型列表的候选地址。OpenAI 用 <c>/v1/models</c>，DeepSeek 等把版本前缀放在
         /// Base URL 里、直接用 <c>/models</c>，因此按顺序尝试，404 时再换下一个。
+        /// OpenCode Console 的列表固定在套餐根路径（<c>/inference/v1/models</c>、
+        /// <c>/inference/go/v1/models</c>），所以先把 <c>/openai/v1</c> 这类协议段剥掉。
         /// </summary>
         public static IReadOnlyList<string> ModelsListCandidates(string baseUrl)
         {
@@ -217,12 +219,39 @@ namespace MiaoWu.Infrastructure.Providers
                 return new[] { value };
             }
 
+            if (ProviderRequestHeaders.IsOpenCodeEndpoint(value))
+            {
+                string root = StripOpenCodeApiPath(value);
+                return new[] { root + "/v1/models", value + "/models" };
+            }
+
             if (EndsWithVersionSegment(value))
             {
                 return new[] { value + "/models" };
             }
 
             return new[] { value + "/v1/models", value + "/models" };
+        }
+
+        private static readonly string[] OpenCodeApiSuffixes =
+        {
+            "/openai/v1",
+            "/anthropic/v1",
+            "/google/v1beta",
+            "/v1"
+        };
+
+        private static string StripOpenCodeApiPath(string value)
+        {
+            foreach (string suffix in OpenCodeApiSuffixes)
+            {
+                if (value.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return value.Substring(0, value.Length - suffix.Length);
+                }
+            }
+
+            return value;
         }
 
         private static bool EndsWithVersionSegment(string url)

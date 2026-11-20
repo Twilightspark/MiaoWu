@@ -89,8 +89,8 @@ namespace MiaoWu.Infrastructure.Conversations
         }
 
         /// <summary>
-        /// 创建 <c>.agent</c> 下的全部保留目录。重复调用幂等；权限不足时抛出，
-        /// 由调用方（会话目录/左栏）转成内联错误。
+        /// 创建 <c>.agent</c> 下的全部保留目录，并确认当前账户可写。重复调用幂等；
+        /// 权限不足时抛出，由调用方（会话目录/左栏）转成内联错误。
         /// </summary>
         public void EnsureCreated()
         {
@@ -102,7 +102,8 @@ namespace MiaoWu.Infrastructure.Conversations
 
             foreach (string directory in AgentWorkspaceLayout.GetManagedDirectories(_workspacePath))
             {
-                Directory.CreateDirectory(directory);
+                // 工作区可能落在只读共享、或由提权进程创建：先补权限再报错。
+                FolderAccess.EnsureWritable(directory);
             }
         }
 

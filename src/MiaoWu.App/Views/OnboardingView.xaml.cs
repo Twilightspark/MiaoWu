@@ -91,6 +91,10 @@ namespace MiaoWu.App.Views
             UpdatePasswordHint();
         }
 
+        /// <summary>
+        /// 占位提示只在“还没有输入”时显示；获得焦点但仍是空的时候继续显示，
+        /// 否则空输入框只剩一根光标，看不出这一栏是干什么的。
+        /// </summary>
         private void UpdatePasswordHint()
         {
             if (ApiKeyHint == null || ApiKeyBox == null)
@@ -99,8 +103,7 @@ namespace MiaoWu.App.Views
             }
 
             bool empty = ApiKeyBox.Password.Length == 0;
-            bool focused = ApiKeyBox.IsKeyboardFocusWithin;
-            ApiKeyHint.Visibility = empty && !focused ? Visibility.Visible : Visibility.Collapsed;
+            ApiKeyHint.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void OnMinimizeClick(object sender, RoutedEventArgs e)

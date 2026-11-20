@@ -50,6 +50,12 @@ namespace MiaoWu.Infrastructure.Providers
         /// </summary>
         public int DelayMs { get; set; }
 
+        /// <summary>最近一次 <see cref="Open"/> 收到的模型，用例可据此断言这一轮用了哪个模型。</summary>
+        public ModelDescriptor LastModel { get; private set; }
+
+        /// <summary>最近一次 <see cref="Open"/> 的会话 ID（来自请求头里的 sessionId）。</summary>
+        public string LastSessionId { get; private set; }
+
         public void EnqueueText(string text)
         {
             var events = new List<LlmStreamEvent>();
@@ -145,6 +151,8 @@ namespace MiaoWu.Infrastructure.Providers
             ScriptedTurn turn;
             lock (_gate)
             {
+                LastModel = model;
+                LastSessionId = request == null ? null : request.SessionId;
                 turn = _turns.Count > 0
                     ? _turns.Dequeue()
                     : new ScriptedTurn

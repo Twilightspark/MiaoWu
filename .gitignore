@@ -5,6 +5,9 @@ artifacts/
 .artifacts/
 *.binlog
 
+# ---- 第三方运行时安装程序（.NET Framework 4.8 离线包，105 MB，不进仓库）----
+/redist/
+
 # ---- Local SDK / package / build caches ----
 .dotnet/
 .nuget/

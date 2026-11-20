@@ -135,6 +135,11 @@ namespace MiaoWu.App.ViewModels
         private bool _isArchived;
         private int _attachVersion;
 
+        /// <summary>“新建会话”刚创建、还没有发送任何消息的会话；离开时自动删除。</summary>
+        private string _pendingNewSessionId;
+
+        private Workspace _pendingNewWorkspace;
+
         public ConversationViewModel(
             AppServices app,
             IDialogService dialogs,
@@ -389,7 +394,7 @@ namespace MiaoWu.App.ViewModels
             get
             {
                 return HasModelGroups
-                    ? "选择这条消息使用的模型（按提供商分组）"
+                    ? "选择模型（所有会话共用，按提供商分组）"
                     : "还没有配置模型，点击查看设置";
             }
         }
@@ -426,7 +431,10 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        /// <summary>模型下拉行点击后调用；先更新本地下一次发送的选择，再同步给已挂载会话。</summary>
+        /// <summary>
+        /// 模型下拉行点击后调用。模型是全局配置：这里改的是所有会话共用的默认模型
+        /// （同时写回 config.json），其它会话的下一条消息也跟着用这个模型。
+        /// </summary>
         public void SelectModel(ModelOption option)
         {
             if (option == null)
@@ -438,17 +446,18 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(SelectedModel));
             OnPropertyChanged(nameof(SelectedModelName));
 
-            IAgentSession session = CurrentSession;
-            if (session != null && !IsRunning)
+            try
             {
-                try
-                {
-                    session.SetModelAsync(option.ProviderId, option.ModelId, CancellationToken.None);
-                }
-                catch (Exception)
-                {
-                }
+                _app.SetDefaultModel(option.ProviderId, option.ModelId);
             }
+            catch (Exception exception)
+            {
+                _app.Logger.Warn("conversation.model", "切换默认模型失败：" + exception.Message);
+            }
+
+            // “默认”角标跟着换到新选中的模型；等弹出菜单关掉再重建列表，
+            // 避免在菜单行的 Click 里搬运它自己的 ItemsSource。
+            _dispatcher.BeginInvoke(new Action(RefreshModelOptions), DispatcherPriority.Background);
         }
 
         /// <summary>由主窗口同步左栏当前会话行的置顶 / 归档状态，保证两处菜单文案一致。</summary>
@@ -748,6 +757,10 @@ namespace MiaoWu.App.ViewModels
                     return;
                 }
 
+                // 记下这个空白会话：没发消息就切走时自动丢弃，不再留下“新会话”空记录。
+                _pendingNewSessionId = sessionId;
+                _pendingNewWorkspace = _workspace;
+
                 StatusText = "已新建会话";
                 SessionListChanged?.Invoke(this, EventArgs.Empty);
                 FocusComposer();
@@ -758,6 +771,69 @@ namespace MiaoWu.App.ViewModels
                 OnPropertyChanged(nameof(CanSend));
                 CommandManager.InvalidateRequerySuggested();
             }
+        }
+
+        /// <summary>“新建会话”创建、还没有发送过消息的当前会话。</summary>
+        public bool HasPendingNewSession
+        {
+            get { return _pendingNewSessionId != null; }
+        }
+
+        /// <summary>
+        /// 丢弃由“新建会话”创建、还没发送任何消息的会话（关停运行时并删除 JSONL 与索引项）。
+        /// 发送第一条消息后不再丢弃；调用方负责在切换完成后刷新该工作区的会话列表。
+        /// </summary>
+        /// <returns>被删除空白会话所属的工作区；没有删除时返回 null。</returns>
+        public async Task<Workspace> DiscardPendingNewSessionAsync()
+        {
+            string pendingId = _pendingNewSessionId;
+            Workspace pendingWorkspace = _pendingNewWorkspace;
+            ClearPendingNewSession();
+
+            if (string.IsNullOrEmpty(pendingId) || pendingWorkspace == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                IAgentSession pending = _app.Runtime.Find(pendingId);
+                if (pending != null)
+                {
+                    await pending.CancelAsync(true, CancellationToken.None);
+                    using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                    {
+                        try
+                        {
+                            await pending.WaitForIdleAsync(timeout.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                        }
+                    }
+                }
+
+                await _app.Runtime.CloseAsync(pendingId, CancellationToken.None);
+                await _app.GetStore(pendingWorkspace).DeleteAsync(pendingId, CancellationToken.None);
+
+                if (string.Equals(_sessionId, pendingId, StringComparison.Ordinal))
+                {
+                    Detach();
+                }
+
+                return pendingWorkspace;
+            }
+            catch (Exception exception)
+            {
+                _app.Logger.Error("conversation.pending-session", "丢弃空白新会话失败。", exception);
+                return null;
+            }
+        }
+
+        private void ClearPendingNewSession()
+        {
+            _pendingNewSessionId = null;
+            _pendingNewWorkspace = null;
         }
 
         public async Task SendAsync()
@@ -834,6 +910,13 @@ namespace MiaoWu.App.ViewModels
 
                     await session.SendAsync(input, AgentSendMode.Queue, CancellationToken.None);
                     IsRunning = true;
+
+                    // 已经发出消息，这个会话不再是“还没操作的空白新会话”。
+                    if (string.Equals(_pendingNewSessionId, _sessionId, StringComparison.Ordinal))
+                    {
+                        ClearPendingNewSession();
+                    }
+
                     FocusComposer();
                 }
                 catch (AgentRunException exception)
@@ -1028,6 +1111,11 @@ namespace MiaoWu.App.ViewModels
 
                 await _app.Runtime.CloseAsync(sessionId, CancellationToken.None);
                 await _app.GetStore(_workspace).DeleteAsync(sessionId, CancellationToken.None);
+                if (string.Equals(_pendingNewSessionId, sessionId, StringComparison.Ordinal))
+                {
+                    ClearPendingNewSession();
+                }
+
                 Detach();
                 SessionListChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -1678,7 +1766,7 @@ namespace MiaoWu.App.ViewModels
         {
             ModelOptions.Clear();
             ModelGroups.Clear();
-            ModelDescriptor defaultModel = _app.Models.GetDefault();
+            ModelDescriptor defaultModel = _app.ResolveDefaultModel();
             string defaultKey = defaultModel == null ? null : defaultModel.Key;
             var groups = new Dictionary<string, ModelGroup>(StringComparer.OrdinalIgnoreCase);
 
@@ -1731,22 +1819,25 @@ namespace MiaoWu.App.ViewModels
 
         private void SyncModelSelection(AgentSessionSnapshot snapshot)
         {
-            // 没挂载会话时保留用户刚在下拉里选中的模型；配置刷新后仍按 key 匹配。
-            string providerId = snapshot != null
-                ? snapshot.ProviderId
-                : (_selectedModel == null ? null : _selectedModel.ProviderId);
-            string modelId = snapshot != null
-                ? snapshot.ModelId
-                : (_selectedModel == null ? null : _selectedModel.ModelId);
-
-            if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId))
+            // 模型是全局配置：切换会话时跟随共享的默认模型，而不是该会话上次用过的模型；
+            // 只有共享选择为空（目录还没配置好）时才退回会话快照 / 注册表兜底。
+            string providerId = null;
+            string modelId = null;
+            ModelDescriptor sharedModel = _app.ResolveDefaultModel();
+            if (sharedModel != null)
             {
-                ModelDescriptor fallback = _app.Models.GetDefault();
-                if (fallback != null)
-                {
-                    providerId = fallback.ProviderId;
-                    modelId = fallback.ModelId;
-                }
+                providerId = sharedModel.ProviderId;
+                modelId = sharedModel.ModelId;
+            }
+            else if (snapshot != null)
+            {
+                providerId = snapshot.ProviderId;
+                modelId = snapshot.ModelId;
+            }
+            else if (_selectedModel != null)
+            {
+                providerId = _selectedModel.ProviderId;
+                modelId = _selectedModel.ModelId;
             }
 
             ModelOption match = ModelOptions.FirstOrDefault(

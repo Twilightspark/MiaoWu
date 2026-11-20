@@ -29,6 +29,11 @@ namespace MiaoWu.Core.Agents
 
     public sealed class AgentSessionOptions
     {
+        public AgentSessionOptions()
+        {
+            AutoTitle = true;
+        }
+
         public string SessionId { get; set; }
 
         public string WorkspaceId { get; set; }
@@ -54,6 +59,12 @@ namespace MiaoWu.Core.Agents
         public int MaxTurnsPerRun { get; set; }
 
         public int MaxToolCallsPerTurn { get; set; }
+
+        /// <summary>
+        /// 是否自动生成标题：首条消息先落一个截断回退标题，等首轮结束后再用
+        /// 该轮记录的路由请求一个更短的模型标题。用户手动重命名后不再自动覆盖。
+        /// </summary>
+        public bool AutoTitle { get; set; }
     }
 
     public sealed class AgentSessionSnapshot
@@ -122,6 +133,11 @@ namespace MiaoWu.Core.Agents
         /// <summary>移除指定 assistant 消息并从同一条用户消息重跑。</summary>
         Task RetryAsync(string assistantMessageId, CancellationToken cancellationToken);
 
+        /// <summary>
+        /// 切换模型。宿主注入了共享 <see cref="MiaoWu.Core.Models.ModelSelection"/> 时，
+        /// 改的是所有会话共用的默认模型（运行中的会话本轮保持原模型、下一条消息生效）；
+        /// 没有共享选择时只改本会话，且生成中调用会抛错。
+        /// </summary>
         Task SetModelAsync(string providerId, string modelId, CancellationToken cancellationToken);
 
         /// <summary>订阅后必须先 Snapshot() 再消费实时事件。</summary>

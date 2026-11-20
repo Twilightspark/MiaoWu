@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using MiaoWu.Core.Abstractions;
+using MiaoWu.Infrastructure.Storage;
 
 namespace MiaoWu.Infrastructure
 {
@@ -91,14 +92,16 @@ namespace MiaoWu.Infrastructure
 
         public void EnsureCreated()
         {
-            Directory.CreateDirectory(DataDirectory);
-            Directory.CreateDirectory(AttachmentsDirectory);
-            Directory.CreateDirectory(BackupsDirectory);
-            Directory.CreateDirectory(LogsDirectory);
-            Directory.CreateDirectory(CacheDirectory);
-            Directory.CreateDirectory(ExportsDirectory);
-            Directory.CreateDirectory(UserSkillsDirectory);
-            Directory.CreateDirectory(ToolOutputCacheDirectory);
+            // 逐个目录确认“存在且当前账户可写”，而不是只建出来：目录可能是提权进程或别的
+            // 账户留下的，那样日志 / 会话会在后面以更难懂的方式失败。
+            FolderAccess.EnsureWritable(DataDirectory);
+            FolderAccess.EnsureWritable(AttachmentsDirectory);
+            FolderAccess.EnsureWritable(BackupsDirectory);
+            FolderAccess.EnsureWritable(LogsDirectory);
+            FolderAccess.EnsureWritable(CacheDirectory);
+            FolderAccess.EnsureWritable(ExportsDirectory);
+            FolderAccess.EnsureWritable(UserSkillsDirectory);
+            FolderAccess.EnsureWritable(ToolOutputCacheDirectory);
         }
     }
 }

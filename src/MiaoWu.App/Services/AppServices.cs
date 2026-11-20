@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Agents;
@@ -31,6 +32,8 @@ namespace MiaoWu.App.Services
     public sealed class AppServices : IDisposable
     {
         private readonly object _gate = new object();
+        private readonly object _catalogWriteGate = new object();
+        private readonly SemaphoreSlim _modelRefreshGate = new SemaphoreSlim(1, 1);
         private readonly ModelCatalogClient _modelCatalog;
         private bool _disposed;
 
@@ -88,6 +91,8 @@ namespace MiaoWu.App.Services
                         new AnthropicMessagesApi(Http)
                     });
 
+            // 所有会话共用这一份模型选择；它同时是 config.json 里记录的默认模型。
+            DefaultModelSelection = new ModelSelection();
             ApplyDefaultModelFromSettings();
 
             Tools = BuiltInToolset.CreateRegistry(paths, SystemClock.Instance);
@@ -107,8 +112,12 @@ namespace MiaoWu.App.Services
                 ToolDefinitions = ToolDefinitions,
                 ErrorClassifier = new AgentErrorClassifier(),
                 Clock = SystemClock.Instance,
+                ModelSelection = DefaultModelSelection,
                 SandboxFactory = root => new WorkspacePathSandbox(root, new FileSystemPathProbe())
             };
+
+            // 初始化完成后再订阅：启动时的默认模型落定不需要回写 config.json。
+            DefaultModelSelection.Changed += OnDefaultModelSelectionChanged;
 
             Runtime = new AgentRuntime(SessionServices, new AgentRuntimeOptions
             {
@@ -146,6 +155,12 @@ namespace MiaoWu.App.Services
         public HttpTransport Http { get; private set; }
 
         public ModelRegistry Models { get; private set; }
+
+        /// <summary>
+        /// 全局共享的模型选择（所有会话共用）。在任一会话里换模型都会改到这里，
+        /// 同时写回 `agent.defaultProviderId / defaultModelId`，下次启动沿用。
+        /// </summary>
+        public ModelSelection DefaultModelSelection { get; }
 
         public ToolRegistry Tools { get; }
 
@@ -193,8 +208,145 @@ namespace MiaoWu.App.Services
             SettingsStore.Save(Settings);
         }
 
+        /// <summary>
+        /// 自动刷新已配置供应商的模型目录：对每个有 Base URL 的供应商请求 <c>/models</c>
+        /// （密钥取 secrets.dat，缺失时回退环境变量），只把缺失的模型追加进 providers.json。
+        /// 已有模型保留用户设置，不删除、不覆盖；网络失败按供应商跳过并写日志，不中断其它供应商。
+        /// 同一时刻只允许一次刷新，第二次调用会返回 <see cref="ProviderModelRefreshResult.Skipped"/>。
+        /// </summary>
+        public async Task<ProviderModelRefreshResult> RefreshProviderModelsAsync(
+            CancellationToken cancellationToken)
+        {
+            if (!await _modelRefreshGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+            {
+                return new ProviderModelRefreshResult { Skipped = true };
+            }
+
+            try
+            {
+                ProviderCatalog catalog = ProviderConfigStore.Load();
+                var providers = new List<ProviderDefinition>();
+                if (catalog != null && catalog.Providers != null)
+                {
+                    foreach (ProviderDefinition provider in catalog.Providers)
+                    {
+                        if (provider != null && !string.IsNullOrWhiteSpace(provider.BaseUrl))
+                        {
+                            providers.Add(provider);
+                        }
+                    }
+                }
+
+                if (providers.Count == 0)
+                {
+                    return new ProviderModelRefreshResult();
+                }
+
+                var tasks = new Task<ProviderModelFetch>[providers.Count];
+                for (int i = 0; i < providers.Count; i++)
+                {
+                    tasks[i] = FetchProviderModelsAsync(providers[i], cancellationToken);
+                }
+
+                ProviderModelFetch[] fetches = await Task.WhenAll(tasks).ConfigureAwait(false);
+                var successes = new List<ProviderModelFetch>();
+                int failed = 0;
+                foreach (ProviderModelFetch fetch in fetches)
+                {
+                    if (fetch == null)
+                    {
+                        continue;
+                    }
+
+                    if (fetch.Failed)
+                    {
+                        failed++;
+                    }
+                    else if (fetch.Entries != null)
+                    {
+                        successes.Add(fetch);
+                    }
+                }
+
+                var result = new ProviderModelRefreshResult
+                {
+                    AttemptedProviders = providers.Count,
+                    FetchedProviders = successes.Count,
+                    FailedProviders = failed
+                };
+
+                if (successes.Count == 0)
+                {
+                    if (failed > 0)
+                    {
+                        Logger.Warn(
+                            "providers.autorefresh",
+                            "自动刷新模型目录：没有供应商返回列表，失败 " + failed + " 个。");
+                    }
+
+                    return result;
+                }
+
+                await ApplyFetchedModelsAsync(successes, result).ConfigureAwait(false);
+                return result;
+            }
+            finally
+            {
+                _modelRefreshGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// 启动 / 首次引导完成后调用：后台自动刷新模型目录，不阻塞 UI，失败只写日志。
+        /// </summary>
+        public void RefreshProviderModelsInBackground()
+        {
+            Task task = RefreshProviderModelsAsync(CancellationToken.None);
+            task.ContinueWith(
+                t =>
+                {
+                    if (t.Exception != null)
+                    {
+                        Logger.Warn(
+                            "providers.autorefresh",
+                            "自动刷新模型目录失败：" + t.Exception.GetBaseException().Message);
+                    }
+                },
+                TaskScheduler.Default);
+        }
+
+        /// <summary>
+        /// 切换全局默认模型：所有会话共用，立即持久化。返回 false 表示这个模型不在目录里。
+        /// </summary>
+        public bool SetDefaultModel(string providerId, string modelId)
+        {
+            ModelDescriptor model = Models.Resolve(providerId, modelId);
+            if (model == null)
+            {
+                return false;
+            }
+
+            return DefaultModelSelection.Set(model.ProviderId, model.ModelId);
+        }
+
+        /// <summary>当前默认模型描述符；目录里找不到时退回注册表的兜底模型。</summary>
+        public ModelDescriptor ResolveDefaultModel()
+        {
+            ModelSelection selection = DefaultModelSelection;
+            return Models.Resolve(selection.ProviderId, selection.ModelId) ?? Models.GetDefault();
+        }
+
         /// <summary>保存 Provider 配置并热切换注册表。校验失败返回错误列表，不写盘。</summary>
         public IReadOnlyList<string> SaveProviders(ProviderCatalog catalog)
+        {
+            // 与自动刷新共用一把写锁：后台刷新不会在用户保存到一半时覆盖目录。
+            lock (_catalogWriteGate)
+            {
+                return SaveProvidersCore(catalog);
+            }
+        }
+
+        private IReadOnlyList<string> SaveProvidersCore(ProviderCatalog catalog)
         {
             IReadOnlyList<string> errors = ProviderConfigValidator.Validate(catalog);
             if (errors.Count > 0)
@@ -205,10 +357,22 @@ namespace MiaoWu.App.Services
             ProviderConfigStore.Save(catalog);
             RebuildHttpTransport();
 
-            ModelDescriptor fallback = Models.GetDefault();
-            Settings.Agent.DefaultProviderId = fallback == null ? null : fallback.ProviderId;
-            Settings.Agent.DefaultModelId = fallback == null ? null : fallback.ModelId;
-            SaveSettings();
+            // 目录变化后保留用户当前选的模型；它已经不在目录里时才退回兜底模型。
+            ModelDescriptor fallback = Models.Resolve(
+                DefaultModelSelection.ProviderId,
+                DefaultModelSelection.ModelId) ?? Models.GetDefault();
+            if (fallback == null)
+            {
+                // 目录被清空：共享选择与设置一起清掉，下次拿到模型时再落定。
+                DefaultModelSelection.Set(null, null);
+                Settings.Agent.DefaultProviderId = null;
+                Settings.Agent.DefaultModelId = null;
+                SaveSettings();
+            }
+            else
+            {
+                DefaultModelSelection.Set(fallback.ProviderId, fallback.ModelId);
+            }
 
             Logger.Info("providers.saved", "Provider 配置已更新：" + catalog.Providers.Count + " 个。");
 
@@ -285,13 +449,14 @@ namespace MiaoWu.App.Services
                 WorkspaceRoot = workspace.Path,
                 Store = GetStore(workspace),
                 SystemPrompt = Settings.Agent.SystemPrompt,
-                ProviderId = providerId ?? Settings.Agent.DefaultProviderId,
-                ModelId = modelId ?? Settings.Agent.DefaultModelId,
+                ProviderId = providerId ?? DefaultModelSelection.ProviderId ?? Settings.Agent.DefaultProviderId,
+                ModelId = modelId ?? DefaultModelSelection.ModelId ?? Settings.Agent.DefaultModelId,
                 Temperature = Settings.Agent.Temperature,
                 MaxOutputTokens = Settings.Agent.MaxOutputTokens,
                 HistoryLimit = Settings.Agent.HistoryLimit,
                 MaxTurnsPerRun = Settings.Agent.MaxTurnsPerRun,
-                MaxToolCallsPerTurn = Settings.Agent.MaxToolCallsPerTurn
+                MaxToolCallsPerTurn = Settings.Agent.MaxToolCallsPerTurn,
+                AutoTitle = Settings.Agent.AutoTitle
             };
         }
 
@@ -405,6 +570,14 @@ namespace MiaoWu.App.Services
 
             try
             {
+                DefaultModelSelection.Changed -= OnDefaultModelSelectionChanged;
+            }
+            catch (Exception)
+            {
+            }
+
+            try
+            {
                 Runtime.Dispose();
             }
             catch (Exception)
@@ -423,6 +596,154 @@ namespace MiaoWu.App.Services
             Logger.Dispose();
         }
 
+        /// <summary>
+        /// 请求单个供应商的模型列表。没有密钥时跳过（不失败）；
+        /// 超时或网络错误只记日志，不影响其它供应商。
+        /// </summary>
+        private async Task<ProviderModelFetch> FetchProviderModelsAsync(
+            ProviderDefinition provider,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                ProviderCredential credential = await Models
+                    .ResolveCredentialAsync(provider.Id, cancellationToken)
+                    .ConfigureAwait(false);
+                if (credential == null || !credential.HasKey)
+                {
+                    return ProviderModelFetch.Skipped(provider.Id);
+                }
+
+                using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                    IReadOnlyList<ModelCatalogEntry> entries = await ListModelsAsync(
+                            provider.BaseUrl,
+                            provider.Api,
+                            credential.ApiKey,
+                            timeout.Token)
+                        .ConfigureAwait(false);
+                    return ProviderModelFetch.Success(provider.Id, entries);
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                Logger.Warn("providers.autorefresh", provider.Id + "：获取模型列表超时。");
+                return ProviderModelFetch.Failure(provider.Id);
+            }
+            catch (Exception exception)
+            {
+                Logger.Warn(
+                    "providers.autorefresh",
+                    provider.Id + "：获取模型列表失败：" + exception.Message);
+                return ProviderModelFetch.Failure(provider.Id);
+            }
+        }
+
+        /// <summary>
+        /// 把取到的模型列表合并进最新的 providers.json 并热切换注册表。
+        /// 有 UI 线程时切回 Dispatcher 执行，避免与设置页的读改写并发。
+        /// </summary>
+        private Task ApplyFetchedModelsAsync(
+            IReadOnlyList<ProviderModelFetch> fetches,
+            ProviderModelRefreshResult result)
+        {
+            Func<ProviderModelRefreshResult> apply = () =>
+            {
+                lock (_catalogWriteGate)
+                {
+                    ProviderCatalog latest = ProviderConfigStore.Load();
+                    var additions = new List<string>();
+                    int addedTotal = 0;
+
+                    foreach (ProviderModelFetch fetch in fetches)
+                    {
+                        ProviderDefinition provider = latest.FindProvider(fetch.ProviderId);
+                        if (provider == null)
+                        {
+                            continue;
+                        }
+
+                        int added = ProviderModelCatalogMerge.Merge(provider, fetch.Entries);
+                        if (added > 0)
+                        {
+                            addedTotal += added;
+                            additions.Add(provider.Id + " +" + added);
+                        }
+                    }
+
+                    if (addedTotal == 0)
+                    {
+                        Logger.Info("providers.autorefresh", "模型目录已是最新，没有新增模型。");
+                        return result;
+                    }
+
+                    IReadOnlyList<string> errors = SaveProviders(latest);
+                    if (errors.Count > 0)
+                    {
+                        Logger.Warn(
+                            "providers.autorefresh",
+                            "模型目录保存失败：" + string.Join("；", errors));
+                        return result;
+                    }
+
+                    result.AddedModels = addedTotal;
+                    Logger.Info(
+                        "providers.autorefresh",
+                        "自动更新模型目录：" + string.Join("，", additions) + "。");
+                    return result;
+                }
+            };
+
+            System.Windows.Threading.Dispatcher dispatcher = System.Windows.Application.Current == null
+                ? null
+                : System.Windows.Application.Current.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                return dispatcher.InvokeAsync(apply).Task;
+            }
+
+            apply();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>一次供应商模型列表请求的结果；Entries 为空表示没取到列表。</summary>
+        private sealed class ProviderModelFetch
+        {
+            private ProviderModelFetch(
+                string providerId,
+                IReadOnlyList<ModelCatalogEntry> entries,
+                bool failed)
+            {
+                ProviderId = providerId;
+                Entries = entries;
+                Failed = failed;
+            }
+
+            public string ProviderId { get; }
+
+            public IReadOnlyList<ModelCatalogEntry> Entries { get; }
+
+            public bool Failed { get; }
+
+            public static ProviderModelFetch Success(
+                string providerId,
+                IReadOnlyList<ModelCatalogEntry> entries)
+            {
+                return new ProviderModelFetch(providerId, entries, false);
+            }
+
+            public static ProviderModelFetch Failure(string providerId)
+            {
+                return new ProviderModelFetch(providerId, null, true);
+            }
+
+            public static ProviderModelFetch Skipped(string providerId)
+            {
+                return new ProviderModelFetch(providerId, null, false);
+            }
+        }
+
         private void ApplyDefaultModelFromSettings()
         {
             ModelDescriptor fallback = Models.Resolve(
@@ -434,10 +755,29 @@ namespace MiaoWu.App.Services
                 fallback = Models.GetDefault();
             }
 
-            if (fallback != null)
+            if (fallback == null)
             {
-                Settings.Agent.DefaultProviderId = fallback.ProviderId;
-                Settings.Agent.DefaultModelId = fallback.ModelId;
+                return;
+            }
+
+            Settings.Agent.DefaultProviderId = fallback.ProviderId;
+            Settings.Agent.DefaultModelId = fallback.ModelId;
+            DefaultModelSelection.Set(fallback.ProviderId, fallback.ModelId);
+        }
+
+        /// <summary>共享模型变了：写回 config.json，下次启动仍是同一个模型。</summary>
+        private void OnDefaultModelSelectionChanged(object sender, EventArgs e)
+        {
+            Settings.Agent.DefaultProviderId = DefaultModelSelection.ProviderId;
+            Settings.Agent.DefaultModelId = DefaultModelSelection.ModelId;
+
+            try
+            {
+                SaveSettings();
+            }
+            catch (Exception exception)
+            {
+                Logger.Warn("settings.model", "默认模型保存失败：" + exception.Message);
             }
         }
 

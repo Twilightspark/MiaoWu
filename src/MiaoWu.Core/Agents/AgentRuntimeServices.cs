@@ -27,6 +27,12 @@ namespace MiaoWu.Core.Agents
 
         public IClock Clock { get; set; }
 
+        /// <summary>
+        /// 全局共享的模型选择；为空时每个会话保留自己的 provider / model
+        /// （测试与嵌入宿主可以不给）。给了之后所有会话共用同一份配置。
+        /// </summary>
+        public ModelSelection ModelSelection { get; set; }
+
         /// <summary>按工作区根创建路径沙箱；为空时工具回合被禁用。</summary>
         public Func<string, WorkspacePathSandbox> SandboxFactory { get; set; }
     }

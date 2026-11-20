@@ -627,7 +627,24 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            FireAndForget(Conversation.NewSessionAsync());
+            FireAndForget(CreateNewSessionAsync());
+        }
+
+        /// <summary>新建后确保左栏选中新会话；右栏已经切过去，左栏不能还停在旧会话上。</summary>
+        private async System.Threading.Tasks.Task CreateNewSessionAsync()
+        {
+            if (Conversation == null)
+            {
+                return;
+            }
+
+            await Conversation.NewSessionAsync();
+            if (Conversation == null || !Conversation.HasSession)
+            {
+                return;
+            }
+
+            Left.SelectSession(Conversation.SessionId);
         }
 
         public void RequestExit()
@@ -1031,6 +1048,7 @@ namespace MiaoWu.App.ViewModels
             {
                 // 没有活动工作区时必须把右栏的工作区也清掉，否则 CanSend 仍为 true。
                 Conversation.SetWorkspace(null);
+                DiscardPendingNewSession();
                 SyncConversationSessionState();
                 return;
             }
@@ -1039,20 +1057,79 @@ namespace MiaoWu.App.ViewModels
 
             if (string.IsNullOrEmpty(sessionId))
             {
+                DiscardPendingNewSession();
                 SyncConversationSessionState();
                 return;
             }
 
             if (!string.Equals(Conversation.SessionId, sessionId, StringComparison.Ordinal))
             {
-                FireAndForget(Conversation.AttachAsync(model, sessionId));
+                FireAndForget(SwitchSessionAsync(model, sessionId));
             }
 
             SyncConversationSessionState();
         }
 
+        /// <summary>
+        /// 切到另一个会话 / 工作区：先丢弃上一个“新建但还没发消息”的空白会话，再打开目标，
+        /// 最后刷新左栏把空记录移出列表。
+        /// </summary>
+        private async System.Threading.Tasks.Task SwitchSessionAsync(Workspace model, string sessionId)
+        {
+            if (Conversation == null)
+            {
+                return;
+            }
+
+            Workspace discarded = await Conversation.DiscardPendingNewSessionAsync();
+            if (Conversation == null)
+            {
+                return;
+            }
+
+            await Conversation.AttachAsync(model, sessionId);
+            if (discarded != null)
+            {
+                Left.RefreshSessions(discarded);
+            }
+        }
+
+        private void DiscardPendingNewSession()
+        {
+            if (Conversation == null || !Conversation.HasPendingNewSession)
+            {
+                return;
+            }
+
+            FireAndForget(DiscardPendingNewSessionAsync());
+        }
+
+        private async System.Threading.Tasks.Task DiscardPendingNewSessionAsync()
+        {
+            if (Conversation == null)
+            {
+                return;
+            }
+
+            Workspace discarded = await Conversation.DiscardPendingNewSessionAsync();
+            if (discarded != null)
+            {
+                Left.RefreshSessions(discarded);
+            }
+        }
+
         private void OnConversationSessionListChanged(object sender, EventArgs e)
         {
+            // 先把左栏模型选中项对齐到右栏会话，再刷新；否则 RefreshSessions 会按旧 id
+            // 重新选中旧会话，触发一次假的“切走”，把刚新建的空白会话丢掉。
+            if (Conversation != null
+                && !string.IsNullOrEmpty(Conversation.SessionId)
+                && Left.ActiveWorkspace != null
+                && ReferenceEquals(Left.ActiveWorkspace.Model, Conversation.Workspace))
+            {
+                Left.AlignSelectedSession(Conversation.SessionId);
+            }
+
             Left.RefreshSessions();
             if (Conversation != null && !string.IsNullOrEmpty(Conversation.SessionId))
             {
@@ -1257,6 +1334,12 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(IsOnboarding));
             ReloadWorkspacesFromDisk();
             ApplyLayout(_layoutWidth);
+
+            // 引导刚写入供应商与密钥：立刻按 /models 补齐该供应商的完整模型列表。
+            if (_services != null)
+            {
+                _services.RefreshProviderModelsInBackground();
+            }
         }
 
         private void OnOnboardingCloseRequested(object sender, EventArgs e)

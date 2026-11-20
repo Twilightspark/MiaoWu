@@ -306,6 +306,10 @@
     <Thickness x:Key="Margin.MenuSeparator">10,4</Thickness>
     <Thickness x:Key="Thickness.MenuHairline">0.5</Thickness>
     <Thickness x:Key="Pad.TextBox">8,6</Thickness>
+    <!-- 30 高（首次引导）的单行输入：PasswordBox 会把 Padding 同步给内容宿主，30 高减去
+         1px 描边后只剩 28，8,6 的竖向留白会让 13px 文字（行高 17.3）只剩 4px 视口，
+         密码点与光标被裁成一条细线；竖向收到 4 才有 19px 视口。 -->
+    <Thickness x:Key="Pad.TextBox.Compact">8,4</Thickness>
     <Thickness x:Key="Pad.Field">4,4</Thickness>
     <Thickness x:Key="Pad.Input">12,14,12,14</Thickness>
 

@@ -579,11 +579,42 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        /// <summary>只刷新指定工作区的会话行（用于删掉非活动工作区里的空白会话）。</summary>
+        public void RefreshSessions(Workspace workspace)
+        {
+            WorkspaceItemViewModel item = workspace == null
+                ? null
+                : _workspaces.FirstOrDefault(w => ReferenceEquals(w.Model, workspace));
+            if (item == null)
+            {
+                return;
+            }
+
+            item.LoadSessionCount();
+            item.RefreshSessions();
+            if (ReferenceEquals(item, _activeWorkspace))
+            {
+                OnPropertyChanged(nameof(ActiveSessionId));
+            }
+        }
+
         public void SelectSession(string sessionId)
         {
             if (_activeWorkspace != null)
             {
                 _activeWorkspace.SelectSessionById(sessionId);
+            }
+        }
+
+        /// <summary>
+        /// 刷新前把模型选中项对齐到指定会话：RefreshSessions 会按旧 id 重建选中项，
+        /// 不先对齐就会在刷新过程中触发一次指向旧会话的“切换”事件。
+        /// </summary>
+        public void AlignSelectedSession(string sessionId)
+        {
+            if (_activeWorkspace != null && !string.IsNullOrEmpty(sessionId))
+            {
+                _activeWorkspace.Model.SelectedSessionId = sessionId;
             }
         }
 

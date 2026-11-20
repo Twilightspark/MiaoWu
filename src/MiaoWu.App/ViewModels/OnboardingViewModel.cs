@@ -371,9 +371,14 @@ namespace MiaoWu.App.ViewModels
             }
 
             _app.Credentials.SetKey(provider.Id, _apiKey.Trim());
-            _app.Settings.Agent.DefaultProviderId = provider.Id;
-            _app.Settings.Agent.DefaultModelId = choice.DefaultModel;
-            _app.SaveSettings();
+            // 首启选的模型就是所有会话共用的默认模型（切换事件里会写回 config.json）。
+            if (!_app.SetDefaultModel(provider.Id, choice.DefaultModel))
+            {
+                _app.Settings.Agent.DefaultProviderId = provider.Id;
+                _app.Settings.Agent.DefaultModelId = choice.DefaultModel;
+                _app.SaveSettings();
+            }
+
             return true;
         }
 

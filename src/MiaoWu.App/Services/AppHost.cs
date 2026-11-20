@@ -101,6 +101,9 @@ namespace MiaoWu.App.Services
             {
                 ShowMainWindow();
             }
+
+            // 启动后在后台补齐各供应商最新的 /models 列表；不阻塞窗口，失败只写日志。
+            _services.RefreshProviderModelsInBackground();
         }
 
         public void ShowMainWindow()

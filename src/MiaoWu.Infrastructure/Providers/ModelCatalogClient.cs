@@ -146,6 +146,7 @@ namespace MiaoWu.Infrastructure.Providers
                 }
 
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                ProviderRequestHeaders.Apply(request, url, null, null);
 
                 using (HttpResponseMessage response = await _send(request, cancellationToken).ConfigureAwait(false))
                 {

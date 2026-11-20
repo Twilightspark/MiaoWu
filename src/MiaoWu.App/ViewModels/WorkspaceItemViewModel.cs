@@ -34,6 +34,9 @@ namespace MiaoWu.App.ViewModels
         private bool _isRenaming;
         private string _renameDraft;
 
+        /// <summary>重建会话行期间列表会临时清空选中项，这不是用户切走，不要向外层发选择事件。</summary>
+        private bool _suppressSelectionEvents;
+
         /// <summary>默认只展示最近几条会话，避免左栏过长；展开后走外层滚动。</summary>
         public const int RecentSessionLimit = 6;
 
@@ -265,6 +268,12 @@ namespace MiaoWu.App.ViewModels
             set
             {
                 if (value != null && value.IsHeader)
+                {
+                    return;
+                }
+
+                // 重建行时 ListBox 会把 SelectedItem 清空；这次 null 不代表用户离开会话。
+                if (value == null && _suppressSelectionEvents)
                 {
                     return;
                 }
@@ -613,15 +622,23 @@ namespace MiaoWu.App.ViewModels
             _archivedCount = archivedCount;
             _hasArchivedSessions = archivedCount > 0;
 
-            SessionRows.Clear();
-            IReadOnlyList<SessionListRow> rows = SessionGroupPolicy.Build(visible, _left.Now);
-            foreach (SessionListRow row in rows)
+            _suppressSelectionEvents = true;
+            try
             {
-                SessionRows.Add(new SessionRowViewModel(
-                    this,
-                    row,
-                    LeftPaneViewModel.GetGroupHeaderText(row.Group),
-                    _left.Now));
+                SessionRows.Clear();
+                IReadOnlyList<SessionListRow> rows = SessionGroupPolicy.Build(visible, _left.Now);
+                foreach (SessionListRow row in rows)
+                {
+                    SessionRows.Add(new SessionRowViewModel(
+                        this,
+                        row,
+                        LeftPaneViewModel.GetGroupHeaderText(row.Group),
+                        _left.Now));
+                }
+            }
+            finally
+            {
+                _suppressSelectionEvents = false;
             }
 
             _sessionsLoaded = true;

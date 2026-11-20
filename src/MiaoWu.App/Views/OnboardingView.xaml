@@ -65,7 +65,10 @@
             </Setter>
         </Style>
 
-        <!-- PasswordBox 默认样式与 TextBox 不同，这里对齐引导页的输入框。 -->
+        <!-- PasswordBox 默认样式与 TextBox 不同，这里对齐引导页的输入框。
+             PasswordBox 会把控件 Padding 同步给 PART_ContentHost（内容宿主），
+             模板 Border 再套一次同样的内边距就变成双份：30 高 + 8,6 只剩 4px 视口，
+             密码点与光标被裁成一条细线。所以 Border 不再吃 Padding，只由内容宿主留白。 -->
         <Style x:Key="OnboardingPasswordBox" TargetType="PasswordBox">
             <Setter Property="Height" Value="30" />
             <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
@@ -74,7 +77,7 @@
             <Setter Property="Background" Value="{DynamicResource Brush.Canvas}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Line3}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="{StaticResource Pad.TextBox}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.TextBox.Compact}" />
             <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -84,7 +87,7 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Button}"
-                                Padding="{TemplateBinding Padding}"
+                                Padding="0"
                                 SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost"
                                           Focusable="False"
@@ -203,7 +206,10 @@
                                 </ToggleButton.Template>
                             </ToggleButton>
 
+                            <!-- 必须 AllowsTransparency：否则 Popup 由不透明 HWND 承载，卡片 4px 上边距与
+                                 8px 圆角切掉的四个角会露出窗口底色（纯黑），在 125% 缩放下是一条贯穿全宽的黑带。 -->
                             <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
                                    Focusable="False"
                                    IsOpen="{TemplateBinding IsDropDownOpen}"
                                    Placement="Bottom"
