@@ -1,4 +1,4 @@
-; MiaoWu v0.4.0 — Inno Setup 6 脚本
+; MiaoWu v0.5.0 — Inno Setup 6 脚本
 ; 目标：管理员安装（装到 Program Files，SetupLdr 先提权）、.NET Framework 4.8 检测、开始菜单、
 ; 卸载时询问是否保留用户目录\.miaowu 数据；setup.exe / unins000.exe / 向导使用品牌图标。
 ; 运行期不需要管理员：装完以原用户身份启动，配置与会话仍写在当前用户的 .miaowu。
@@ -6,13 +6,13 @@
 ; 构建：
 ;   1. scripts\publish.ps1 -Configuration Release（同时产出便携 zip 与 SHA-256）
 ;   2. 安装 Inno Setup 6，运行 ISCC.exe installer\MiaoWu.iss
-; 产物：.artifacts\installer\MiaoWu-0.4.0-setup.exe
+; 产物：.artifacts\installer\MiaoWu-0.5.0-setup.exe
 ;
 ; 全量包（自带 .NET Framework 4.8 离线安装程序，105 MB 左右）：
 ;   scripts\publish.ps1 -Configuration Release -BundleDotNet
 ;   需要先把 ndp48-x86-x64-allos-enu.exe 放到 redist\ 或 .artifacts\redist\，
 ;   或用 scripts\fetch-dotnet-redist.ps1 下载。脚本会传 /DBUNDLE_DOTNET 与
-;   /DDotNetRedist=<绝对路径>，产物改名为 MiaoWu-0.4.0-setup-offline.exe。
+;   /DDotNetRedist=<绝对路径>，产物改名为 MiaoWu-0.5.0-setup-offline.exe。
 ;   缺 4.8 时安装器在“准备安装”阶段静默装 4.8；已有 4.8 的机器只多背体积，不会重复安装。
 ;
 ; 为什么强制 admin：SetupLdr 会先把安装器解到 %TEMP%\is-*.tmp 再进向导。低完整性进程
@@ -21,7 +21,7 @@
 ; 不再受该限制（2026-11-19 实机验证：普通双击失败、管理员启动正常）。
 
 #define MyAppName "MiaoWu"
-#define MyAppVersion "0.4.0"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "MiaoWu"
 #define MyAppExeName "MiaoWu.exe"
 #define MyAppDataDir "{userprofile}\.miaowu"

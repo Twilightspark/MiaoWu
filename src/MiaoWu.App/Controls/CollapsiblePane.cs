@@ -21,7 +21,7 @@ namespace MiaoWu.App.Controls
             nameof(ExpandedWidth),
             typeof(double),
             typeof(CollapsiblePane),
-            new PropertyMetadata(428d, OnExpandedWidthChanged));
+            new PropertyMetadata(580d, OnExpandedWidthChanged));
 
         public static readonly DependencyProperty AnimationsEnabledProperty = DependencyProperty.Register(
             nameof(AnimationsEnabled),

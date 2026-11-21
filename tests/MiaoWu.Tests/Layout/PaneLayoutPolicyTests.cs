@@ -13,8 +13,8 @@ namespace MiaoWu.Tests.Layout
             PaneLayout layout = _policy.Compute(1440, false);
 
             Assert.Equal(262, layout.Left, 3);
-            Assert.Equal(742, layout.Middle, 3);
-            Assert.Equal(428, layout.Right, 3);
+            Assert.Equal(590, layout.Middle, 3);
+            Assert.Equal(580, layout.Right, 3);
             Assert.False(layout.Degraded);
         }
 
@@ -24,8 +24,8 @@ namespace MiaoWu.Tests.Layout
             PaneLayout layout = _policy.Compute(1180, false);
 
             Assert.Equal(208, layout.Left, 3);
-            Assert.Equal(580, layout.Middle, 3);
-            Assert.Equal(384, layout.Right, 3);
+            Assert.Equal(480, layout.Middle, 3);
+            Assert.Equal(484, layout.Right, 3);
             Assert.False(layout.Degraded);
         }
 
@@ -35,17 +35,17 @@ namespace MiaoWu.Tests.Layout
             PaneLayout layout = _policy.Compute(1386, false);
 
             Assert.Equal(208, layout.Left, 3);
-            Assert.Equal(742, layout.Middle, 3);
-            Assert.Equal(428, layout.Right, 3);
+            Assert.Equal(590, layout.Middle, 3);
+            Assert.Equal(580, layout.Right, 3);
         }
 
         [Fact]
         public void RightReachesMinimumBeforeMiddle()
         {
-            PaneLayout layout = _policy.Compute(1342, false);
+            PaneLayout layout = _policy.Compute(1080, false);
 
             Assert.Equal(208, layout.Left, 3);
-            Assert.Equal(742, layout.Middle, 3);
+            Assert.Equal(480, layout.Middle, 3);
             Assert.Equal(384, layout.Right, 3);
         }
 

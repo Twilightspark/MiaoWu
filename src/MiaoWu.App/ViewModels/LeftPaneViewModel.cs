@@ -826,7 +826,8 @@ namespace MiaoWu.App.ViewModels
                 Strings.RemoveWorkspaceConfirmTitle,
                 Strings.RemoveWorkspaceConfirmBody,
                 Strings.Remove,
-                Strings.Cancel);
+                Strings.Cancel,
+                false);
 
             if (!confirmed)
             {

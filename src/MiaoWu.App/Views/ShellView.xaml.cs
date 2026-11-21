@@ -12,26 +12,6 @@ namespace MiaoWu.App.Views
         {
             InitializeComponent();
             Loaded += OnLoaded;
-            RightPane.SizeChanged += OnRightPaneSizeChanged;
-            RightPane.LayoutUpdated += OnRightPaneLayoutUpdated;
-        }
-
-        private void OnRightPaneSizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            MainWindowViewModel viewModel = ViewModel;
-            if (viewModel != null)
-            {
-                viewModel.SetRightPaneVisualWidth(e.NewSize.Width);
-            }
-        }
-
-        private void OnRightPaneLayoutUpdated(object sender, EventArgs e)
-        {
-            MainWindowViewModel viewModel = ViewModel;
-            if (viewModel != null)
-            {
-                viewModel.SetRightPaneVisualWidth(RightPane.ActualWidth);
-            }
         }
 
         private MainWindowViewModel ViewModel

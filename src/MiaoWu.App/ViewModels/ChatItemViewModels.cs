@@ -1,12 +1,17 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using MiaoWu.App.Mvvm;
 using MiaoWu.App.Services;
 using MiaoWu.Core.Agents;
 using MiaoWu.Core.Agents.Tools;
+using MiaoWu.Core.Input;
 using MiaoWu.Core.Markdown;
 using MiaoWu.Core.Models;
 using MiaoWu.Core.Text;
@@ -225,6 +230,181 @@ namespace MiaoWu.App.ViewModels
             {
                 _clipboard.SetText(_text);
             }
+        }
+
+        /// <summary>提问气泡里的图片附件（缩略图），与输入框里的图片 chip 一一对应。</summary>
+        public ObservableCollection<ChatImageViewModel> Images { get; } =
+            new ObservableCollection<ChatImageViewModel>();
+
+        public bool HasImages
+        {
+            get { return Images.Count > 0; }
+        }
+
+        /// <summary>乐观回显：把刚发出的图片附件直接显示在气泡里。</summary>
+        public void SetImages(IReadOnlyList<ComposerImageAttachment> attachments)
+        {
+            Images.Clear();
+            if (attachments != null)
+            {
+                foreach (ComposerImageAttachment attachment in attachments)
+                {
+                    if (attachment == null || string.IsNullOrEmpty(attachment.Base64Data))
+                    {
+                        continue;
+                    }
+
+                    ImageSource source = ChatImageViewModel.Decode(attachment.Base64Data);
+                    if (source != null)
+                    {
+                        Images.Add(new ChatImageViewModel(source, attachment.DisplayName));
+                    }
+                }
+            }
+
+            OnPropertyChanged(nameof(HasImages));
+        }
+
+        /// <summary>回放：从消息块里的 image 块恢复缩略图。</summary>
+        public void SetImagesFromBlocks(IEnumerable<AgentContentBlock> blocks)
+        {
+            Images.Clear();
+            if (blocks != null)
+            {
+                foreach (AgentContentBlock block in blocks)
+                {
+                    if (block == null
+                        || !string.Equals(block.Type, "image", StringComparison.Ordinal)
+                        || string.IsNullOrEmpty(block.Data))
+                    {
+                        continue;
+                    }
+
+                    ImageSource source = ChatImageViewModel.Decode(block.Data);
+                    if (source != null)
+                    {
+                        Images.Add(new ChatImageViewModel(source, block.MimeType));
+                    }
+                }
+            }
+
+            OnPropertyChanged(nameof(HasImages));
+        }
+    }
+
+    /// <summary>一条用户提问里的图片缩略图。</summary>
+    public sealed class ChatImageViewModel
+    {
+        public ChatImageViewModel(ImageSource source, string label)
+        {
+            Source = source;
+            Label = string.IsNullOrWhiteSpace(label) ? "图片" : label;
+        }
+
+        public ImageSource Source { get; private set; }
+
+        public string Label { get; private set; }
+
+        /// <summary>把 base64 解码成缩略图；失败返回 null（不影响文字消息发送）。</summary>
+        public static ImageSource Decode(string base64)
+        {
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(base64);
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bitmap.DecodePixelWidth = 360;
+                bitmap.StreamSource = new MemoryStream(bytes);
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch (Exception exception)
+            {
+                Trace.WriteLine("chat.image.decode: " + exception.Message);
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 压缩分隔行：显示在“已被摘要覆盖的最后一条消息”之后，说明从这里往前的对话
+    /// 不再逐条进入模型上下文。展开可以看摘要正文。
+    /// </summary>
+    public sealed class CompactionChatItemViewModel : ChatItemViewModel
+    {
+        private bool _isExpanded;
+
+        public CompactionChatItemViewModel(int coveredMessages, string summary, DateTimeOffset timestamp)
+            : base(timestamp)
+        {
+            CoveredMessages = coveredMessages < 0 ? 0 : coveredMessages;
+            Summary = summary ?? string.Empty;
+            ToggleCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+        }
+
+        public int CoveredMessages { get; private set; }
+
+        public string Summary { get; private set; }
+
+        public RelayCommand ToggleCommand { get; private set; }
+
+        public string HeaderText
+        {
+            get { return "已压缩 " + CoveredMessages + " 条消息"; }
+        }
+
+        public bool HasSummary
+        {
+            get { return !string.IsNullOrWhiteSpace(Summary); }
+        }
+
+        /// <summary>摘要按行去掉 Markdown 标题井号，展开时读起来是六段小节而不是原始标记。</summary>
+        public string DisplaySummary
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Summary))
+                {
+                    return string.Empty;
+                }
+
+                var builder = new StringBuilder(Summary.Length);
+                foreach (string line in Summary.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+                {
+                    string text = line.TrimEnd();
+                    if (text.StartsWith("## ", StringComparison.Ordinal))
+                    {
+                        text = text.Substring(3);
+                    }
+                    else if (string.Equals(text.Trim(), "##", StringComparison.Ordinal))
+                    {
+                        text = string.Empty;
+                    }
+
+                    if (builder.Length > 0)
+                    {
+                        builder.Append('\n');
+                    }
+
+                    builder.Append(text);
+                }
+
+                return builder.ToString().Trim();
+            }
+        }
+
+        public bool IsExpanded
+        {
+            get { return _isExpanded; }
+            set { SetProperty(ref _isExpanded, value); }
+        }
+
+        public override string AutomationName
+        {
+            get { return HeaderText; }
         }
     }
 

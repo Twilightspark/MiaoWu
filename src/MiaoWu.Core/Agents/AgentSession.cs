@@ -66,6 +66,12 @@ namespace MiaoWu.Core.Agents
         private string _firstUserText;
         private int _modelTitleStarted;
         private int _goalContinuationCount;
+        private AgentCompaction _compaction;
+        private bool _compacting;
+        private SessionStats _stats = new SessionStats();
+        private SessionTokenUsage _usage = new SessionTokenUsage();
+        private DateTimeOffset _stepStartedAt;
+        private DateTimeOffset? _stepFirstDeltaAt;
 
         private IConversationStore Store
         {
@@ -132,6 +138,32 @@ namespace MiaoWu.Core.Agents
                         break;
                     }
                 }
+
+                if (transcript.Compaction != null)
+                {
+                    _compaction = transcript.Compaction.Clone();
+                }
+
+                if (transcript.Stats != null)
+                {
+                    _stats = transcript.Stats.Clone();
+                }
+
+                if (transcript.Usage != null)
+                {
+                    _usage = transcript.Usage.Clone();
+                }
+            }
+
+            // 旧会话没有 session.meter：从内存里的消息折叠出可复现的部分。
+            if (transcript == null || transcript.Stats == null)
+            {
+                _stats = SessionStats.FromMessages(_messages);
+            }
+
+            if (transcript == null || transcript.Usage == null)
+            {
+                _usage = SessionTokenUsage.FromMessages(_messages);
             }
 
             if (string.IsNullOrWhiteSpace(_providerId))
@@ -215,6 +247,7 @@ namespace MiaoWu.Core.Agents
 
         public AgentSessionSnapshot Snapshot()
         {
+            SessionMeter meter = BuildMeter(null);
             lock (_gate)
             {
                 var messages = new List<AgentMessage>(_messages.Count);
@@ -242,7 +275,9 @@ namespace MiaoWu.Core.Agents
                     ProviderId = _providerId,
                     ModelId = _modelId,
                     EstimatedContextTokens = _estimatedContextTokens,
-                    PlanMode = _planMode
+                    PlanMode = _planMode,
+                    Compaction = _compaction == null ? null : _compaction.Clone(),
+                    Meter = meter
                 };
             }
         }
@@ -258,7 +293,22 @@ namespace MiaoWu.Core.Agents
             }
 
             string text = input.GetText();
-            if (string.IsNullOrWhiteSpace(text))
+            bool hasImage = false;
+            if (input.Blocks != null)
+            {
+                foreach (AgentContentBlock block in input.Blocks)
+                {
+                    if (block != null
+                        && string.Equals(block.Type, "image", StringComparison.Ordinal)
+                        && !string.IsNullOrEmpty(block.Data))
+                    {
+                        hasImage = true;
+                        break;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(text) && !hasImage)
             {
                 throw new AgentRunException(AgentError.Create(AgentErrorKind.InvalidRequest, "消息不能为空。"));
             }
@@ -608,6 +658,180 @@ namespace MiaoWu.Core.Agents
             return Store.RenameAsync(_options.SessionId, normalized, cancellationToken);
         }
 
+        /// <summary>
+        /// `/compact`：把较早的对话压成摘要并落盘。
+        /// 消息本身保留，下一次请求用摘要替代被覆盖的历史；运行中直接失败。
+        /// </summary>
+        public async Task<AgentCompactionResult> CompactAsync(CancellationToken cancellationToken)
+        {
+            List<AgentMessage> history;
+            lock (_gate)
+            {
+                if (_disposed)
+                {
+                    return AgentCompactionResult.Failure("会话已关闭。");
+                }
+
+                if (_state == AgentSessionState.Running || _state == AgentSessionState.Cancelling)
+                {
+                    return AgentCompactionResult.Failure("请等这一轮回答结束再压缩。");
+                }
+
+                if (_compacting)
+                {
+                    return AgentCompactionResult.Failure("正在压缩，请稍候。");
+                }
+
+                _compacting = true;
+                history = new List<AgentMessage>(_messages);
+            }
+
+            bool acquired = false;
+            try
+            {
+                int from = CompactedStartIndex(history);
+                if (history.Count == 0 || history.Count - from < 2)
+                {
+                    return AgentCompactionResult.Failure("最近的消息已经不多，不需要压缩。");
+                }
+
+                ModelDescriptor model = ResolveModel(null, out ProviderCredential credential);
+                if (model == null || _services.Models == null)
+                {
+                    return AgentCompactionResult.Failure("没有可用的模型，无法生成摘要。");
+                }
+
+                IModelApi api = _services.Models.GetApi(model.Api);
+                if (api == null)
+                {
+                    return AgentCompactionResult.Failure("当前模型没有可用的协议实现。");
+                }
+
+                int maxOutputTokens = model.MaxOutputTokens > 0
+                    ? Math.Min(SessionCompactor.MaxOutputTokens, model.MaxOutputTokens)
+                    : SessionCompactor.MaxOutputTokens;
+                LlmRequest request = SessionCompactor.BuildRequest(
+                    history,
+                    from,
+                    _options.SessionId,
+                    maxOutputTokens);
+                if (request == null)
+                {
+                    return AgentCompactionResult.Failure("还没有可压缩的对话。");
+                }
+
+                using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    _shutdown.Token))
+                {
+                    // 摘要失败不应该把会话卡住：90 秒后按失败返回，草稿与历史都不动。
+                    timeout.CancelAfter(TimeSpan.FromSeconds(90));
+                    CancellationToken token = timeout.Token;
+
+                    await AcquireGateAsync(token).ConfigureAwait(false);
+                    acquired = true;
+
+                    string text = null;
+                    TokenUsage compactUsage = null;
+                    using (ILlmStream stream = api.Open(model, request, credential, token))
+                    {
+                        while (true)
+                        {
+                            LlmStreamEvent streamEvent = await stream.ReadAsync(token).ConfigureAwait(false);
+                            if (streamEvent == null)
+                            {
+                                break;
+                            }
+
+                            var failed = streamEvent as LlmFailed;
+                            if (failed != null)
+                            {
+                                string reason = failed.Error == null ? "未知错误" : failed.Error.Message;
+                                _services.Logger.Warn("session.compact", "压缩请求失败：" + reason);
+                                return AgentCompactionResult.Failure("模型请求失败：" + reason);
+                            }
+
+                            var completed = streamEvent as LlmCompleted;
+                            if (completed != null)
+                            {
+                                text = SessionCompactor.ExtractSummary(completed.Response);
+                                compactUsage = completed.Response.Usage;
+                            }
+                        }
+                    }
+
+                    string summary = SessionCompactor.Normalize(text);
+                    if (summary == null)
+                    {
+                        return AgentCompactionResult.Failure("模型没有返回可用的摘要。");
+                    }
+
+                    var compaction = new AgentCompaction
+                    {
+                        Summary = summary,
+                        CoveredMessages = history.Count,
+                        LastCoveredMessageId = history[history.Count - 1] == null
+                            ? null
+                            : history[history.Count - 1].Id,
+                        CompactedAt = Now
+                    };
+
+                    await Store.CompactAsync(_options.SessionId, compaction, CancellationToken.None)
+                        .ConfigureAwait(false);
+
+                    lock (_gate)
+                    {
+                        _compaction = compaction;
+                    }
+
+                    if (compactUsage != null)
+                    {
+                        lock (_gate)
+                        {
+                            _usage.Add(compactUsage);
+                        }
+
+                        await SaveMeterAsync().ConfigureAwait(false);
+                    }
+
+                    Publish(new SessionCompactedEvent
+                    {
+                        Summary = summary,
+                        CoveredMessages = history.Count
+                    });
+
+                    PublishMeter(model, _lastUsage);
+
+                    return AgentCompactionResult.Success(summary, history.Count - from);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return AgentCompactionResult.Failure("压缩已取消。");
+            }
+            catch (ObjectDisposedException)
+            {
+                return AgentCompactionResult.Failure("会话已关闭。");
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.compact", "压缩失败：" + exception.Message);
+                return AgentCompactionResult.Failure("压缩失败：" + exception.Message);
+            }
+            finally
+            {
+                if (acquired)
+                {
+                    ReleaseGate();
+                }
+
+                lock (_gate)
+                {
+                    _compacting = false;
+                }
+            }
+        }
+
         public IDisposable Subscribe(IAgentEventSink sink)
         {
             if (sink == null)
@@ -819,6 +1043,9 @@ namespace MiaoWu.Core.Agents
                         IsFirstStep = stepIndex == 1
                     });
 
+                    _stepStartedAt = Now;
+                    _stepFirstDeltaAt = null;
+
                     if (stepIndex == 1)
                     {
                         // 首步一开始就用这一轮实际使用的路由发标题请求：与主回答并行推进，
@@ -884,6 +1111,10 @@ namespace MiaoWu.Core.Agents
                         ToolCallCount = calls.Count,
                         WillContinue = willContinue
                     });
+
+                    RecordClosedStep(stepIndex, assistant);
+                    await SaveMeterAsync().ConfigureAwait(false);
+                    PublishMeter(model, assistant.Usage);
 
                     continueRun = willContinue;
                 }
@@ -1047,6 +1278,7 @@ namespace MiaoWu.Core.Agents
                                 if (!string.IsNullOrEmpty(text.Delta))
                                 {
                                     hasText = true;
+                                    RecordFirstDelta();
                                     AppendTextDelta(assistant, text.ContentIndex, text.Delta);
                                     Publish(new MessageDeltaEvent
                                     {
@@ -1065,6 +1297,7 @@ namespace MiaoWu.Core.Agents
                             {
                                 if (!string.IsNullOrEmpty(thinking.Delta))
                                 {
+                                    RecordFirstDelta();
                                     AppendThinkingDelta(assistant, thinking.ContentIndex, thinking.Delta);
                                     Publish(new ThinkingDeltaEvent
                                     {
@@ -1162,12 +1395,15 @@ namespace MiaoWu.Core.Agents
 
             if (assistant.Usage != null)
             {
-                Publish(new UsageChangedEvent
+                lock (_gate)
                 {
-                    Usage = assistant.Usage.Clone(),
-                    EstimatedContextTokens = EstimateContext(model)
-                });
+                    _usage.Add(assistant.Usage);
+                }
+
+                await SaveMeterAsync().ConfigureAwait(false);
             }
+
+            PublishMeter(model, assistant.Usage);
 
             return new RunTurnResult { Message = assistant };
         }
@@ -1184,7 +1420,22 @@ namespace MiaoWu.Core.Agents
             }
 
             int limit = Math.Max(1, _options.HistoryLimit);
-            int start = Math.Max(0, history.Count - limit - 1);
+            int compacted = CompactedStartIndex(history);
+            int start = Math.Max(compacted, history.Count - limit - 1);
+
+            string systemPrompt = SystemPromptBuilder.Build(
+                _options.SystemPrompt,
+                _options.WorkspaceRoot,
+                ToolsEnabled ? definitions : null);
+
+            // 压缩后的摘要进入系统提示，替代被省略的历史；它不属于任何一条消息，
+            // 因此不会在界面上重复出现，也不会被工具结果预算裁剪。
+            AgentCompaction compaction = _compaction;
+            if (compaction != null && !string.IsNullOrWhiteSpace(compaction.Summary))
+            {
+                systemPrompt += "\n\n## 会话摘要（较早的对话已压缩，以下摘要替代它们）\n"
+                    + compaction.Summary.Trim();
+            }
 
             var request = new LlmRequest
             {
@@ -1193,10 +1444,7 @@ namespace MiaoWu.Core.Agents
                     ? _options.Temperature
                     : _options.Temperature,
                 MaxOutputTokens = _options.MaxOutputTokens ?? model.MaxOutputTokens,
-                SystemPrompt = SystemPromptBuilder.Build(
-                    _options.SystemPrompt,
-                    _options.WorkspaceRoot,
-                    ToolsEnabled ? definitions : null)
+                SystemPrompt = systemPrompt
             };
 
             if (ToolsEnabled && definitions != null && definitions.Count > 0)
@@ -1627,6 +1875,10 @@ namespace MiaoWu.Core.Agents
             lock (_gate)
             {
                 _toolExecutions.Add(completed);
+                if (completed.Result != null && completed.Result.DurationMilliseconds > 0)
+                {
+                    _stats.ToolMs += completed.Result.DurationMilliseconds;
+                }
             }
 
             Publish(new ToolExecutionCompletedEvent { Execution = completed });
@@ -2151,33 +2403,218 @@ namespace MiaoWu.Core.Agents
             return model;
         }
 
-        private int EstimateContext(ModelDescriptor model)
+        /// <summary>汇总三条读数：会话统计、Token 用量、当前上下文占用。</summary>
+        private SessionMeter BuildMeter(ModelDescriptor model)
         {
-            List<string> texts = new List<string>();
+            SessionStats stats;
+            SessionTokenUsage usage;
+            AgentCompaction compaction;
+            List<AgentMessage> history;
+            string providerId;
+            string modelId;
             lock (_gate)
             {
-                foreach (AgentMessage message in _messages)
+                stats = _stats.Clone();
+                usage = _usage.Clone();
+                compaction = _compaction;
+                history = new List<AgentMessage>(_messages);
+                providerId = _providerId;
+                modelId = _modelId;
+            }
+
+            ModelDescriptor current = model ?? ResolveMeterModel(providerId, modelId);
+            SessionContextUsage context = BuildContext(history, compaction, current);
+            lock (_gate)
+            {
+                _estimatedContextTokens = context.UsedTokens;
+            }
+
+            return new SessionMeter
+            {
+                Stats = stats,
+                Usage = usage,
+                Context = context
+            };
+        }
+
+        private ModelDescriptor ResolveMeterModel(string providerId, string modelId)
+        {
+            if (_services.Models == null)
+            {
+                return null;
+            }
+
+            ModelDescriptor model = _services.Models.Resolve(providerId, modelId);
+            return model ?? _services.Models.GetDefault();
+        }
+
+        /// <summary>
+        /// 上下文占用：用与真实请求相同的系统提示、工具声明与消息切片做启发式估算。
+        /// 三段只用于分比例，CJK 与 JSON schema 会被低估，界面要标成估算。
+        /// </summary>
+        private SessionContextUsage BuildContext(
+            IReadOnlyList<AgentMessage> history,
+            AgentCompaction compaction,
+            ModelDescriptor model)
+        {
+            var context = new SessionContextUsage
+            {
+                WindowTokens = model == null ? 0 : Math.Max(0, model.ContextWindow)
+            };
+
+            IReadOnlyList<ToolDefinition> definitions = GetToolDefinitions();
+            string basePrompt = SystemPromptBuilder.Build(_options.SystemPrompt, _options.WorkspaceRoot, null);
+            string fullPrompt = SystemPromptBuilder.Build(
+                _options.SystemPrompt,
+                _options.WorkspaceRoot,
+                definitions);
+
+            int systemTokens = TokenEstimator.Estimate(basePrompt);
+            if (compaction != null && !string.IsNullOrWhiteSpace(compaction.Summary))
+            {
+                systemTokens += TokenEstimator.Estimate(compaction.Summary) + 20;
+            }
+
+            int toolsTokens = Math.Max(0, TokenEstimator.Estimate(fullPrompt) - TokenEstimator.Estimate(basePrompt));
+            if (definitions != null)
+            {
+                foreach (ToolDefinition definition in definitions)
                 {
-                    string text = message.GetText();
-                    if (!string.IsNullOrEmpty(text))
+                    if (definition == null)
                     {
-                        texts.Add(text);
+                        continue;
+                    }
+
+                    toolsTokens += TokenEstimator.Estimate(definition.ParametersJson) + 8;
+                }
+            }
+
+            int limit = Math.Max(1, _options.HistoryLimit);
+            int start = Math.Max(CompactedStartIndex(history), history.Count - limit - 1);
+            var texts = new List<string>();
+            for (int i = start; i < history.Count; i++)
+            {
+                string text = history[i] == null ? null : history[i].GetText();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    texts.Add(text);
+                }
+            }
+
+            context.SystemTokens = systemTokens;
+            context.ToolsTokens = toolsTokens;
+            context.MessageTokens = TokenEstimator.EstimateMessages(texts);
+            context.UsedTokens = systemTokens + toolsTokens + context.MessageTokens;
+            return context;
+        }
+
+        private void RecordFirstDelta()
+        {
+            if (!_stepFirstDeltaAt.HasValue)
+            {
+                _stepFirstDeltaAt = Now;
+            }
+        }
+
+        /// <summary>关闭一个步骤后累计轮 / 步与耗时；只由会话 loop 调用。</summary>
+        private void RecordClosedStep(int stepIndex, AgentMessage assistant)
+        {
+            DateTimeOffset completedAt = assistant == null || !assistant.CompletedAt.HasValue
+                ? Now
+                : assistant.CompletedAt.Value;
+            lock (_gate)
+            {
+                _stats.Steps++;
+                if (stepIndex == 1)
+                {
+                    _stats.Turns++;
+                }
+
+                if (_stepStartedAt != default(DateTimeOffset))
+                {
+                    _stats.LlmMs += Math.Max(0, (long)(completedAt - _stepStartedAt).TotalMilliseconds);
+                }
+
+                if (_stepFirstDeltaAt.HasValue)
+                {
+                    _stats.TtftMs += Math.Max(0, (long)(_stepFirstDeltaAt.Value - _stepStartedAt).TotalMilliseconds);
+                    _stats.TtftSteps++;
+                    _stats.DecodeMs += Math.Max(0, (long)(completedAt - _stepFirstDeltaAt.Value).TotalMilliseconds);
+                    if (assistant != null && assistant.Usage != null)
+                    {
+                        _stats.DecodeTokens += Math.Max(0, assistant.Usage.Output);
+                    }
+                }
+            }
+        }
+
+        private void PublishMeter(ModelDescriptor model, TokenUsage lastUsage)
+        {
+            SessionMeter meter = BuildMeter(model);
+            Publish(new UsageChangedEvent
+            {
+                Usage = lastUsage == null ? null : lastUsage.Clone(),
+                EstimatedContextTokens = meter.Context.UsedTokens,
+                Meter = meter
+            });
+        }
+
+        /// <summary>读数落盘失败只记日志，不把一轮回答拖垮。</summary>
+        private async Task SaveMeterAsync()
+        {
+            SessionStats stats;
+            SessionTokenUsage usage;
+            lock (_gate)
+            {
+                stats = _stats.Clone();
+                usage = _usage.Clone();
+            }
+
+            try
+            {
+                await Store.SaveMeterAsync(
+                    _options.SessionId,
+                    stats,
+                    usage,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.meter", "会话读数保存失败：" + exception.Message);
+            }
+        }
+
+        /// <summary>
+        /// 压缩切点：上一次压缩覆盖到的最后一条消息之后的第一个下标。
+        /// 优先按消息 id 定位，旧记录只有条数时退回条数，越界夹紧。
+        /// </summary>
+        private int CompactedStartIndex(IReadOnlyList<AgentMessage> history)
+        {
+            AgentCompaction compaction = _compaction;
+            if (compaction == null || history == null || history.Count == 0)
+            {
+                return 0;
+            }
+
+            if (!string.IsNullOrEmpty(compaction.LastCoveredMessageId))
+            {
+                for (int i = history.Count - 1; i >= 0; i--)
+                {
+                    if (history[i] != null
+                        && string.Equals(history[i].Id, compaction.LastCoveredMessageId, StringComparison.Ordinal))
+                    {
+                        return i + 1;
                     }
                 }
             }
 
-            int estimate = SystemPromptBuilder.EstimateContext(GetSystemPromptForEstimate(), texts);
-            lock (_gate)
+            int covered = compaction.CoveredMessages;
+            if (covered < 0)
             {
-                _estimatedContextTokens = estimate;
+                return 0;
             }
 
-            return estimate;
-        }
-
-        private string GetSystemPromptForEstimate()
-        {
-            return _options.SystemPrompt ?? string.Empty;
+            return covered > history.Count ? history.Count : covered;
         }
 
         private void TryAutoTitle(AgentMessage userMessage)

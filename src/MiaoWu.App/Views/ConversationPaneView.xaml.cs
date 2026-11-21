@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Specialized;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -7,12 +8,14 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using MiaoWu.App.ViewModels;
+using MiaoWu.Core.Input;
 
 namespace MiaoWu.App.Views
 {
     /// <summary>
     /// 右栏对话视图的纯视图逻辑：Enter 发送、Shift+Enter 换行、
-    /// 消息流只在用户停在底部时跟随新内容；用户上滚后不再被拉回底部。
+    /// 消息流只在用户停在底部时跟随新内容；`/` 与 `@` 菜单的键盘路由也在这里，
+    /// 焦点始终留在编辑器里（菜单 Popup 不抢焦点）。
     /// </summary>
     public partial class ConversationPaneView : UserControl
     {
@@ -28,6 +31,8 @@ namespace MiaoWu.App.Views
         {
             InitializeComponent();
             ModelPopup.CustomPopupPlacementCallback = PlaceModelPopup;
+            TriggerPopup.CustomPopupPlacementCallback = PlaceTriggerPopup;
+            DockPopup.CustomPopupPlacementCallback = PlaceDockPopup;
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
             DataContextChanged += OnDataContextChanged;
@@ -43,6 +48,18 @@ namespace MiaoWu.App.Views
         public ListBox MessagesList
         {
             get { return MessageList; }
+        }
+
+        /// <summary>供离屏快照探针检查 `/` 与 `@` 补全菜单的位置与开关状态。</summary>
+        public Popup ComposerMenuPopup
+        {
+            get { return TriggerPopup; }
+        }
+
+        /// <summary>供离屏快照探针检查输入框下方读数明细面板。</summary>
+        public Popup ComposerDockPopup
+        {
+            get { return DockPopup; }
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -205,6 +222,7 @@ namespace MiaoWu.App.Views
             if (_viewModel != null)
             {
                 _viewModel.ComposerFocusRequested -= OnComposerFocusRequested;
+                _viewModel.MentionInsertRequested -= OnMentionInsertRequested;
             }
 
             if (_viewModel != null)
@@ -217,6 +235,7 @@ namespace MiaoWu.App.Views
             if (_viewModel != null)
             {
                 _viewModel.ComposerFocusRequested += OnComposerFocusRequested;
+                _viewModel.MentionInsertRequested += OnMentionInsertRequested;
                 ((INotifyCollectionChanged)_viewModel.Items).CollectionChanged += OnItemsChanged;
             }
         }
@@ -263,9 +282,65 @@ namespace MiaoWu.App.Views
 
         private void OnComposerKeyDown(object sender, KeyEventArgs e)
         {
-            // 输入法组词期间 WPF 报 ImeProcessed；不要把候选回车当成发送。
+            // 输入法组词期间 WPF 报 ImeProcessed；不要把候选回车当成发送或菜单选中。
             if (e.Key == Key.ImeProcessed || e.Key == Key.System)
             {
+                return;
+            }
+
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            ComposerTriggerViewModel menu = viewModel == null ? null : viewModel.ComposerTriggers;
+            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+
+            if (menu != null && menu.IsOpen && !shift)
+            {
+                switch (e.Key)
+                {
+                    case Key.Down:
+                        menu.Move(1);
+                        e.Handled = true;
+                        EnsureHighlightVisible();
+                        return;
+
+                    case Key.Up:
+                        menu.Move(-1);
+                        e.Handled = true;
+                        EnsureHighlightVisible();
+                        return;
+
+                    case Key.Escape:
+                        menu.Dismiss();
+                        e.Handled = true;
+                        return;
+
+                    case Key.Tab:
+                        if (ApplyComposerPick(menu.PickHighlighted(true)))
+                        {
+                            e.Handled = true;
+                        }
+
+                        return;
+
+                    case Key.Enter:
+                        if (ApplyComposerPick(menu.PickHighlighted(false)))
+                        {
+                            e.Handled = true;
+                            return;
+                        }
+
+                        // 候选还没回来 / 没有高亮：吞掉回车，既不选中旧行也不发送。
+                        e.Handled = true;
+                        return;
+                }
+            }
+
+            if (e.Key == Key.Escape)
+            {
+                if (menu != null)
+                {
+                    menu.Close(false);
+                }
+
                 return;
             }
 
@@ -274,21 +349,29 @@ namespace MiaoWu.App.Views
                 return;
             }
 
-            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
             if (shift)
             {
-                // 让 TextBox 插入换行。
+                // 让 RichTextBox 插入新段落。
                 return;
             }
 
             e.Handled = true;
-            ConversationViewModel viewModel = DataContext as ConversationViewModel;
             if (viewModel == null)
             {
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(viewModel.Draft))
+            // 裸命令（`/compact`、`/plan`、`/work`）在回车时消费 token 并执行，不进会话日志。
+            ComposerCommand command;
+            if (ComposerCommandCatalog.TryParseBareCommand(ComposerBox.PlainText, out command))
+            {
+                ComposerBox.ClearAll();
+                viewModel.Draft = string.Empty;
+                viewModel.ExecuteComposerCommand(command);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(viewModel.Draft) || viewModel.ComposerImages.Count > 0)
             {
                 viewModel.SendCommand.Execute(null);
             }
@@ -298,6 +381,271 @@ namespace MiaoWu.App.Views
             {
                 _scroller.ScrollToEnd();
             }
+        }
+
+        /// <summary>草稿变化：同步 Draft / 引用集合，并重新检测触发 token。</summary>
+        private void OnComposerDraftChanged(object sender, EventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null || ComposerBox == null)
+            {
+                return;
+            }
+
+            viewModel.SyncComposerMentions(ComposerBox.Mentions);
+            viewModel.TrackComposer(ComposerBox.PlainText, ComposerBox.CaretOffset);
+        }
+
+        /// <summary>光标移动：同一 token 上移回来时按 dismissed 记忆决定是否重开菜单。</summary>
+        private void OnComposerCaretMoved(object sender, EventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null || ComposerBox == null)
+            {
+                return;
+            }
+
+            viewModel.TrackComposer(ComposerBox.PlainText, ComposerBox.CaretOffset);
+        }
+
+        /// <summary>拖进输入框的文件：图片读成附件，其余插入引用 chip。</summary>
+        private void OnComposerFilesDropped(object sender, MiaoWu.App.Controls.ComposerPathsEventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null || e == null)
+            {
+                return;
+            }
+
+            foreach (string path in e.Paths)
+            {
+                ComposerMention mention;
+                string error;
+                if (!viewModel.TryCreateComposerMention(path, out mention, out error))
+                {
+                    continue;
+                }
+
+                ComposerBox.InsertMentionAtCaret(mention);
+            }
+
+            viewModel.SyncComposerMentions(ComposerBox.Mentions);
+            ComposerBox.Focus();
+        }
+
+        /// <summary>`+` 选完文件后，把引用逐个插到光标处。</summary>
+        private void OnMentionInsertRequested(object sender, ConversationViewModel.ComposerMentionsEventArgs e)
+        {
+            if (e == null || ComposerBox == null)
+            {
+                return;
+            }
+
+            foreach (ComposerMention mention in e.Mentions)
+            {
+                ComposerBox.InsertMentionAtCaret(mention);
+            }
+
+            ComposerBox.Focus();
+        }
+
+        private void OnTriggerRowMouseMove(object sender, MouseEventArgs e)
+        {
+            var button = sender as Button;
+            var row = button == null ? null : button.Tag as ComposerMenuRowViewModel;
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (row == null || viewModel == null)
+            {
+                return;
+            }
+
+            viewModel.ComposerTriggers.Hover(row);
+        }
+
+        private void OnTriggerRowClick(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            var row = button == null ? null : button.Tag as ComposerMenuRowViewModel;
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (row == null || viewModel == null)
+            {
+                return;
+            }
+
+            ApplyComposerPick(viewModel.ComposerTriggers.PickRow(row));
+            ComposerBox.Focus();
+        }
+
+        /// <summary>外部点击关闭菜单时，触发控制器也要一起收起来（并记住拒绝）。</summary>
+        private void OnTriggerPopupClosed(object sender, EventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel != null && viewModel.ComposerTriggers.IsOpen)
+            {
+                viewModel.ComposerTriggers.Dismiss();
+            }
+        }
+
+        /// <summary>窄宽度时收起速度 / 缓存命中，只留轮步与总 token。</summary>
+        private void OnComposerDockSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel != null)
+            {
+                viewModel.ComposerDock.SetCompact(e.NewSize.Width < 396);
+            }
+        }
+
+        /// <summary>读数 pill：点开对应明细；再点同一个收起，同一时刻只开一个面板。</summary>
+        private void OnDockPillClick(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (button == null || viewModel == null)
+            {
+                return;
+            }
+
+            ComposerDockPanel panel;
+            string tag = button.Tag as string;
+            if (string.Equals(tag, "Usage", StringComparison.Ordinal))
+            {
+                panel = ComposerDockPanel.Usage;
+            }
+            else if (string.Equals(tag, "Context", StringComparison.Ordinal))
+            {
+                panel = ComposerDockPanel.Context;
+            }
+            else
+            {
+                panel = ComposerDockPanel.Stats;
+            }
+
+            viewModel.ComposerDock.Toggle(panel);
+        }
+
+        /// <summary>点外部或再次点击 pill 关闭面板时，视图模型也要归位。</summary>
+        private void OnDockPopupClosed(object sender, EventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel != null)
+            {
+                viewModel.ComposerDock.Close();
+            }
+        }
+
+        /// <summary>Esc 关闭读数面板并把焦点还给输入框。</summary>
+        private void OnDockKeyDown(object sender, KeyEventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null || !viewModel.ComposerDock.IsOpen)
+            {
+                return;
+            }
+
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                viewModel.ComposerDock.Close();
+                if (ComposerBox != null)
+                {
+                    ComposerBox.Focus();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 焦点离开编辑器（点到消息流、模型按钮等）时收起菜单；点输入卡自身不触发，
+        /// 所以 StaysOpen=True，不靠 Popup 自己判断“外面”。
+        /// </summary>
+        private void OnComposerLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null || !viewModel.ComposerTriggers.IsOpen)
+            {
+                return;
+            }
+
+            var target = e.NewFocus as DependencyObject;
+            if (target != null && (ComposerBox.IsAncestorOf(target) || target == ComposerBox))
+            {
+                return;
+            }
+
+            viewModel.ComposerTriggers.Dismiss();
+        }
+
+        /// <summary>把一个菜单动作落到编辑器 / 会话上；返回是否真的做了事。</summary>
+        private bool ApplyComposerPick(ComposerPickResult pick)
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (pick == null || pick.Kind == ComposerPickKind.None || viewModel == null)
+            {
+                return false;
+            }
+
+            switch (pick.Kind)
+            {
+                case ComposerPickKind.Command:
+                    ComposerBox.ReplaceHit(pick.Hit, string.Empty);
+                    viewModel.Draft = ComposerBox.PlainText;
+                    viewModel.ExecuteComposerCommand(pick.Command);
+                    return true;
+
+                case ComposerPickKind.Text:
+                    ComposerBox.ReplaceHit(pick.Hit, pick.Text);
+                    viewModel.Draft = ComposerBox.PlainText;
+                    if (pick.ContinueMenu)
+                    {
+                        // 目录下钻：菜单不关，下一次击键继续命中同一个引号 token。
+                        viewModel.TrackComposer(ComposerBox.PlainText, ComposerBox.CaretOffset);
+                    }
+
+                    return true;
+
+                case ComposerPickKind.Mention:
+                    ComposerBox.InsertMention(pick.Hit, pick.Mention);
+                    viewModel.SyncComposerMentions(ComposerBox.Mentions);
+                    if (pick.Mention != null && pick.Mention.Kind == ComposerMentionKind.Image)
+                    {
+                        viewModel.AttachImageForMention(pick.Mention);
+                    }
+
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>↑ / ↓ 之后把高亮行滚进菜单视口（菜单本身不抢焦点）。</summary>
+        private void EnsureHighlightVisible()
+        {
+            ConversationViewModel viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null)
+            {
+                return;
+            }
+
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    foreach (ComposerMenuRowViewModel row in viewModel.ComposerTriggers.Rows)
+                    {
+                        if (row.IsHeader || !row.IsHighlighted)
+                        {
+                            continue;
+                        }
+
+                        var container = TriggerRows.ItemContainerGenerator.ContainerFromItem(row) as FrameworkElement;
+                        if (container != null)
+                        {
+                            container.BringIntoView();
+                        }
+
+                        break;
+                    }
+                }),
+                DispatcherPriority.Background);
         }
 
         /// <summary>会话头「更多」左键打开与左栏会话行共用的菜单。</summary>
@@ -376,6 +724,43 @@ namespace MiaoWu.App.Views
                 new CustomPopupPlacement(
                     new Point(x, targetSize.Height + gap),
                     PopupPrimaryAxis.Horizontal)
+            };
+        }
+
+        /// <summary>读数明细向上展开、右缘与读数行对齐；上方放不下时回退到下方。</summary>
+        private static CustomPopupPlacement[] PlaceDockPopup(
+            Size popupSize,
+            Size targetSize,
+            Point offset)
+        {
+            const double gap = 6;
+            double x = Math.Max(0, targetSize.Width - popupSize.Width);
+            return new[]
+            {
+                new CustomPopupPlacement(
+                    new Point(x, -popupSize.Height - gap),
+                    PopupPrimaryAxis.Horizontal),
+                new CustomPopupPlacement(
+                    new Point(x, targetSize.Height + gap),
+                    PopupPrimaryAxis.Horizontal)
+            };
+        }
+
+        /// <summary>触发菜单向上展开、左缘与输入卡对齐；上方放不下时回退到输入卡下方。</summary>
+        private static CustomPopupPlacement[] PlaceTriggerPopup(
+            Size popupSize,
+            Size targetSize,
+            Point offset)
+        {
+            const double gap = 4;
+            return new[]
+            {
+                new CustomPopupPlacement(
+                    new Point(0, -popupSize.Height - gap),
+                    PopupPrimaryAxis.Vertical),
+                new CustomPopupPlacement(
+                    new Point(0, targetSize.Height + gap),
+                    PopupPrimaryAxis.Vertical)
             };
         }
 

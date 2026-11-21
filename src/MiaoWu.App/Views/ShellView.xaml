@@ -39,18 +39,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- 顶栏 -->
+        <!-- 顶栏与左侧面板同色，左栏通高到窗口顶部；中/右栏的白色内容面板从顶栏下方 8px 开始。 -->
         <Grid x:Name="TopBar"
               Grid.Row="0"
               Height="{StaticResource Metric.TopBar.Height}"
-              Background="{DynamicResource Brush.Canvas}"
+              Background="{DynamicResource Brush.Side}"
               AutomationProperties.AutomationId="TopBar"
               AutomationProperties.Name="{x:Static res:Strings.TopBarAutomation}">
-
-            <Rectangle Width="{Binding LeftPaneWidth}"
-                       HorizontalAlignment="Left"
-                       Fill="{DynamicResource Brush.Side}"
-                       IsHitTestVisible="False" />
 
             <!-- 顶栏左段只有品牌图标与应用名；工作区入口已移除，工作区在左栏切换。 -->
             <StackPanel Orientation="Horizontal"
@@ -65,42 +60,6 @@
                            Text="{x:Static res:Strings.AppName}"
                            Style="{StaticResource Text.AppName}" />
             </StackPanel>
-
-            <Button x:Name="TopBarToggle"
-                    Width="{StaticResource Metric.TopBar.ToggleSize}"
-                    Height="{StaticResource Metric.TopBar.ToggleSize}"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Center"
-                    Style="{StaticResource Button.Icon}"
-                    Command="{Binding ToggleRightPaneCommand}"
-                    ToolTip="{Binding ToggleRightPaneToolTip}"
-                    AutomationProperties.AutomationId="TopBarToggle"
-                    AutomationProperties.Name="{Binding ToggleRightPaneToolTip}"
-                    KeyboardNavigation.TabIndex="100"
-                    Margin="{Binding TopBarToggleMargin}"
-                    shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                <Grid Width="{StaticResource Metric.Icon}" Height="{StaticResource Metric.Icon}">
-                    <Path Fill="{DynamicResource Brush.Text2}">
-                        <Path.Style>
-                            <Style TargetType="Path" BasedOn="{StaticResource Icon}">
-                                <Setter Property="Data" Value="{StaticResource Ico.PanelCollapse}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsRightPaneCollapsed}" Value="True">
-                                        <Setter Property="Data" Value="{StaticResource Ico.PanelExpand}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Path.Style>
-                    </Path>
-                    <Ellipse Width="6"
-                             Height="6"
-                             HorizontalAlignment="Right"
-                             VerticalAlignment="Top"
-                             Margin="0,-2,-2,0"
-                             Fill="{DynamicResource Brush.Warning}"
-                             Visibility="{Binding HasPendingApproval, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
-            </Button>
 
             <StackPanel Orientation="Horizontal"
                         HorizontalAlignment="Right"
@@ -153,10 +112,11 @@
             </StackPanel>
         </Grid>
 
-        <!-- 三栏主体 -->
+        <!-- 三栏主体：左栏通高并与顶栏同色；中栏问答与右栏文件/预览共用一张白色圆角面板，
+             两者之间只保留一条 PaneSplitter 分割线。 -->
         <Grid x:Name="Body"
               Grid.Row="1"
-              Background="{DynamicResource Brush.Canvas}">
+              Background="{DynamicResource Brush.Side}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="LeftColumn"
                                   Width="{Binding LeftPaneWidth, Converter={StaticResource DoubleToGridLength}}"
@@ -164,8 +124,6 @@
                                   MaxWidth="{StaticResource Metric.Left.Max}" />
                 <ColumnDefinition Width="{StaticResource GridLength.Splitter}" />
                 <ColumnDefinition Width="*" MinWidth="{StaticResource Metric.Middle.Min}" />
-                <ColumnDefinition Width="{StaticResource GridLength.Splitter}" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <views:LeftPaneView x:Name="LeftPane"
@@ -183,242 +141,53 @@
                                    AutomationProperties.AutomationId="LeftSplitter"
                                    AutomationProperties.Name="{x:Static res:Strings.LeftSplitterAutomation}" />
 
-            <views:CanvasPaneView x:Name="MiddlePane"
-                                  Grid.Column="2"
-                                  DataContext="{Binding Canvas}" />
-
-            <controls:PaneSplitter x:Name="RightSplitter"
-                                   Grid.Column="3"
-                                   Panel.ZIndex="10"
-                                   Style="{StaticResource PaneSplitter}"
-                                   Value="{Binding RightExpandedWidth, Mode=TwoWay}"
-                                   Minimum="{StaticResource Metric.Right.Min}"
-                                   Maximum="{Binding RightPaneMax}"
-                                   IsRight="True"
-                                   IdleLineVisible="True"
-                                   Visibility="{Binding IsRightPaneCollapsed, Converter={StaticResource InverseBoolToVisibility}}"
-                                   AutomationProperties.AutomationId="RightSplitter"
-                                   AutomationProperties.Name="{x:Static res:Strings.RightSplitterAutomation}" />
-
-            <!-- 右栏（P3 接对话；P2 保留 P1 轮廓用于布局回归） -->
-            <controls:CollapsiblePane x:Name="RightPane"
-                                      Grid.Column="4"
-                                      Style="{StaticResource CollapsiblePane}"
-                                      Background="{DynamicResource Brush.Canvas}"
-                                      ExpandedWidth="{Binding RightExpandedWidth}"
-                                      IsCollapsed="{Binding IsRightPaneCollapsed, Mode=OneWay}"
-                                      DurationMilliseconds="{StaticResource Motion.PanelMs}"
-                                      AutomationProperties.AutomationId="RightPane"
-                                      AutomationProperties.Name="{x:Static res:Strings.RightPaneAutomation}">
+            <!-- 一块白色圆角表面同时承载问答与文件/预览；右栏折叠时问答自动占满。 -->
+            <Border x:Name="ContentPanel"
+                    Grid.Column="2"
+                    Margin="{StaticResource Margin.Pane.Right}"
+                    Style="{StaticResource Pane.Card}">
                 <Grid>
-                    <views:ConversationPaneView x:Name="ConversationPane"
-                                                DataContext="{Binding Conversation}" />
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="{StaticResource GridLength.Splitter}" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                    <!-- P2 的静态占位已由真实对话替换；保留为折叠的布局回归样本。 -->
-                    <Grid Visibility="Collapsed" Background="{DynamicResource Brush.Canvas}">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <Grid Grid.Row="0" Height="{StaticResource Metric.RightTitle.Height}" Margin="14,0">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Static res:Strings.PlaceholderConversationTitle}"
-                                       Style="{StaticResource Text.Section}" />
-                            <Path Margin="4,0,0,0"
-                                  Style="{StaticResource Icon}"
-                                  Data="{StaticResource Ico.ChevronDown}"
-                                  Fill="{DynamicResource Brush.Text3}" />
-                        </StackPanel>
-                        <StackPanel HorizontalAlignment="Right"
-                                    VerticalAlignment="Center"
-                                    Orientation="Horizontal">
-                            <Path Margin="0,0,10,0"
-                                  Style="{StaticResource Icon}"
-                                  Data="{StaticResource Ico.Pin}"
-                                  Fill="{DynamicResource Brush.Text3}" />
-                            <Path Style="{StaticResource Icon.Solid}"
-                                  Data="{StaticResource Ico.More}"
-                                  Fill="{DynamicResource Brush.Text3}" />
-                        </StackPanel>
+                    <!-- 中栏：问答。折叠按钮在会话头「更多」右侧，由右栏的展开状态驱动。 -->
+                    <Grid x:Name="MiddlePane" Grid.Column="0">
+                        <views:ConversationPaneView x:Name="ConversationPane"
+                                                    DataContext="{Binding Conversation}" />
                     </Grid>
 
-                    <ScrollViewer Grid.Row="1"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel Margin="14,16,16,16">
-                            <StackPanel Margin="0,0,0,17">
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="{StaticResource Metric.Avatar}"
-                                            Height="{StaticResource Metric.Avatar}"
-                                            Background="{DynamicResource Brush.Sel}"
-                                            CornerRadius="11">
-                                        <TextBlock HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   Text="{x:Static res:Strings.UserInitial}"
-                                                   FontSize="{StaticResource Font.Group.Size}"
-                                                   Foreground="{DynamicResource Brush.Text2}" />
-                                    </Border>
-                                    <TextBlock Margin="8,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Text="{x:Static res:Strings.UserInitial}"
-                                               Style="{StaticResource Text.Time}"
-                                               Foreground="{DynamicResource Brush.Text}"
-                                               FontWeight="{StaticResource Font.Weight.SemiBold}" />
-                                    <TextBlock Margin="6,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Text="10:38"
-                                               Style="{StaticResource Text.Time}" />
-                                </StackPanel>
-                                <TextBlock Margin="30,4,0,0"
-                                           Text="{x:Static res:Strings.PlaceholderMessageUser}"
-                                           Style="{StaticResource Text.Body}" />
-                            </StackPanel>
+                    <!-- 中/右之间唯一的分割线：静止 1px，悬停 / 拖动转 accent。 -->
+                    <controls:PaneSplitter x:Name="RightSplitter"
+                                           Grid.Column="1"
+                                           Panel.ZIndex="10"
+                                           Style="{StaticResource PaneSplitter}"
+                                           Value="{Binding RightExpandedWidth, Mode=TwoWay}"
+                                           Minimum="{StaticResource Metric.Right.Min}"
+                                           Maximum="{Binding RightPaneMax}"
+                                           IsRight="True"
+                                           IdleLineVisible="True"
+                                           Visibility="{Binding IsRightPaneCollapsed, Converter={StaticResource InverseBoolToVisibility}}"
+                                           AutomationProperties.AutomationId="RightSplitter"
+                                           AutomationProperties.Name="{x:Static res:Strings.RightSplitterAutomation}" />
 
-                            <StackPanel Margin="0,0,0,17">
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="{StaticResource Metric.Avatar}"
-                                            Height="{StaticResource Metric.Avatar}"
-                                            Background="{DynamicResource Brush.AccentSoft}"
-                                            CornerRadius="11">
-                                        <TextBlock HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   Text="{x:Static res:Strings.AssistantInitial}"
-                                                   FontSize="{StaticResource Font.Group.Size}"
-                                                   Foreground="{DynamicResource Brush.Accent}" />
-                                    </Border>
-                                    <TextBlock Margin="8,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Text="{x:Static res:Strings.AppName}"
-                                               Style="{StaticResource Text.Time}"
-                                               Foreground="{DynamicResource Brush.Text}"
-                                               FontWeight="{StaticResource Font.Weight.SemiBold}" />
-                                    <TextBlock Margin="6,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Text="{x:Static res:Strings.PlaceholderMessageMeta}"
-                                               Style="{StaticResource Text.Time}" />
-                                </StackPanel>
-                                <TextBlock Margin="30,4,0,0"
-                                           Text="{x:Static res:Strings.PlaceholderMessageAssistant}"
-                                           Style="{StaticResource Text.Body}" />
-                            </StackPanel>
-                        </StackPanel>
-                    </ScrollViewer>
-
-                    <Border x:Name="RightInputShell"
-                            Grid.Row="2"
-                            Height="{StaticResource Metric.Input.Height}"
-                            Margin="14,0,14,14"
-                            Padding="{StaticResource Pad.Input}"
-                            Background="{DynamicResource Brush.Canvas}"
-                            BorderBrush="{DynamicResource Brush.Line3}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource Radius.Input}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <Grid Grid.Row="0" Height="{StaticResource Metric.Input.AttachmentRow}">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Border Style="{StaticResource Chip}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{x:Static res:Strings.PlaceholderDocumentTitle}"
-                                                       Style="{StaticResource Text.Chip}" />
-                                            <Path Width="12" Height="12" Margin="4,0,0,0"
-                                                  Style="{StaticResource Icon}"
-                                                  Data="{StaticResource Ico.Close}"
-                                                  Fill="{DynamicResource Brush.Text3}" />
-                                        </StackPanel>
-                                    </Border>
-                                    <Border Style="{StaticResource Chip}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{x:Static res:Strings.PlaceholderImageName}"
-                                                       Style="{StaticResource Text.Chip}" />
-                                            <Path Width="12" Height="12" Margin="4,0,0,0"
-                                                  Style="{StaticResource Icon}"
-                                                  Data="{StaticResource Ico.Close}"
-                                                  Fill="{DynamicResource Brush.Text3}" />
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-                                <TextBlock HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"
-                                           Text="{x:Static res:Strings.PlaceholderUsage}"
-                                           Style="{StaticResource Text.Time}" />
-                            </Grid>
-
-                            <TextBlock Grid.Row="1"
-                                       VerticalAlignment="Center"
-                                       Text="{x:Static res:Strings.PlaceholderInput}"
-                                       Style="{StaticResource Text.Body}" />
-
-                            <Grid Grid.Row="2" Height="{StaticResource Metric.Input.ToolsRow}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <Border Grid.Column="0"
-                                        Height="22"
-                                        Padding="8,0"
-                                        VerticalAlignment="Center"
-                                        Background="{DynamicResource Brush.Tab}"
-                                        CornerRadius="6">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Static res:Strings.PlaceholderModel}"
-                                                   Style="{StaticResource Text.Chip}" />
-                                        <Path Margin="4,0,0,0"
-                                              Style="{StaticResource Icon}"
-                                              Data="{StaticResource Ico.ChevronDown}"
-                                              Fill="{DynamicResource Brush.Text3}" />
-                                    </StackPanel>
-                                </Border>
-
-                                <StackPanel Grid.Column="1"
-                                            Margin="10,0,0,0"
-                                            VerticalAlignment="Center"
-                                            Orientation="Horizontal">
-                                    <!-- 过渡：paperclip.svg 在 16px 下糊成一团 -->
-                                    <Path Margin="0,0,10,0"
-                                          Style="{StaticResource Icon.Stroke}"
-                                          Data="{StaticResource Ico.Paperclip}"
-                                          Stroke="{DynamicResource Brush.Text3}" />
-                                    <Path Style="{StaticResource Icon}"
-                                          Data="{StaticResource Ico.Image}"
-                                          Fill="{DynamicResource Brush.Text3}" />
-                                </StackPanel>
-
-                                <TextBlock Grid.Column="3"
-                                           Margin="8,0"
-                                           VerticalAlignment="Center"
-                                           Text="{x:Static res:Strings.PlaceholderSendHint}"
-                                           Style="{StaticResource Text.Time}" />
-
-                                <Border Grid.Column="4"
-                                        Width="27"
-                                        Height="27"
-                                        VerticalAlignment="Center"
-                                        Background="{DynamicResource Brush.Accent}"
-                                        CornerRadius="{StaticResource Radius.Button}">
-                                    <Path Width="14"
-                                          Height="14"
-                                          Style="{StaticResource Icon}"
-                                          Data="{StaticResource Ico.Send}"
-                                          Fill="{DynamicResource Brush.White}" />
-                                </Border>
-                            </Grid>
-                        </Grid>
-                    </Border>
+                    <!-- 右栏：文件浏览 / 预览，可折叠至 0。 -->
+                    <controls:CollapsiblePane x:Name="RightPane"
+                                              Grid.Column="2"
+                                              Style="{StaticResource CollapsiblePane}"
+                                              Background="Transparent"
+                                              ExpandedWidth="{Binding RightExpandedWidth}"
+                                              IsCollapsed="{Binding IsRightPaneCollapsed, Mode=OneWay}"
+                                              DurationMilliseconds="{StaticResource Motion.PanelMs}"
+                                              AutomationProperties.AutomationId="RightPane"
+                                              AutomationProperties.Name="{x:Static res:Strings.RightPaneAutomation}">
+                        <views:CanvasPaneView x:Name="DocumentPane"
+                                              DataContext="{Binding Canvas}" />
+                    </controls:CollapsiblePane>
                 </Grid>
-                </Grid>
-            </controls:CollapsiblePane>
+            </Border>
         </Grid>
 
         <!-- 浮层：设置 / 应用内通知 -->
@@ -442,5 +211,11 @@
         <views:ClosePromptView Grid.RowSpan="2"
                                Panel.ZIndex="300"
                                DataContext="{Binding ClosePrompt}" />
+
+        <!-- 通用二次确认（删除会话 / 文件 / 清除 / 撤销写入）：与关闭确认同样的卡片，
+             但可以叠在它之上，避免关窗时被删除确认挡住。 -->
+        <views:ConfirmPromptView Grid.RowSpan="2"
+                                 Panel.ZIndex="400"
+                                 DataContext="{Binding ConfirmPrompt}" />
     </Grid>
 </UserControl>

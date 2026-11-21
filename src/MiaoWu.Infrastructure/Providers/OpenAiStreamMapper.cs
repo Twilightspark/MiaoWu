@@ -296,7 +296,6 @@ namespace MiaoWu.Infrastructure.Providers
 
             var result = new TokenUsage
             {
-                Input = ReadInt(usage, "prompt_tokens"),
                 Output = ReadInt(usage, "completion_tokens")
             };
 
@@ -305,6 +304,10 @@ namespace MiaoWu.Infrastructure.Providers
             {
                 result.CacheRead = ReadInt(promptDetails, "cached_tokens");
             }
+
+            // OpenAI 的 prompt_tokens 含缓存命中；本仓库统一用「未缓存输入」口径，
+            // 否则会话 Token 用量里的缓存读取会被重复计算。
+            result.Input = Math.Max(0, ReadInt(usage, "prompt_tokens") - result.CacheRead);
 
             result.Total = ReadInt(usage, "total_tokens");
             return result;

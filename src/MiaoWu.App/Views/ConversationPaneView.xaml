@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:views="clr-namespace:MiaoWu.App.Views"
+             xmlns:controls="clr-namespace:MiaoWu.App.Controls"
              xmlns:vm="clr-namespace:MiaoWu.App.ViewModels"
              xmlns:conv="clr-namespace:MiaoWu.App.Converters"
              xmlns:res="clr-namespace:MiaoWu.App.Resources"
@@ -12,15 +13,18 @@
              d:DesignHeight="800"
              x:Name="Root"
              Focusable="False"
-             Background="{DynamicResource Brush.Canvas}"
+             Background="Transparent"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True"
-             AutomationProperties.AutomationId="ConversationPane">
+             AutomationProperties.AutomationId="ConversationPane"
+             AutomationProperties.Name="{x:Static res:Strings.MiddlePaneAutomation}">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibility" />
+        <conv:ResourceKeyToGeometryConverter x:Key="MenuIcon" />
+        <conv:PercentToArcConverter x:Key="PercentToArc" />
 
         <!-- 输入框：工具集中在底部一行；工作区入口在左栏。 -->
         <Style x:Key="Composer.IconButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
@@ -145,6 +149,33 @@
             </Setter>
         </Style>
 
+        <!-- 输入框正文（RichTextBox）：去掉自带边框与内边距，只保留外层卡片的一圈 accent；
+             chip 由 ComposerEditor 以内联 InlineUIContainer 渲染。 -->
+        <Style x:Key="Composer.Editor" TargetType="RichTextBox">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="IsReadOnly" Value="False" />
+            <Setter Property="AcceptsTab" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RichTextBox">
+                        <Border x:Name="ComposerInputBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="0"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 模型入口：只做当前模型 + 展开箭头；真正的菜单在下方 Popup 里按提供商分区。 -->
         <Style x:Key="Composer.ModelButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
             <Setter Property="Height" Value="26" />
@@ -164,6 +195,59 @@
                     <Setter Property="Background" Value="{DynamicResource Brush.Sel}" />
                 </DataTrigger>
             </Style.Triggers>
+        </Style>
+
+        <!-- 输入卡下方读数：三个只读 pill，共用 12/20 与 tertiary 静止态。 -->
+        <Style x:Key="Composer.DockPill" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+            <Setter Property="Height" Value="{StaticResource Metric.Dock.Height}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.DockPill}" />
+            <Setter Property="Margin" Value="{StaticResource Margin.DockPill}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="Transparent"
+                                CornerRadius="{StaticResource Radius.Button}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel2}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Composer.DockRowLabel"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource Text.Dock}">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+        </Style>
+
+        <Style x:Key="Composer.DockRowValue"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource Text.Dock}">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+            <Setter Property="TextAlignment" Value="Right" />
+        </Style>
+
+        <Style x:Key="Composer.DockPanelTitle"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource Text.Dock}">
+            <Setter Property="FontSize" Value="{StaticResource Font.Section.Size}" />
+            <Setter Property="LineHeight" Value="{StaticResource Font.Section.Line}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         </Style>
 
         <Style x:Key="Composer.ModelRowButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
@@ -192,6 +276,75 @@
             </Grid>
         </DataTemplate>
 
+        <Style x:Key="Composer.MenuRow" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+            <Setter Property="Height" Value="{StaticResource Metric.Menu.RowHeight}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.MenuItem}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource Radius.MenuItem}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel}" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 触发菜单一行：图标 + 标题 + 别名 / 父目录；目录行带右箭头提示可下钻。 -->
+        <DataTemplate x:Key="Composer.TriggerRow">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Path Width="14"
+                      Height="14"
+                      VerticalAlignment="Center"
+                      Stretch="Uniform"
+                      Data="{Binding IconKey, Converter={StaticResource MenuIcon}}"
+                      Fill="{DynamicResource Brush.Text2}" />
+                <TextBlock Grid.Column="1"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Text="{Binding Label}"
+                           Style="{StaticResource Text.Chip}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Text="{Binding Detail}"
+                           Style="{StaticResource Text.Time}"
+                           TextTrimming="CharacterEllipsis" />
+                <Path Grid.Column="3"
+                      Width="10"
+                      Height="10"
+                      Margin="6,0,0,0"
+                      VerticalAlignment="Center"
+                      Stretch="Uniform"
+                      Data="{StaticResource Ico.ChevronRight}"
+                      Fill="{DynamicResource Brush.Text3}"
+                      Visibility="{Binding IsDirectory, Converter={StaticResource BoolToVisibility}}" />
+            </Grid>
+        </DataTemplate>
+
         <Style x:Key="ChatItemContainer" TargetType="ListBoxItem">
             <Setter Property="Focusable" Value="False" />
             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
@@ -206,7 +359,7 @@
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
-                <!-- 执行过程组收起：成员保留在列表里（重试/追溯仍找得到），只是折叠成 0 高 -->
+                <!-- 执行过程组收起：成员保留在列表里（重试 / 追溯仍找得到），只是折叠成 0 高 -->
                 <DataTrigger Binding="{Binding IsHiddenByGroup}" Value="True">
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
@@ -216,7 +369,7 @@
         <conv:NonEmptyStringToVisibilityConverter x:Key="NonEmptyToVisibility" />
         <conv:ToolIconConverter x:Key="ToolIcon" />
 
-        <!-- 消息尾部的图标动作：24×24 命中，16 盒描边 glyph，悬停才出浅底 -->
+        <!-- 消息尾部的图标动作：24×24 命中区，16 盒描边 glyph，悬停才出浅底 -->
         <Style x:Key="Chat.ActionButton" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
         </Style>
@@ -236,12 +389,12 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- 思考折叠行：与工具行同高、同字号；行距由过程成员统一给 -->
+        <!-- 思考折叠行：与工具行同高、同字号；行距由过程成员统一。 -->
         <Style x:Key="Chat.Disclosure" TargetType="Button" BasedOn="{StaticResource Chat.Row}">
             <Setter Property="Margin" Value="0" />
         </Style>
 
-        <!-- 展开箭头：收起指向右、展开指向下；默认隐形，悬停或展开时出现 -->
+        <!-- 展开箭头：收起指向右、展开指向下；默认隐形，悬停或展开时出现。 -->
         <Style x:Key="Chat.Chevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
             <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
             <Setter Property="Opacity" Value="0" />
@@ -259,8 +412,8 @@
             </Style.Triggers>
         </Style>
 
-        <!-- DSH 的 TurnProcess 行：没有图标、没有底色，只有一行 tertiary 状态文字 + 14 箭头。
-             容器 33 高 = 24 文字行 + 8 底距 + 1 发丝线；悬停只把文字抬到 secondary。 -->
+        <!-- DSH 的 TurnProcess 行：没有图标、没有底色，只有一条 tertiary 状态文字 + 14 箭头；
+             容器 33 高（= 24 文字行 + 8 底距 + 1 发丝线）；悬停只把文字抬到 secondary。 -->
         <Style x:Key="Chat.TurnRow" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
@@ -293,7 +446,7 @@
             </Setter>
         </Style>
 
-        <!-- 过程组头的箭头：始终可见；展开时旋转 180°，与 DSH 的 data-open 一致 -->
+        <!-- 过程组头的箭头：始终可见；展开时旋转 180°，与 DSH 的 data-open 一致。 -->
         <Style x:Key="Chat.TurnChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
             <Setter Property="Width" Value="{StaticResource Metric.Chat.Icon}" />
             <Setter Property="Height" Value="{StaticResource Metric.Chat.Icon}" />
@@ -310,7 +463,7 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 思考行的箭头：随思考开合换向；收起时只在悬停出现 -->
+        <!-- 思考行的箭头：随思考开合换向；收起时只在悬停出现。 -->
         <Style x:Key="Chat.ThinkingChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
             <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
             <Setter Property="Opacity" Value="0" />
@@ -328,7 +481,53 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 用户消息：右对齐气泡，宽度上限为内容列的 70%（3*/7* 分栏），与助手正文左右对照。
+        <Style x:Key="Chat.CompactionChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
+            <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
+            <Setter Property="Opacity" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeDown}" />
+                    <Setter Property="Opacity" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Opacity" Value="1" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 压缩分隔行：说明从这里往前的对话已收进摘要；展开可看六段摘要。 -->
+        <DataTemplate DataType="{x:Type vm:CompactionChatItemViewModel}">
+            <StackPanel Margin="0,10,0,4">
+                <Button Style="{StaticResource Chat.Disclosure}"
+                        Command="{Binding ToggleCommand}"
+                        ToolTip="展开或收起压缩摘要"
+                        AutomationProperties.Name="展开或收起压缩摘要">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Path Style="{StaticResource Chat.Icon}" Data="{StaticResource Ico.Sparkle}" />
+                        <TextBlock Grid.Column="1"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding HeaderText}"
+                                   Style="{StaticResource Text.ChatProcess}" />
+                        <Path Grid.Column="2"
+                              Margin="6,0,0,0"
+                              Style="{StaticResource Chat.CompactionChevron}" />
+                    </Grid>
+                </Button>
+                <TextBlock Margin="22,4,0,0"
+                           Text="{Binding DisplaySummary}"
+                           Style="{StaticResource Text.Reasoning}"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 用户消息：右对齐气泡，宽度上限为内容列的 70%，与助手正文左右对照；
              时间、复制与本轮计时都在气泡下方；轮内间距（4）必须小于轮次间距（18）。
              本轮一旦有执行过程组，计时交给组头，气泡下不再重复一条。 -->
         <DataTemplate DataType="{x:Type vm:UserChatItemViewModel}">
@@ -342,9 +541,34 @@
                     <Border Padding="{StaticResource Pad.Bubble}"
                             Background="{DynamicResource Brush.Tab}"
                             CornerRadius="{StaticResource Radius.Bubble}">
-                        <TextBlock Text="{Binding Text}"
-                                   Style="{StaticResource Text.Body}"
-                                   TextWrapping="Wrap" />
+                        <StackPanel>
+                            <ItemsControl ItemsSource="{Binding Images}"
+                                          Focusable="False"
+                                          Margin="0,0,0,6"
+                                          Visibility="{Binding HasImages, Converter={StaticResource BoolToVisibility}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="104"
+                                                Height="104"
+                                                Margin="0,0,6,0"
+                                                Background="{DynamicResource Brush.Canvas}"
+                                                CornerRadius="{StaticResource Radius.Card}"
+                                                ClipToBounds="True"
+                                                ToolTip="{Binding Label}">
+                                            <Image Source="{Binding Source}" Stretch="UniformToFill" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{Binding Text}"
+                                       Style="{StaticResource Text.Body}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
                     </Border>
 
                     <StackPanel Margin="0,4,0,0"
@@ -376,7 +600,7 @@
             </Grid>
         </DataTemplate>
 
-        <!-- 助手回答：左对齐正文、无卡片底色；时间/模型/用量与图标动作收束成一行尾部元信息。
+        <!-- 助手回答：左对齐正文、无卡片底色；时间、模型 / 用量与图标动作收束成一行尾部元信息；
              思考默认收起，收起时给一行摘要。 -->
         <DataTemplate DataType="{x:Type vm:AssistantChatItemViewModel}">
             <StackPanel x:Name="AssistantRoot" Margin="{StaticResource Margin.Chat.Assistant}">
@@ -414,7 +638,7 @@
                         </Grid>
                     </Button>
 
-                    <!-- DSH 的推理正文：组头下方缩进 22，紧凑 12/20，不再加左侧竖线 -->
+                    <!-- DSH 的推理正文：组头下方缩进 22，紧贴 12/20，不再加左侧竖线 -->
                     <TextBlock Margin="22,2,0,0"
                                Text="{Binding ThinkingText}"
                                Style="{StaticResource Text.Reasoning}"
@@ -426,7 +650,7 @@
                               Focusable="False"
                               Visibility="{Binding HasBlocks, Converter={StaticResource BoolToVisibility}}" />
 
-                <!-- 流式首帧：Markdown 还没重建时先显示纯文本；空步骤不占一行 -->
+                <!-- 流式首帧：Markdown 还没重建时先显示纯文本；空步骤不占一行。 -->
                 <TextBlock Text="{Binding Text}"
                            Style="{StaticResource Text.Body}"
                            TextWrapping="Wrap"
@@ -439,7 +663,7 @@
                            TextWrapping="Wrap"
                            Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}" />
 
-                <!-- 尾部元信息只留时间与动作：模型 / 用量不再占回答下方一行 -->
+                <!-- 尾部元信息只留时间与动作：模型 / 用量不再占回答下方一行。 -->
                 <Grid Margin="{StaticResource Margin.Chat.Footer}"
                       Visibility="{Binding ShowFooter, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
@@ -485,7 +709,7 @@
                 </Grid>
             </StackPanel>
             <DataTemplate.Triggers>
-                <!-- 只带工具调用的助手步骤没有正文/思考：整行不占高，否则组内会多出一段空白 -->
+                <!-- 只带工具调用的助手步骤没有正文与思考：整行不占高，否则组内会多出一段空白。 -->
                 <MultiDataTrigger>
                     <MultiDataTrigger.Conditions>
                         <Condition Binding="{Binding IsProcessMember}" Value="True" />
@@ -509,7 +733,7 @@
         </DataTemplate>
 
         <!-- 工具调用：24 高单行摘要（族图标 + 名称 + 摘要 + 状态），整行可点展开；
-             展开体是代码块 + 风险/决策元信息 + 完整输出与撤销入口。
+             展开体是代码块 + 风险 / 决策元信息 + 完整输出与撤销入口；
              行内不铺卡片底色，避免过程行比答案更抢眼。 -->
         <DataTemplate DataType="{x:Type vm:ToolCardViewModel}">
             <StackPanel x:Name="ToolRoot" Margin="{StaticResource Margin.Chat.Tool}">
@@ -681,7 +905,7 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- 最后一轮答案的思考：从正文行拆出来，作为执行过程组的成员。
+        <!-- 最后一轮答案的思考：从正文行拆出来，作为执行过程组的成员；
              视觉与正文里的思考折叠行一致，只是归组收起。 -->
         <DataTemplate DataType="{x:Type vm:ProcessThinkingViewModel}">
             <StackPanel Margin="{StaticResource Margin.Chat.ProcessMember}">
@@ -724,8 +948,8 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- 执行过程组：DSH 的 TurnProcess 行（状态 + 用时 + 箭头）+ 可展开的成员行。
-             成员是平铺在列表里的助手步骤/工具卡，组收起时折叠成 0 高，因此重试与快照回放仍按原顺序工作。 -->
+        <!-- 执行过程组：DSH 的 TurnProcess 行（状态 + 用时 + 箭头），可展开的成员行；
+             成员是平铺在列表里的助手步骤 / 工具卡，组收起时折叠成 0 高，因此重试与快照回放仍按原顺序工作。 -->
         <DataTemplate DataType="{x:Type vm:ProcessGroupViewModel}">
             <StackPanel Margin="{StaticResource Margin.Chat.Process}">
                 <Border x:Name="ProcessHeader"
@@ -804,6 +1028,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- 会话头：标题 + 更多。轮次计时在问题气泡下方，标题栏不再放计时。 -->
@@ -846,11 +1071,46 @@
                           Data="{StaticResource Ico.More}"
                           Fill="{DynamicResource Brush.Text3}" />
                 </Button>
+
+                <!-- 折叠按钮从窗口顶栏移到会话头「更多」右侧；仍由 Ctrl+J 与右栏状态驱动。 -->
+                <Button x:Name="PaneToggle"
+                        Width="{StaticResource Metric.Pane.ToggleSize}"
+                        Height="{StaticResource Metric.Pane.ToggleSize}"
+                        Margin="4,0,0,0"
+                        Style="{StaticResource Button.Icon}"
+                        Command="{Binding DataContext.ToggleRightPaneCommand, RelativeSource={RelativeSource AncestorType={x:Type views:ShellView}}}"
+                        ToolTip="{Binding DataContext.ToggleRightPaneToolTip, RelativeSource={RelativeSource AncestorType={x:Type views:ShellView}}}"
+                        AutomationProperties.AutomationId="PaneToggle"
+                        AutomationProperties.Name="{Binding DataContext.ToggleRightPaneToolTip, RelativeSource={RelativeSource AncestorType={x:Type views:ShellView}}}"
+                        KeyboardNavigation.TabIndex="100">
+                    <Grid Width="{StaticResource Metric.Icon}" Height="{StaticResource Metric.Icon}">
+                        <Path Fill="{DynamicResource Brush.Text2}">
+                            <Path.Style>
+                                <Style TargetType="Path" BasedOn="{StaticResource Icon}">
+                                    <Setter Property="Data" Value="{StaticResource Ico.PanelCollapse}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsRightPaneCollapsed, RelativeSource={RelativeSource AncestorType={x:Type views:ShellView}}}"
+                                                     Value="True">
+                                            <Setter Property="Data" Value="{StaticResource Ico.PanelExpand}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                        <Ellipse Width="6"
+                                 Height="6"
+                                 HorizontalAlignment="Right"
+                                 VerticalAlignment="Top"
+                                 Margin="0,-2,-2,0"
+                                 Fill="{DynamicResource Brush.Warning}"
+                                 Visibility="{Binding DataContext.HasPendingApproval, RelativeSource={RelativeSource AncestorType={x:Type views:ShellView}}, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
+                </Button>
             </StackPanel>
         </Grid>
 
         <!-- 消息列表：像素滚动，拖动滚动条是连续的；是否跟随新内容由视图判断贴底，
-             用户上滚后不再自动拉回（见 ConversationPaneView.xaml.cs）。
+             用户上滚后不再自动拉回（见 ConversationPaneView.xaml.cs），
              本轮计时在问题气泡下方，列表底部不再放运行状态条。 -->
         <Grid Grid.Row="1">
             <ListBox x:Name="MessageList"
@@ -898,7 +1158,7 @@
         <Border x:Name="RightInputShell"
                 Grid.Row="2"
                 Height="{StaticResource Metric.Input.Height}"
-                Margin="14,0,14,14"
+                Margin="14,0,14,4"
                 Padding="{StaticResource Pad.Input}">
             <Border.Style>
                 <Style TargetType="Border">
@@ -920,27 +1180,26 @@
                     <RowDefinition Height="{StaticResource GridLength.Input.Tools}" />
                 </Grid.RowDefinitions>
 
-                <!-- 正文：固定卡片高度内滚动，避免输入时整栏跳动。 -->
+                <!-- 正文：固定卡片高度内滚动，避免输入时整栏跳动。文件 / 图片以 chip 内联显示。 -->
                 <Grid Grid.Row="0" Margin="0,0,0,8">
-                    <TextBox x:Name="ComposerBox"
-                             Style="{StaticResource Composer.TextBox}"
-                             Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             VerticalContentAlignment="Top"
-                             FontFamily="{StaticResource Font.Family}"
-                             FontSize="{StaticResource Font.Body.Size}"
-                             TextBlock.LineHeight="{StaticResource Font.Body.Line}"
-                             TextBlock.LineStackingStrategy="BlockLineHeight"
-                             Foreground="{DynamicResource Brush.Text}"
-                             PreviewKeyDown="OnComposerKeyDown"
-                             AutomationProperties.AutomationId="ComposerInput"
-                             AutomationProperties.Name="消息输入框" />
+                    <controls:ComposerEditor x:Name="ComposerBox"
+                                             Style="{StaticResource Composer.Editor}"
+                                             PlainText="{Binding Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontFamily="{StaticResource Font.Family}"
+                                             FontSize="{StaticResource Font.Body.Size}"
+                                             Foreground="{DynamicResource Brush.Text}"
+                                             PreviewKeyDown="OnComposerKeyDown"
+                                             DraftChanged="OnComposerDraftChanged"
+                                             CaretMoved="OnComposerCaretMoved"
+                                             ExternalPathsDropped="OnComposerFilesDropped"
+                                             LostKeyboardFocus="OnComposerLostFocus"
+                                             AutomationProperties.AutomationId="ComposerInput"
+                                             AutomationProperties.Name="消息输入框" />
                     <TextBlock Margin="2,0,0,0"
                                VerticalAlignment="Top"
                                IsHitTestVisible="False"
-                               Text="{Binding ComposerPlaceholder, FallbackValue=描述你想让 MiaoWu 做的事}"
+                               Text="{Binding ComposerPlaceholder, FallbackValue=发送问题或任务，/调用指令，@引用文件}"
                                Style="{StaticResource Text.Body}"
                                Foreground="{DynamicResource Brush.Text3}"
                                Visibility="{Binding Draft, Converter={StaticResource EmptyStringToVisibility}}" />
@@ -958,10 +1217,10 @@
 
                     <Button Grid.Column="0"
                             Style="{StaticResource Composer.IconButton}"
-                            IsEnabled="False"
-                            ToolTip="附件与文件引用将在后续版本提供"
+                            Command="{Binding AttachFilesCommand}"
+                            ToolTip="{Binding AttachFilesToolTip}"
                             ToolTipService.ShowOnDisabled="True"
-                            AutomationProperties.Name="添加附件（暂未开放）">
+                            AutomationProperties.Name="添加文件或图片">
                         <Path Width="14"
                               Height="14"
                               Style="{StaticResource Icon}"
@@ -1108,7 +1367,253 @@
                         </Border>
                     </Border>
                 </Popup>
+
+                <!-- `/` 与 `@` 补全菜单：浮在输入卡上方 4px，宽度与输入卡一致；
+                     焦点留在编辑器里，行用 mousedown/click 选中，Tab 由代码后置路由。 -->
+                <Popup x:Name="TriggerPopup"
+                       Placement="Custom"
+                       PlacementTarget="{Binding ElementName=RightInputShell}"
+                       AllowsTransparency="True"
+                       StaysOpen="True"
+                       Focusable="False"
+                       PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}"
+                       Width="{Binding ActualWidth, ElementName=RightInputShell}"
+                       IsOpen="{Binding ComposerTriggers.IsOpen, Mode=OneWay}"
+                       Closed="OnTriggerPopupClosed">
+                    <Border Background="Transparent"
+                            BorderBrush="{DynamicResource Brush.MenuHairline}"
+                            BorderThickness="{StaticResource Thickness.MenuHairline}"
+                            CornerRadius="{StaticResource Radius.MenuHairline}"
+                            SnapsToDevicePixels="False"
+                            UseLayoutRounding="False">
+                        <Border Style="{StaticResource Menu.Surface}">
+                            <ScrollViewer x:Name="TriggerScroller"
+                                          MaxHeight="{StaticResource Metric.ModelPicker.MaxHeight}"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl x:Name="TriggerRows" ItemsSource="{Binding ComposerTriggers.Rows}" Focusable="False">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <TextBlock Margin="{StaticResource Margin.ModelSection}"
+                                                           Text="{Binding HeaderText}"
+                                                           Style="{StaticResource Text.Group}"
+                                                           Visibility="{Binding IsHeader, Converter={StaticResource BoolToVisibility}}" />
+                                                <Button Style="{StaticResource Composer.MenuRow}"
+                                                        Content="{Binding}"
+                                                        ContentTemplate="{StaticResource Composer.TriggerRow}"
+                                                        Tag="{Binding}"
+                                                        ToolTip="{Binding ToolTip}"
+                                                        AutomationProperties.Name="{Binding Label}"
+                                                        Visibility="{Binding IsHeader, Converter={StaticResource InverseBoolToVisibility}}"
+                                                        MouseMove="OnTriggerRowMouseMove"
+                                                        Click="OnTriggerRowClick" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+                    </Border>
+                </Popup>
             </Grid>
         </Border>
+
+        <!-- 输入卡下方读数：居中的三个只读 pill；没有数据整条隐藏。
+             高度固定 22（20 行高 + 上下 1），读数异步到达也不会顶动输入卡。 -->
+        <Grid x:Name="ComposerDockRowHost"
+              Grid.Row="3"
+              Height="{StaticResource Metric.Dock.Height}"
+              Margin="{StaticResource Margin.Dock}"
+              Visibility="{Binding ComposerDock.HasAny, Converter={StaticResource BoolToVisibility}}"
+              SizeChanged="OnComposerDockSizeChanged"
+              PreviewKeyDown="OnDockKeyDown">
+            <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                <Button x:Name="StatsPill"
+                        Style="{StaticResource Composer.DockPill}"
+                        Tag="Stats"
+                        Click="OnDockPillClick"
+                        AutomationProperties.Name="会话统计"
+                        Visibility="{Binding ComposerDock.HasStats, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Width="14"
+                              Height="14"
+                              VerticalAlignment="Center"
+                              Stretch="Uniform"
+                              Stroke="{DynamicResource Brush.Text3}"
+                              StrokeThickness="{StaticResource Metric.Icon.Stroke}"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              Data="{StaticResource Ico.Clock}" />
+                        <TextBlock Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding ComposerDock.StatsSummary}"
+                                   Style="{StaticResource Text.Dock}" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="UsagePill"
+                        Style="{StaticResource Composer.DockPill}"
+                        Tag="Usage"
+                        Click="OnDockPillClick"
+                        AutomationProperties.Name="Token 用量"
+                        Visibility="{Binding ComposerDock.HasUsage, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Width="14"
+                              Height="14"
+                              VerticalAlignment="Center"
+                              Stretch="Uniform"
+                              Fill="{DynamicResource Brush.Text3}"
+                              Data="{StaticResource Ico.Market}" />
+                        <TextBlock Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding ComposerDock.UsageSummary}"
+                                   Style="{StaticResource Text.Dock}" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="ContextPill"
+                        Style="{StaticResource Composer.DockPill}"
+                        Margin="0"
+                        Tag="Context"
+                        Click="OnDockPillClick"
+                        AutomationProperties.Name="上下文已用"
+                        Visibility="{Binding ComposerDock.HasContext, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <Grid Width="14" Height="14" VerticalAlignment="Center">
+                            <Ellipse Width="12"
+                                     Height="12"
+                                     Stroke="{DynamicResource Brush.Line3}"
+                                     StrokeThickness="{StaticResource Metric.Icon.Stroke}" />
+                            <Path Stroke="{DynamicResource Brush.Accent}"
+                                  StrokeThickness="{StaticResource Metric.Icon.Stroke}"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  Data="{Binding ComposerDock.ContextPercent, Converter={StaticResource PercentToArc}}" />
+                        </Grid>
+                        <TextBlock Margin="4,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding ComposerDock.ContextPercentText}"
+                                   Style="{StaticResource Text.Dock}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- 读数明细：点 pill 才出现，锚在读数行上方；点外部或 Esc 关闭。 -->
+        <Popup x:Name="DockPopup"
+               Placement="Custom"
+               PlacementTarget="{Binding ElementName=ComposerDockRowHost}"
+               AllowsTransparency="True"
+               StaysOpen="False"
+               Focusable="False"
+               PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}"
+               IsOpen="{Binding ComposerDock.IsOpen, Mode=OneWay}"
+               Closed="OnDockPopupClosed">
+            <Border Background="Transparent"
+                    BorderBrush="{DynamicResource Brush.MenuHairline}"
+                    BorderThickness="{StaticResource Thickness.MenuHairline}"
+                    CornerRadius="{StaticResource Radius.MenuHairline}"
+                    SnapsToDevicePixels="False"
+                    UseLayoutRounding="False">
+                <Border Style="{StaticResource Menu.Surface}"
+                        Width="{StaticResource Metric.Dock.Panel.Width}"
+                        Padding="{StaticResource Pad.DockPanel}">
+                    <Grid>
+                        <StackPanel Visibility="{Binding ComposerDock.ShowStats, Converter={StaticResource BoolToVisibility}}">
+                            <Grid>
+                                <TextBlock Text="会话统计" Style="{StaticResource Composer.DockPanelTitle}" />
+                                <TextBlock HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding ComposerDock.StatsTitleRight}"
+                                           Style="{StaticResource Text.Dock}"
+                                           Foreground="{DynamicResource Brush.Text2}" />
+                            </Grid>
+                            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding ComposerDock.StatsRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Height="{StaticResource Font.Dock.Line}">
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource Composer.DockRowLabel}" />
+                                            <TextBlock HorizontalAlignment="Right"
+                                                       Text="{Binding Value}"
+                                                       Style="{StaticResource Composer.DockRowValue}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding ComposerDock.ShowUsage, Converter={StaticResource BoolToVisibility}}">
+                            <Grid>
+                                <TextBlock Text="Token 用量" Style="{StaticResource Composer.DockPanelTitle}" />
+                                <TextBlock HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding ComposerDock.UsageTitleRight}"
+                                           Style="{StaticResource Text.Dock}"
+                                           Foreground="{DynamicResource Brush.Text2}" />
+                            </Grid>
+                            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding ComposerDock.UsageRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Height="{StaticResource Font.Dock.Line}">
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource Composer.DockRowLabel}" />
+                                            <TextBlock HorizontalAlignment="Right"
+                                                       Text="{Binding Value}"
+                                                       Style="{StaticResource Composer.DockRowValue}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding ComposerDock.ShowContext, Converter={StaticResource BoolToVisibility}}">
+                            <Grid>
+                                <TextBlock Text="上下文已用" Style="{StaticResource Composer.DockPanelTitle}" />
+                                <TextBlock HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding ComposerDock.ContextTitleRight}"
+                                           Style="{StaticResource Composer.DockPanelTitle}"
+                                           Foreground="{DynamicResource Brush.Accent}" />
+                            </Grid>
+                            <TextBlock Margin="0,2,0,0"
+                                       Text="{Binding ComposerDock.ContextRatioText}"
+                                       Style="{StaticResource Text.Dock}"
+                                       Foreground="{DynamicResource Brush.Text2}" />
+                            <Grid Height="4" Margin="0,8,0,10" HorizontalAlignment="Left">
+                                <Border Width="244"
+                                        Height="4"
+                                        Background="{DynamicResource Brush.Line3}"
+                                        CornerRadius="2" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="{Binding ComposerDock.SystemBarWidth}"
+                                            Height="4"
+                                            Background="{DynamicResource Brush.Accent}" />
+                                    <Border Width="{Binding ComposerDock.ToolsBarWidth}"
+                                            Height="4"
+                                            Background="{DynamicResource Brush.Text2}" />
+                                    <Border Width="{Binding ComposerDock.MessageBarWidth}"
+                                            Height="4"
+                                            Background="{DynamicResource Brush.Line2}" />
+                                </StackPanel>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding ComposerDock.ContextRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Height="{StaticResource Font.Dock.Line}">
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource Composer.DockRowLabel}" />
+                                            <TextBlock HorizontalAlignment="Right"
+                                                       Text="{Binding Value}"
+                                                       Style="{StaticResource Composer.DockRowValue}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>

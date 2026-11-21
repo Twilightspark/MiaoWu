@@ -36,6 +36,10 @@ namespace MiaoWu.App.Services
             _accessibility = new AccessibilityService();
             _accessibility.Apply();
 
+            // 确认浮层与对话框服务共用同一份 ViewModel：删除会话等二次确认
+            // 走主窗口内的卡片浮层，而不是系统 MessageBox。
+            var confirmPrompt = new ConfirmPromptViewModel();
+
             MainViewModel = new MainWindowViewModel(
                 _services.SettingsStore,
                 _services.WorkspaceStore,
@@ -46,10 +50,11 @@ namespace MiaoWu.App.Services
                 _services.PreviewService,
                 new WindowsFolderPicker(),
                 new WindowsFilePicker(),
-                new MessageBoxDialogService(),
+                new ConfirmDialogService(confirmPrompt),
                 new SystemClipboardService(),
                 null,
-                _services);
+                _services,
+                confirmPrompt);
 
             MainViewModel.ExitRequested += OnMainViewModelExitRequested;
             MainViewModel.HiddenToTray += OnHiddenToTray;

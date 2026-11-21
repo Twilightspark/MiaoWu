@@ -18,7 +18,7 @@ namespace MiaoWu.Tests.Settings
             Assert.Equal(1440, settings.Ui.WindowWidth);
             Assert.Equal(900, settings.Ui.WindowHeight);
             Assert.Equal(262, settings.Ui.LeftPaneWidth);
-            Assert.Equal(428, settings.Ui.RightPaneWidth);
+            Assert.Equal(580, settings.Ui.RightPaneWidth);
             Assert.Equal(AppSettings.CurrentSchemaVersion, settings.SchemaVersion);
         }
 
@@ -38,9 +38,9 @@ namespace MiaoWu.Tests.Settings
         }
 
         [Theory]
-        [InlineData(double.NaN, 428)]
+        [InlineData(double.NaN, 580)]
         [InlineData(0, 384)]
-        [InlineData(999, 560)]
+        [InlineData(999, 640)]
         public void RightWidthIsClamped(double value, double expected)
         {
             var settings = new AppSettings();

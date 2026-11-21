@@ -24,15 +24,11 @@ using MiaoWu.Core.Workspaces;
 namespace MiaoWu.App.ViewModels
 {
     /// <summary>
-    /// 主窗口壳的状态与命令：布局、左栏、中栏、右栏会话、浮层、通知与状态持久化。
+    /// 主窗口壳的状态与命令：布局、左栏、中栏问答、右栏文件/预览、浮层、通知与状态持久化。
     /// 窗口级行为（WindowChrome、DPI、最大化）仍在 MainWindow。
     /// </summary>
     public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
-        private const double WindowButtonsWidth = 132;
-        private const double ToggleGap = 8;
-        private const double ToggleSize = 28;
-
         private readonly ISettingsStore _settingsStore;
         private readonly IWorkspaceStore _workspaceStore;
         private readonly AppSettings _settings;
@@ -47,8 +43,7 @@ namespace MiaoWu.App.ViewModels
         private double _windowWidth = 1440;
         private double _windowHeight = 900;
         private double _layoutWidth = 1440;
-        private double _rightExpandedWidth = 428;
-        private double _rightPaneVisualWidth = 428;
+        private double _rightExpandedWidth = 580;
         private bool _isRightPaneCollapsed;
         private bool _isMaximized;
         private bool _isOnboarding;
@@ -70,7 +65,8 @@ namespace MiaoWu.App.ViewModels
             IDialogService dialogs,
             IClipboardService clipboard,
             Func<DateTime> clock = null,
-            AppServices services = null)
+            AppServices services = null,
+            ConfirmPromptViewModel confirmPrompt = null)
         {
             _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
             _workspaceStore = workspaceStore ?? throw new ArgumentNullException(nameof(workspaceStore));
@@ -140,6 +136,10 @@ namespace MiaoWu.App.ViewModels
             _layout = _layoutPolicy.Compute(_windowWidth, _isRightPaneCollapsed);
 
             WorkspaceCollection collection = LoadWorkspaces(_workspaceStore);
+
+            // 确认浮层先于左栏创建：左栏的删除文件确认也走同一份浮层。
+            ConfirmPrompt = confirmPrompt ?? new ConfirmPromptViewModel();
+
             Left = new LeftPaneViewModel(
                 sessionCatalog,
                 fileCatalog,
@@ -202,6 +202,7 @@ namespace MiaoWu.App.ViewModels
                     dialogs,
                     clipboard,
                     folderPicker,
+                    filePicker,
                     now);
 
                 Settings = new SettingsViewModel(services);
@@ -239,6 +240,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(Canvas));
             OnPropertyChanged(nameof(Overlay));
             OnPropertyChanged(nameof(ClosePrompt));
+            OnPropertyChanged(nameof(ConfirmPrompt));
             OnPropertyChanged(nameof(Conversation));
             OnPropertyChanged(nameof(Settings));
             OnPropertyChanged(nameof(Onboarding));
@@ -268,6 +270,9 @@ namespace MiaoWu.App.ViewModels
 
         /// <summary>关闭确认浮层；仅当 CloseAction=Ask 时打开。</summary>
         public ClosePromptViewModel ClosePrompt { get; }
+
+        /// <summary>通用二次确认浮层：删除会话 / 删除文件 / 清除会话 / 撤销写入 / 移除工作区。</summary>
+        public ConfirmPromptViewModel ConfirmPrompt { get; }
 
         public ConversationViewModel Conversation { get; }
 
@@ -442,9 +447,6 @@ namespace MiaoWu.App.ViewModels
 
         public double RightPaneMax { get; private set; }
 
-        /// <summary>顶栏折叠按钮的右边距：展开时贴右栏，折叠时停在窗口按钮左侧。</summary>
-        public Thickness TopBarToggleMargin { get; private set; }
-
         public double PreferredWindowWidth
         {
             get { return _windowWidth; }
@@ -499,26 +501,12 @@ namespace MiaoWu.App.ViewModels
             LeftPaneMax = _layoutPolicy.GetLeftMaximum(contentWidth, actual.Right);
             RightPaneMax = _layoutPolicy.GetRightMaximum(contentWidth, actual.Left);
 
-            UpdateTopBarToggleMargin();
-
             OnPropertyChanged(nameof(LeftPaneWidth));
             OnPropertyChanged(nameof(MiddlePaneWidth));
             OnPropertyChanged(nameof(RightPaneWidth));
             OnPropertyChanged(nameof(RightExpandedWidth));
             OnPropertyChanged(nameof(LeftPaneMax));
             OnPropertyChanged(nameof(RightPaneMax));
-        }
-
-        /// <summary>由 CollapsiblePane 的实际宽度驱动，让顶栏按钮在折叠动画中跟随。</summary>
-        public void SetRightPaneVisualWidth(double width)
-        {
-            if (Math.Abs(width - _rightPaneVisualWidth) < 0.1)
-            {
-                return;
-            }
-
-            _rightPaneVisualWidth = width;
-            UpdateTopBarToggleMargin();
         }
 
         public void UpdateWindowBounds(double width, double height, bool maximized)
@@ -1002,16 +990,6 @@ namespace MiaoWu.App.ViewModels
         private void RaiseStateChanged()
         {
             StateChanged?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void UpdateTopBarToggleMargin()
-        {
-            double toggleMargin = Math.Max(
-                _rightPaneVisualWidth - ToggleSize,
-                WindowButtonsWidth + ToggleGap);
-
-            TopBarToggleMargin = new Thickness(0, 0, toggleMargin, 0);
-            OnPropertyChanged(nameof(TopBarToggleMargin));
         }
 
         private void SetLeftPreferred(double value)

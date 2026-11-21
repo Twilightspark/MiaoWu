@@ -274,6 +274,15 @@
         <Setter Property="TextWrapping" Value="NoWrap" />
     </Style>
 
+    <!-- 输入卡下方读数：12/20、静止态 tertiary；悬停由父按钮改色。 -->
+    <Style x:Key="Text.Dock" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource Font.Dock.Size}" />
+        <Setter Property="LineHeight" Value="{StaticResource Font.Dock.Line}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
     <Style x:Key="Text.Empty" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{StaticResource Font.Empty.Size}" />
         <Setter Property="LineHeight" Value="{StaticResource Font.Empty.Line}" />
@@ -1284,6 +1293,16 @@
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}" />
         <Setter Property="Padding" Value="18" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!-- 中/右栏的内容面板：白色圆角卡片。面板内部各视图必须保持透明底，
+         否则方形底色会盖住圆角（见 ShellView）。 -->
+    <Style x:Key="Pane.Card" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Brush.Canvas}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Line2}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Pane}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 

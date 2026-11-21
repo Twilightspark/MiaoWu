@@ -148,6 +148,12 @@ namespace MiaoWu.Core.Agents
 
         /// <summary>是否处于计划模式；开启时只暴露只读工具与 `exit_plan_mode`。</summary>
         public bool PlanMode { get; set; }
+
+        /// <summary>最近一次压缩；为空表示还没有压缩过。</summary>
+        public AgentCompaction Compaction { get; set; }
+
+        /// <summary>输入框下方三个读数的快照：会话统计、Token 用量、上下文占用。</summary>
+        public SessionMeter Meter { get; set; }
     }
 
     public sealed class AgentRun
@@ -201,6 +207,12 @@ namespace MiaoWu.Core.Agents
         Task WaitForIdleAsync(CancellationToken cancellationToken);
 
         Task RenameAsync(string title, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// `/compact`：请当前模型把较早的对话压成摘要并落盘。消息本身保留（界面可回看），
+        /// 下一次请求只送摘要与最近消息；运行中调用会返回失败而不是打断当前轮次。
+        /// </summary>
+        Task<AgentCompactionResult> CompactAsync(CancellationToken cancellationToken);
     }
 
     public interface IAgentRuntime : IDisposable

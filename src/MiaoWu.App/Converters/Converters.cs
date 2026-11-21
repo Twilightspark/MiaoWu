@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 
 namespace MiaoWu.App.Converters
 {
@@ -24,6 +25,58 @@ namespace MiaoWu.App.Converters
             }
 
             return 0d;
+        }
+    }
+
+    /// <summary>
+    /// 0–100 的百分比 → 14×14 盒内的圆环弧线（从 12 点开始顺时针）。
+    /// 只用来画上下文占用环，0 返回空几何，100 返回整圆。
+    /// </summary>
+    public sealed class PercentToArcConverter : IValueConverter
+    {
+        private const double Box = 14;
+        private const double Radius = 6;
+        private static readonly Point Center = new Point(Box / 2, Box / 2);
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            double percent = value is double ? (double)value : 0;
+            if (percent <= 0)
+            {
+                return Geometry.Empty;
+            }
+
+            if (percent >= 100)
+            {
+                return new EllipseGeometry(Center, Radius, Radius);
+            }
+
+            double angle = 360.0 * percent / 100.0;
+            double radians = (angle - 90) * Math.PI / 180.0;
+            var end = new Point(
+                Center.X + Radius * Math.Cos(radians),
+                Center.Y + Radius * Math.Sin(radians));
+
+            var figure = new PathFigure
+            {
+                StartPoint = new Point(Center.X, Center.Y - Radius),
+                IsClosed = false,
+                IsFilled = false
+            };
+            figure.Segments.Add(new ArcSegment(
+                end,
+                new Size(Radius, Radius),
+                0,
+                angle > 180,
+                SweepDirection.Clockwise,
+                true));
+
+            return new PathGeometry(new[] { figure });
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotSupportedException();
         }
     }
 
@@ -121,6 +174,30 @@ namespace MiaoWu.App.Converters
             if (!Icons.TryGetValue(name, out key))
             {
                 key = "Ico.Sparkle";
+            }
+
+            Application app = Application.Current;
+            return app == null ? null : app.TryFindResource(key);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    /// <summary>
+    /// 资源键 → 图标几何。输入框触发菜单用它把 ViewModel 的图标键（Ico.File / Ico.Folder …）
+    /// 换成一个 16 网格几何，避免在 DataTemplate 里写多份 Path。
+    /// </summary>
+    public sealed class ResourceKeyToGeometryConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            string key = value as string;
+            if (string.IsNullOrEmpty(key))
+            {
+                return null;
             }
 
             Application app = Application.Current;

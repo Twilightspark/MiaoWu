@@ -124,6 +124,8 @@
     <sys:Double x:Key="Font.InlineCode.Size">11.5</sys:Double>
     <sys:Double x:Key="Font.Button.Size">12</sys:Double>
     <sys:Double x:Key="Font.Chip.Size">11.5</sys:Double>
+    <!-- 输入卡下方读数：比正文 13 小 1px，与 DSH 的 dock 一致。 -->
+    <sys:Double x:Key="Font.Dock.Size">12</sys:Double>
     <!-- 思考与提示正文：比正文小一档、行高 20，长段落仍可读 -->
     <sys:Double x:Key="Font.Reasoning.Size">12</sys:Double>
     <sys:Double x:Key="Font.Empty.Size">12.5</sys:Double>
@@ -144,6 +146,7 @@
     <sys:Double x:Key="Font.Code.Line">19</sys:Double>
     <sys:Double x:Key="Font.Button.Line">20</sys:Double>
     <sys:Double x:Key="Font.Chip.Line">20</sys:Double>
+    <sys:Double x:Key="Font.Dock.Line">20</sys:Double>
     <sys:Double x:Key="Font.Reasoning.Line">20</sys:Double>
     <sys:Double x:Key="Font.Empty.Line">20</sys:Double>
     <!-- 过程行与组头：DSH 的 TurnProcess / DisclosureRow 都是 24 行高。
@@ -155,8 +158,7 @@
     <sys:Double x:Key="Metric.Default.Window.Width">1440</sys:Double>
     <sys:Double x:Key="Metric.Default.Window.Height">900</sys:Double>
     <sys:Double x:Key="Metric.TopBar.Height">44</sys:Double>
-    <sys:Double x:Key="Metric.TopBar.ToggleSize">28</sys:Double>
-    <sys:Double x:Key="Metric.TopBar.ToggleGap">8</sys:Double>
+    <sys:Double x:Key="Metric.Pane.ToggleSize">28</sys:Double>
     <sys:Double x:Key="Metric.WindowButton.Size">44</sys:Double>
     <sys:Double x:Key="Metric.WindowButtons.Total">132</sys:Double>
     <sys:Double x:Key="Metric.Left.Width">262</sys:Double>
@@ -164,12 +166,12 @@
     <sys:Double x:Key="Metric.Left.Max">320</sys:Double>
     <sys:Double x:Key="Metric.Left.Section.Height">32</sys:Double>
     <sys:Double x:Key="Metric.Middle.Min">480</sys:Double>
-    <sys:Double x:Key="Metric.Right.Width">428</sys:Double>
+    <sys:Double x:Key="Metric.Right.Width">580</sys:Double>
     <sys:Double x:Key="Metric.Right.Min">384</sys:Double>
-    <sys:Double x:Key="Metric.Right.Max">560</sys:Double>
+    <sys:Double x:Key="Metric.Right.Max">640</sys:Double>
     <sys:Double x:Key="Metric.Splitter">4</sys:Double>
     <sys:Double x:Key="Metric.SplitterHit">7</sys:Double>
-    <sys:Double x:Key="Metric.Middle.Baseline">742</sys:Double>
+    <sys:Double x:Key="Metric.Middle.Baseline">580</sys:Double>
     <sys:Double x:Key="Metric.TabRow.Height">40</sys:Double>
     <sys:Double x:Key="Metric.RightTitle.Height">34</sys:Double>
     <sys:Double x:Key="Metric.Avatar">22</sys:Double>
@@ -185,6 +187,9 @@
     <sys:Double x:Key="Metric.Input.AttachmentRow">21</sys:Double>
     <sys:Double x:Key="Metric.Input.BodyRow">20</sys:Double>
     <sys:Double x:Key="Metric.Input.ToolsRow">28</sys:Double>
+    <!-- 读数行：20 行高 + 上下各 1，给异步落地的读数预留高度，避免输入卡跳动。 -->
+    <sys:Double x:Key="Metric.Dock.Height">22</sys:Double>
+    <sys:Double x:Key="Metric.Dock.Panel.Width">268</sys:Double>
     <sys:Double x:Key="Metric.Doc.CodeRadius">6</sys:Double>
     <sys:Double x:Key="Metric.Doc.BulletIndent">16</sys:Double>
     <sys:Double x:Key="Metric.Window.Min.Width">1080</sys:Double>
@@ -231,7 +236,7 @@
     <sys:Double x:Key="Metric.ModelPicker.MaxHeight">280</sys:Double>
     <sys:Double x:Key="Metric.Notification.Width">384</sys:Double>
     <sys:Double x:Key="Metric.Notification.Right">16</sys:Double>
-    <sys:Double x:Key="Metric.Notification.Bottom">158</sys:Double>
+    <sys:Double x:Key="Metric.Notification.Bottom">172</sys:Double>
     <sys:Double x:Key="Metric.Notification.BottomCollapsed">18</sys:Double>
     <sys:Double x:Key="Metric.Notification.Gap">9</sys:Double>
     <!-- 通知栈的最大高度：超过后整栈滚动，而不是把正文截断 -->
@@ -268,6 +273,8 @@
     <CornerRadius x:Key="Radius.Segment">6</CornerRadius>
     <CornerRadius x:Key="Radius.SegmentItem">5</CornerRadius>
     <CornerRadius x:Key="Radius.Tab">8</CornerRadius>
+    <!-- 中/右栏白色内容面板：与窗口 8px 圆角区分，面板用 12px -->
+    <CornerRadius x:Key="Radius.Pane">12</CornerRadius>
     <CornerRadius x:Key="Radius.ScrollThumb">3</CornerRadius>
     <CornerRadius x:Key="Radius.ToolTip">6</CornerRadius>
     <CornerRadius x:Key="Radius.Focus.WindowButton">3</CornerRadius>
@@ -275,6 +282,8 @@
 
     <!-- 间距 -->
     <Thickness x:Key="Pad.TopBar">14,0,8,0</Thickness>
+    <!-- 白色内容面板与顶栏 / 窗口边缘的留白；左侧由 4px 分隔条充当间隙 -->
+    <Thickness x:Key="Margin.Pane.Right">0,8,8,8</Thickness>
     <Thickness x:Key="Pad.WorkspaceRow">10,0,10,0</Thickness>
     <Thickness x:Key="Pad.SessionRow">9,0,9,0</Thickness>
     <Thickness x:Key="Pad.Tab">9,0,9,0</Thickness>
@@ -312,6 +321,10 @@
     <Thickness x:Key="Pad.TextBox.Compact">8,4</Thickness>
     <Thickness x:Key="Pad.Field">4,4</Thickness>
     <Thickness x:Key="Pad.Input">12,14,12,14</Thickness>
+    <Thickness x:Key="Pad.DockPill">6,1</Thickness>
+    <Thickness x:Key="Margin.Dock">14,0,14,10</Thickness>
+    <Thickness x:Key="Margin.DockPill">0,0,8,0</Thickness>
+    <Thickness x:Key="Pad.DockPanel">12,10,12,12</Thickness>
 
     <!-- 会话消息流：行内边距 14 与输入框、会话头对齐；轮次间距 18，轮内 10 -->
     <Thickness x:Key="Margin.Chat.User">14,18,14,0</Thickness>
@@ -328,8 +341,8 @@
     <Thickness x:Key="Pad.Bubble">9,12</Thickness>
     <Thickness x:Key="Pad.Chat.Body">10,8</Thickness>
     <Thickness x:Key="Pad.Chat.Reasoning">10,0,0,0</Thickness>
-    <!-- 通知栈底距 = 输入框 132 + 输入框外边距 14 + 栈间距 12 -->
-    <Thickness x:Key="Margin.Notification">0,0,16,158</Thickness>
+    <!-- 通知栈底距 = 输入框 132 + 底距 4 + 读数行 22 + 读数行底距 10 + 栈间距 4 -->
+    <Thickness x:Key="Margin.Notification">0,0,16,172</Thickness>
     <Thickness x:Key="Margin.NotificationCollapsed">0,0,16,18</Thickness>
     <Thickness x:Key="Pad.Code">12,10</Thickness>
     <Thickness x:Key="Margin.H2">0,20,0,8</Thickness>

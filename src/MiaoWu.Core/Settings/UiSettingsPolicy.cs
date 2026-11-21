@@ -44,7 +44,7 @@ namespace MiaoWu.Core.Settings
             WindowWidth = 1440;
             WindowHeight = 900;
             LeftPaneWidth = 262;
-            RightPaneWidth = 428;
+            RightPaneWidth = 580;
             Theme = "light";
             Language = "zh-CN";
             OpenTabs = new List<DocumentTab>();
@@ -102,7 +102,7 @@ namespace MiaoWu.Core.Settings
             LeftMin = 208;
             LeftMax = 320;
             RightMin = 384;
-            RightMax = 560;
+            RightMax = 640;
             MaxTabs = TabStripPolicy.MaxTabs;
         }
 
@@ -176,7 +176,7 @@ namespace MiaoWu.Core.Settings
             ui.WindowWidth = Clamp(ui.WindowWidth, effective.MinWindowWidth, maxWindowWidth, 1440);
             ui.WindowHeight = Clamp(ui.WindowHeight, effective.MinWindowHeight, maxWindowHeight, 900);
             ui.LeftPaneWidth = Clamp(ui.LeftPaneWidth, effective.LeftMin, effective.LeftMax, 262);
-            ui.RightPaneWidth = Clamp(ui.RightPaneWidth, effective.RightMin, effective.RightMax, 428);
+            ui.RightPaneWidth = Clamp(ui.RightPaneWidth, effective.RightMin, effective.RightMax, 580);
             ui.DocumentScrollOffset = Clamp(ui.DocumentScrollOffset, 0, double.MaxValue, 0);
             ui.Theme = NormalizeChoice(ui.Theme, "light", "dark", "system");
             ui.Language = NormalizeChoice(ui.Language, "zh-CN", "en-US");

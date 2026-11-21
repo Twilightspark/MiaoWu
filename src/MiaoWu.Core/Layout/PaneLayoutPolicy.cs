@@ -15,9 +15,9 @@ namespace MiaoWu.Core.Layout
 
         public double RightMin { get; set; } = 384;
 
-        public double RightMax { get; set; } = 560;
+        public double RightMax { get; set; } = 640;
 
-        public double RightDefault { get; set; } = 428;
+        public double RightDefault { get; set; } = 580;
 
         public double MiddleMin { get; set; } = 480;
 
@@ -26,7 +26,10 @@ namespace MiaoWu.Core.Layout
         /// <summary>三栏内容设计的最小高度，窗口高度不得低于该值。</summary>
         public double MinimumHeight { get; set; } = 760;
 
-        /// <summary>设计基准窗口宽度：1440 时是 262 / 742 / 428。</summary>
+        /// <summary>
+        /// 设计基准窗口宽度：1440 时左栏 262；中栏与右栏默认等宽，
+        /// 扣除卡片留白后实际各 580（策略值 590 / 580，多出的 10 是面板留白与 1px 描边）。
+        /// </summary>
         public double ReferenceWidth { get; set; } = 1440;
     }
 
@@ -56,9 +59,10 @@ namespace MiaoWu.Core.Layout
     /// <summary>
     /// 三栏宽度策略：
     /// 1. 以 1440 为设计基准；
-    /// 2. 窗口变窄时先压缩左栏（到 208），再压缩右栏（到 384），最后压缩中栏（保底 480）；
-    /// 3. 折叠右栏时右栏为 0，左栏仍按同一顺序收敛；
-    /// 4. 用户拖动分隔条后，以新的 preferred 宽度为准，窗口缩放仍按上面的顺序让位。
+    /// 2. 窗口变窄时先压缩左栏（到 208）；中栏不足 480 时再压缩右栏（到 384），中栏保底 480；
+    /// 3. 右栏展开时若中栏仍然够宽，不因为窗口小于基准而额外压缩右栏；
+    /// 4. 折叠右栏时右栏为 0，左栏仍按同一顺序收敛；
+    /// 5. 用户拖动分隔条后，以新的 preferred 宽度为准，窗口缩放仍按上面的顺序让位。
     /// </summary>
     public sealed class PaneLayoutPolicy
     {
@@ -115,13 +119,21 @@ namespace MiaoWu.Core.Layout
                 double takeLeft = Math.Min(deficit, leftRoom);
                 left -= takeLeft;
                 deficit -= takeLeft;
-
-                double rightRoom = Math.Max(0, right - _metrics.RightMin);
-                double takeRight = Math.Min(deficit, rightRoom);
-                right -= takeRight;
             }
 
             double middle = windowWidth - left - right - (_metrics.Splitter * 2);
+
+            // 中栏保底 480：只有中栏真的不够宽时才继续压右栏。
+            // 这样 1440 基准下用户保存的右栏宽度在 1180 / 1344 这类窗口里不会被无谓压缩，
+            // 中/右默认等宽在 1344 与 1440 都能成立。
+            if (!rightCollapsed && middle < _metrics.MiddleMin)
+            {
+                double needed = _metrics.MiddleMin - middle;
+                double rightRoom = Math.Max(0, right - _metrics.RightMin);
+                right -= Math.Min(needed, rightRoom);
+                middle = windowWidth - left - right - (_metrics.Splitter * 2);
+            }
+
             if (middle < 0)
             {
                 middle = 0;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
 
@@ -35,6 +36,9 @@ namespace MiaoWu.App.Services
     public interface IFilePicker
     {
         string PickFile(string title, string initialDirectory, string filter);
+
+        /// <summary>多选文件；输入框 `+` 用它把多个引用一次插进草稿。</summary>
+        IReadOnlyList<string> PickFiles(string title, string initialDirectory, string filter);
     }
 
     public sealed class WindowsFilePicker : IFilePicker
@@ -56,6 +60,26 @@ namespace MiaoWu.App.Services
                 return dialog.ShowDialog() == DialogResult.OK
                     ? dialog.FileName
                     : null;
+            }
+        }
+
+        public IReadOnlyList<string> PickFiles(string title, string initialDirectory, string filter)
+        {
+            using (var dialog = new OpenFileDialog())
+            {
+                dialog.Title = title ?? string.Empty;
+                dialog.CheckFileExists = true;
+                dialog.Multiselect = true;
+                dialog.Filter = string.IsNullOrWhiteSpace(filter) ? "所有文件|*.*" : filter;
+
+                if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
+                {
+                    dialog.InitialDirectory = initialDirectory;
+                }
+
+                return dialog.ShowDialog() == DialogResult.OK
+                    ? dialog.FileNames
+                    : new string[0];
             }
         }
     }

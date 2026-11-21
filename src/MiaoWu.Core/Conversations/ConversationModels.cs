@@ -41,6 +41,20 @@ namespace MiaoWu.Core.Conversations
         /// <summary>加载进内存的消息；最多 5000 条，按时间顺序。</summary>
         public List<AgentMessage> Messages { get; set; }
 
+        /// <summary>最近一次压缩；为空表示还没有压缩过。压缩不删消息，只改变请求上下文。</summary>
+        public AgentCompaction Compaction { get; set; }
+
+        /// <summary>
+        /// 会话级工作统计。落盘在 <c>session.meter</c>，消息被 5000 条内存上限裁掉后仍然完整。
+        /// 旧会话没有这条记录时为 <c>null</c>，调用方回退到消息折叠。
+        /// </summary>
+        public SessionStats Stats { get; set; }
+
+        /// <summary>
+        /// 会话级 token 分桶。与 <see cref="Stats"/> 同一条记录落盘，同样不受内存裁剪影响。
+        /// </summary>
+        public SessionTokenUsage Usage { get; set; }
+
         public string GetPlainText()
         {
             var builder = new System.Text.StringBuilder();
@@ -207,6 +221,22 @@ namespace MiaoWu.Core.Conversations
         System.Threading.Tasks.Task RenameAsync(
             string sessionId,
             string title,
+            System.Threading.CancellationToken cancellationToken);
+
+        /// <summary>追加一条压缩记录（<c>session.compacted</c>）；消息本身不删除。</summary>
+        System.Threading.Tasks.Task CompactAsync(
+            string sessionId,
+            AgentCompaction compaction,
+            System.Threading.CancellationToken cancellationToken);
+
+        /// <summary>
+        /// 追加一条会话读数快照（<c>session.meter</c>）：累计统计与 token 分桶。
+        /// 只保留最后一次，重放时覆盖。
+        /// </summary>
+        System.Threading.Tasks.Task SaveMeterAsync(
+            string sessionId,
+            SessionStats stats,
+            SessionTokenUsage usage,
             System.Threading.CancellationToken cancellationToken);
 
         /// <summary>把脏索引与未刷新的尾部写到磁盘。</summary>

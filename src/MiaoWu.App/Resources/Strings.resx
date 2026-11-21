@@ -115,10 +115,10 @@
     <value>工作区导航</value>
   </data>
   <data name="MiddlePaneAutomation" xml:space="preserve">
-    <value>预览画布</value>
+    <value>对话区</value>
   </data>
   <data name="RightPaneAutomation" xml:space="preserve">
-    <value>对话区</value>
+    <value>文档区</value>
   </data>
   <data name="TopBarAutomation" xml:space="preserve">
     <value>窗口顶栏</value>

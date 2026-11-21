@@ -419,6 +419,93 @@ namespace MiaoWu.Infrastructure.Conversations
             return Task.CompletedTask;
         }
 
+        /// <summary>追加一条压缩记录；消息不删除，重放时只恢复最近一次压缩。</summary>
+        public Task CompactAsync(
+            string sessionId,
+            AgentCompaction compaction,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (compaction == null)
+            {
+                throw new ArgumentNullException(nameof(compaction));
+            }
+
+            RequireSessionId(sessionId);
+            string path = RequireSessionFile(sessionId);
+            DateTimeOffset now = _clock.UtcNow;
+
+            lock (GetSessionGate(sessionId))
+            {
+                JsonValue body = JsonValue.NewObject();
+                body["summary"] = JsonValue.From(compaction.Summary ?? string.Empty);
+                body["coveredMessages"] = JsonValue.From(compaction.CoveredMessages);
+                if (!string.IsNullOrEmpty(compaction.LastCoveredMessageId))
+                {
+                    body["lastCoveredMessageId"] = JsonValue.From(compaction.LastCoveredMessageId);
+                }
+
+                body["compactedAt"] = JsonValue.From(ConversationJson.FormatTimestamp(
+                    compaction.CompactedAt == default(DateTimeOffset) ? now : compaction.CompactedAt));
+                AppendEvent(sessionId, path, now, "session.compacted", body);
+
+                lock (_indexGate)
+                {
+                    ConversationIndex index = GetIndexUnsafe();
+                    ConversationIndexEntry entry = FindEntry(index, sessionId);
+                    if (entry != null)
+                    {
+                        entry.UpdatedAt = now;
+                        MarkIndexDirty(index, persist: true);
+                    }
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>追加一条会话读数快照；只保留最后一次，重放时覆盖。</summary>
+        public Task SaveMeterAsync(
+            string sessionId,
+            SessionStats stats,
+            SessionTokenUsage usage,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireSessionId(sessionId);
+            string path = RequireSessionFile(sessionId);
+            DateTimeOffset now = _clock.UtcNow;
+
+            lock (GetSessionGate(sessionId))
+            {
+                JsonValue body = JsonValue.NewObject();
+                JsonValue statsNode = JsonValue.NewObject();
+                SessionStats safeStats = stats ?? new SessionStats();
+                statsNode["turns"] = JsonValue.From(safeStats.Turns);
+                statsNode["steps"] = JsonValue.From(safeStats.Steps);
+                statsNode["llmMs"] = JsonValue.From(safeStats.LlmMs);
+                statsNode["toolMs"] = JsonValue.From(safeStats.ToolMs);
+                statsNode["ttftMs"] = JsonValue.From(safeStats.TtftMs);
+                statsNode["ttftSteps"] = JsonValue.From(safeStats.TtftSteps);
+                statsNode["decodeMs"] = JsonValue.From(safeStats.DecodeMs);
+                statsNode["decodeTokens"] = JsonValue.From(safeStats.DecodeTokens);
+                body["stats"] = statsNode;
+
+                SessionTokenUsage safeUsage = usage ?? new SessionTokenUsage();
+                JsonValue usageNode = JsonValue.NewObject();
+                usageNode["uncachedInput"] = JsonValue.From(safeUsage.UncachedInput);
+                usageNode["cacheRead"] = JsonValue.From(safeUsage.CacheRead);
+                usageNode["cacheWrite"] = JsonValue.From(safeUsage.CacheWrite);
+                usageNode["output"] = JsonValue.From(safeUsage.Output);
+                usageNode["total"] = JsonValue.From(safeUsage.Total);
+                body["usage"] = usageNode;
+
+                AppendEvent(sessionId, path, now, "session.meter", body);
+            }
+
+            return Task.CompletedTask;
+        }
+
         /// <summary>置顶 / 取消置顶，并追加 <c>session.pinned</c> 事件保证索引重建后仍保留。</summary>
         public Task SetPinnedAsync(
             string sessionId,
@@ -783,6 +870,14 @@ namespace MiaoWu.Infrastructure.Conversations
                             ApplyModel(transcript, evt);
                             break;
 
+                        case "session.compacted":
+                            ApplyCompacted(transcript, evt, timestamp);
+                            break;
+
+                        case "session.meter":
+                            ApplyMeter(transcript, evt);
+                            break;
+
                         case "message.added":
                             ApplyMessageAdded(evt, timestamp, byId, ordered, ref total);
                             break;
@@ -888,6 +983,65 @@ namespace MiaoWu.Infrastructure.Conversations
             {
                 transcript.ModelId = modelId;
             }
+        }
+
+        private static void ApplyCompacted(
+            ConversationTranscript transcript,
+            JsonValue evt,
+            DateTimeOffset timestamp)
+        {
+            string summary = ConversationJson.GetString(evt, "summary");
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                return;
+            }
+
+            transcript.Compaction = new AgentCompaction
+            {
+                Summary = summary,
+                CoveredMessages = ConversationJson.GetInt(evt, "coveredMessages"),
+                LastCoveredMessageId = ConversationJson.GetString(evt, "lastCoveredMessageId"),
+                CompactedAt = ConversationJson.ParseTimestamp(evt.Get("compactedAt"), timestamp)
+            };
+        }
+
+        /// <summary>最近一条 <c>session.meter</c> 覆盖之前的读数；只保留最后一次。</summary>
+        private static void ApplyMeter(ConversationTranscript transcript, JsonValue evt)
+        {
+            JsonValue statsNode = evt == null ? null : evt.Get("stats");
+            if (statsNode != null && statsNode.Kind == JsonKind.Object)
+            {
+                transcript.Stats = new SessionStats
+                {
+                    Turns = ConversationJson.GetInt(statsNode, "turns"),
+                    Steps = ConversationJson.GetInt(statsNode, "steps"),
+                    LlmMs = ReadLong(statsNode, "llmMs"),
+                    ToolMs = ReadLong(statsNode, "toolMs"),
+                    TtftMs = ReadLong(statsNode, "ttftMs"),
+                    TtftSteps = ConversationJson.GetInt(statsNode, "ttftSteps"),
+                    DecodeMs = ReadLong(statsNode, "decodeMs"),
+                    DecodeTokens = ConversationJson.GetInt(statsNode, "decodeTokens")
+                };
+            }
+
+            JsonValue usageNode = evt == null ? null : evt.Get("usage");
+            if (usageNode != null && usageNode.Kind == JsonKind.Object)
+            {
+                transcript.Usage = new SessionTokenUsage
+                {
+                    UncachedInput = ConversationJson.GetInt(usageNode, "uncachedInput"),
+                    CacheRead = ConversationJson.GetInt(usageNode, "cacheRead"),
+                    CacheWrite = ConversationJson.GetInt(usageNode, "cacheWrite"),
+                    Output = ConversationJson.GetInt(usageNode, "output"),
+                    Total = ConversationJson.GetInt(usageNode, "total")
+                };
+            }
+        }
+
+        private static long ReadLong(JsonValue node, string name)
+        {
+            JsonValue value = node == null ? null : node.Get(name);
+            return value == null || value.Kind != JsonKind.Number ? 0 : value.AsLong(0);
         }
 
         private static void ApplyMessageAdded(

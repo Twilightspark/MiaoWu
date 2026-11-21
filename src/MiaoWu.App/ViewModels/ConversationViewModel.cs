@@ -15,11 +15,13 @@ using MiaoWu.Core.Agents;
 using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Errors;
+using MiaoWu.Core.Input;
 using MiaoWu.Core.Models;
 using MiaoWu.Core.Text;
 using MiaoWu.Core.Workspaces;
 using MiaoWu.Infrastructure.Json;
 using MiaoWu.Infrastructure.Tools;
+using MiaoWu.Infrastructure.Workspaces;
 
 namespace MiaoWu.App.ViewModels
 {
@@ -98,6 +100,8 @@ namespace MiaoWu.App.ViewModels
         private readonly AppServices _app;
         private readonly IDialogService _dialogs;
         private readonly IClipboardService _clipboard;
+        private readonly IFolderPicker _folderPicker;
+        private readonly IFilePicker _filePicker;
         private readonly Dispatcher _dispatcher;
         private readonly Func<DateTime> _clock;
 
@@ -124,8 +128,6 @@ namespace MiaoWu.App.ViewModels
         private bool _pendingPlanMode;
         private string _draft;
         private string _statusText;
-        private string _usageText;
-        private string _contextText;
         private ModelOption _selectedModel;
         private bool _isRunning;
         private bool _isRenaming;
@@ -135,6 +137,9 @@ namespace MiaoWu.App.ViewModels
         private bool _isPinned;
         private bool _isArchived;
         private int _attachVersion;
+
+        /// <summary>发送过程中忽略“草稿被清空”导致的引用回收。</summary>
+        private bool _isSending;
 
         /// <summary>“新建会话”刚创建、还没有发送任何消息的会话；离开时自动删除。</summary>
         private string _pendingNewSessionId;
@@ -146,11 +151,14 @@ namespace MiaoWu.App.ViewModels
             IDialogService dialogs,
             IClipboardService clipboard,
             IFolderPicker folderPicker,
+            IFilePicker filePicker,
             Func<DateTime> clock = null)
         {
             _app = app ?? throw new ArgumentNullException(nameof(app));
             _dialogs = dialogs;
             _clipboard = clipboard;
+            _folderPicker = folderPicker;
+            _filePicker = filePicker;
             _dispatcher = Application.Current == null
                 ? Dispatcher.CurrentDispatcher
                 : Application.Current.Dispatcher;
@@ -159,6 +167,14 @@ namespace MiaoWu.App.ViewModels
             Items = new ObservableCollection<ChatItemViewModel>();
             ModelOptions = new ObservableCollection<ModelOption>();
             ModelGroups = new ObservableCollection<ModelGroup>();
+            ComposerImages = new ObservableCollection<ComposerImageAttachment>();
+
+            ComposerTriggers = new ComposerTriggerViewModel(
+                () => IsPlanMode,
+                () => Items.OfType<UserChatItemViewModel>().Any(),
+                () => _workspace == null ? null : _workspace.Path);
+
+            ComposerDock = new ComposerDockViewModel();
 
             SendCommand = new RelayCommand(() => FireAndForget(SendAsync()), () => CanSend);
             StopCommand = new RelayCommand(() => FireAndForget(StopAsync()), () => IsRunning);
@@ -178,6 +194,9 @@ namespace MiaoWu.App.ViewModels
             ExportCommand = new RelayCommand(() => FireAndForget(ExportAsync()), () => HasSession);
             OpenSettingsCommand = new RelayCommand(() => SettingsRequested?.Invoke(this, EventArgs.Empty));
             ClearCommand = new RelayCommand(ClearTranscript, () => HasSession);
+            AttachFilesCommand = new RelayCommand(
+                () => FireAndForget(AttachFilesAsync()),
+                () => HasWorkspace);
 
             _markdownTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
             {
@@ -248,6 +267,28 @@ namespace MiaoWu.App.ViewModels
 
         public RelayCommand ClearCommand { get; }
 
+        /// <summary>输入框左侧 `+`：选择文件 / 图片插入草稿。</summary>
+        public RelayCommand AttachFilesCommand { get; }
+
+        /// <summary>`/` 与 `@` 触发菜单；每个会话一个控制器。</summary>
+        public ComposerTriggerViewModel ComposerTriggers { get; }
+
+        /// <summary>输入框下方三个读数：会话统计 / Token 用量 / 上下文已用。</summary>
+        public ComposerDockViewModel ComposerDock { get; }
+
+        /// <summary>当前草稿里的图片附件（base64），发送成功即清空。</summary>
+        public ObservableCollection<ComposerImageAttachment> ComposerImages { get; }
+
+        public bool HasComposerImages
+        {
+            get { return ComposerImages.Count > 0; }
+        }
+
+        public string AttachFilesToolTip
+        {
+            get { return "添加文件或图片（也可以直接输入 @ 引用，或把文件拖进来）"; }
+        }
+
         public Workspace Workspace
         {
             get { return _workspace; }
@@ -297,31 +338,10 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        public string UsageText
-        {
-            get { return _usageText; }
-            private set { SetProperty(ref _usageText, value); }
-        }
-
-        public string ContextText
-        {
-            get { return _contextText; }
-            private set
-            {
-                if (SetProperty(ref _contextText, value))
-                {
-                    OnPropertyChanged(nameof(HeaderText));
-                }
-            }
-        }
-
-        /// <summary>输入框头部右侧只显示一条：临时状态优先，否则显示上下文用量。</summary>
+        /// <summary>输入框工具行右侧只显示临时状态；上下文用量改由下方读数承载。</summary>
         public string HeaderText
         {
-            get
-            {
-                return string.IsNullOrWhiteSpace(_statusText) ? _contextText : _statusText;
-            }
+            get { return _statusText; }
         }
 
         public bool IsPinned
@@ -354,7 +374,7 @@ namespace MiaoWu.App.ViewModels
                     return "先在左栏选择工作区";
                 }
 
-                return "描述你想让 MiaoWu 做的事，Enter 发送";
+                return "发送问题或任务，/调用指令，@引用文件";
             }
         }
 
@@ -563,7 +583,7 @@ namespace MiaoWu.App.ViewModels
             {
                 return _workspace != null
                     && !_isBusy
-                    && !string.IsNullOrWhiteSpace(_draft);
+                    && (!string.IsNullOrWhiteSpace(_draft) || ComposerImages.Count > 0);
             }
         }
 
@@ -608,20 +628,27 @@ namespace MiaoWu.App.ViewModels
         /// </summary>
         private void TogglePlanMode()
         {
+            SetPlanMode(!IsPlanMode);
+        }
+
+        /// <summary>`/plan` 与 `/work` 都走这里；状态立即反映到输入框的 chip 上。</summary>
+        public void SetPlanMode(bool active)
+        {
             IAgentSession session = CurrentSession;
             if (session == null)
             {
-                _pendingPlanMode = !_pendingPlanMode;
+                _pendingPlanMode = active;
             }
             else
             {
-                session.SetPlanMode(!session.PlanMode);
+                session.SetPlanMode(active);
             }
 
             OnPropertyChanged(nameof(IsPlanMode));
             OnPropertyChanged(nameof(PlanModeLabel));
             OnPropertyChanged(nameof(PlanModeToolTip));
             CommandManager.InvalidateRequerySuggested();
+            StatusText = active ? "已进入计划模式" : "已回到工作模式";
         }
 
         public void SetWorkspace(Workspace workspace)
@@ -644,6 +671,14 @@ namespace MiaoWu.App.ViewModels
             // 新工作区没有选中会话时看起来就像“新会话不能输入”。
             Detach();
             _workspace = workspace;
+            ComposerTriggers.ResetWorkspace();
+
+            // 换工作区时草稿里的引用可能指向旧工作区，连同图片附件一起清掉；
+            // 只是切换会话则保留（同一工作区内的引用仍然有效）。
+            Draft = string.Empty;
+            ComposerImages.Clear();
+            OnPropertyChanged(nameof(HasComposerImages));
+            OnPropertyChanged(nameof(CanSend));
             OnPropertyChanged(nameof(Workspace));
             OnPropertyChanged(nameof(HasWorkspace));
             OnPropertyChanged(nameof(SessionSubtitle));
@@ -774,8 +809,8 @@ namespace MiaoWu.App.ViewModels
             _turnUser = null;
             IsRunning = false;
             StatusText = null;
-            UsageText = null;
-            ContextText = null;
+            ComposerDock.Reset();
+            ComposerTriggers.Reset();
             ApplySessionFlags(false, false);
             OnPropertyChanged(nameof(SessionId));
             OnPropertyChanged(nameof(HasSession));
@@ -907,7 +942,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             string text = (_draft ?? string.Empty).Trim();
-            if (text.Length == 0)
+            if (text.Length == 0 && ComposerImages.Count == 0)
             {
                 return;
             }
@@ -925,8 +960,12 @@ namespace MiaoWu.App.ViewModels
             }
 
             _isBusy = true;
+            _isSending = true;
             OnPropertyChanged(nameof(CanSend));
             CommandManager.InvalidateRequerySuggested();
+
+            // 发送前把附件钉住：清空草稿会连带清掉 ComposerImages，回调里不能再读集合。
+            var outgoingImages = ComposerImages.ToList();
 
             try
             {
@@ -952,27 +991,45 @@ namespace MiaoWu.App.ViewModels
 
                 string clientId = "m_" + Guid.NewGuid().ToString("N").Substring(0, 12);
                 var optimistic = new UserChatItemViewModel(clientId, text, _clock(), _clipboard);
+                optimistic.SetImages(outgoingImages);
                 CloseProcessGroup(true, optimistic.Timestamp);
                 Items.Add(optimistic);
                 _userItems[clientId] = optimistic;
+                ComposerTriggers.Close(false);
                 Draft = string.Empty;
                 OnPropertyChanged(nameof(IsEmpty));
 
                 try
                 {
+                    var blocks = new List<AgentContentBlock>
+                    {
+                        new AgentContentBlock { Type = "text", Text = text }
+                    };
+
+                    foreach (ComposerImageAttachment image in outgoingImages)
+                    {
+                        blocks.Add(new AgentContentBlock
+                        {
+                            Type = "image",
+                            MimeType = image.MimeType,
+                            Data = image.Base64Data
+                        });
+                    }
+
                     var input = new AgentInput
                     {
                         ClientMessageId = clientId,
-                        Blocks = new List<AgentContentBlock>
-                        {
-                            new AgentContentBlock { Type = "text", Text = text }
-                        },
+                        Blocks = blocks,
                         ProviderId = _selectedModel == null ? null : _selectedModel.ProviderId,
                         ModelId = _selectedModel == null ? null : _selectedModel.ModelId
                     };
 
                     await session.SendAsync(input, AgentSendMode.Queue, CancellationToken.None);
                     IsRunning = true;
+
+                    ComposerImages.Clear();
+                    OnPropertyChanged(nameof(HasComposerImages));
+                    OnPropertyChanged(nameof(CanSend));
 
                     // 已经发出消息，这个会话不再是“还没操作的空白新会话”。
                     if (string.Equals(_pendingNewSessionId, _sessionId, StringComparison.Ordinal))
@@ -1000,6 +1057,7 @@ namespace MiaoWu.App.ViewModels
             finally
             {
                 _isBusy = false;
+                _isSending = false;
                 OnPropertyChanged(nameof(CanSend));
                 OnPropertyChanged(nameof(IsEmpty));
                 CommandManager.InvalidateRequerySuggested();
@@ -1013,6 +1071,354 @@ namespace MiaoWu.App.ViewModels
             {
                 Draft = text;
             }
+        }
+
+        // ---------------------------------------------------------------
+        // 输入框触发（/ 与 @）与引用附件
+        // ---------------------------------------------------------------
+
+        /// <summary>用户把文件拖进输入框 / 选完 `+` 之后要求把引用 chip 插进编辑器。</summary>
+        public event EventHandler<ComposerMentionsEventArgs> MentionInsertRequested;
+
+        /// <summary>草稿或光标变化：重新跑一次触发检测。</summary>
+        public void TrackComposer(string text, int caret)
+        {
+            ComposerTriggers.Track(text, caret);
+        }
+
+        /// <summary>
+        /// 编辑器内容变化后同步引用集合：删掉 chip 的图片不再随消息发送。
+        /// 发送期间不清，避免清空草稿时把还没交付的附件一起丢掉。
+        /// </summary>
+        public void SyncComposerMentions(IReadOnlyList<ComposerMention> mentions)
+        {
+            if (_isSending || ComposerImages.Count == 0)
+            {
+                return;
+            }
+
+            var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (mentions != null)
+            {
+                foreach (ComposerMention mention in mentions)
+                {
+                    if (mention != null && !string.IsNullOrEmpty(mention.RelativePath))
+                    {
+                        live.Add(mention.RelativePath);
+                    }
+                }
+            }
+
+            bool changed = false;
+            for (int i = ComposerImages.Count - 1; i >= 0; i--)
+            {
+                if (!live.Contains(ComposerImages[i].RelativePath))
+                {
+                    ComposerImages.RemoveAt(i);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                OnPropertyChanged(nameof(HasComposerImages));
+                OnPropertyChanged(nameof(CanSend));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        /// <summary>
+        /// 把磁盘路径变成可插入的引用。图片会同时读成附件；工作区外的路径直接拒绝。
+        /// </summary>
+        public bool TryCreateComposerMention(
+            string fullPath,
+            out ComposerMention mention,
+            out string error)
+        {
+            mention = null;
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(fullPath))
+            {
+                error = "路径为空。";
+                return false;
+            }
+
+            string root = _workspace == null ? null : _workspace.Path;
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                error = "还没有选择工作区。";
+                return false;
+            }
+
+            string full;
+            string rootFull;
+            try
+            {
+                full = System.IO.Path.GetFullPath(fullPath);
+                rootFull = System.IO.Path.GetFullPath(root)
+                    .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+            }
+            catch (Exception exception)
+            {
+                error = "路径不合法：" + exception.Message;
+                return false;
+            }
+
+            if (!full.StartsWith(rootFull + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "只能引用当前工作区内的文件。";
+                return false;
+            }
+
+            string relative = full.Substring(rootFull.Length + 1).Replace('\\', '/');
+            bool isDirectory = System.IO.Directory.Exists(full);
+            if (!isDirectory && !System.IO.File.Exists(full))
+            {
+                error = "文件不存在或已被移动。";
+                return false;
+            }
+
+            if (MentionFormatter.Format(relative, isDirectory, false) == null)
+            {
+                error = "这个路径含有无法在输入框里表达的字符。";
+                return false;
+            }
+
+            ComposerMentionKind kind = isDirectory
+                ? ComposerMentionKind.Folder
+                : (MentionFormatter.IsImagePath(relative) ? ComposerMentionKind.Image : ComposerMentionKind.File);
+
+            if (kind == ComposerMentionKind.Image)
+            {
+                if (ComposerImages.Count >= ImageAttachmentPolicy.MaxImagesPerMessage)
+                {
+                    error = "一条消息最多携带 " + ImageAttachmentPolicy.MaxImagesPerMessage + " 张图片。";
+                    return false;
+                }
+
+                ComposerImageAttachment attachment;
+                if (!ImageAttachmentLoader.TryLoad(full, relative, out attachment, out error))
+                {
+                    return false;
+                }
+
+                AddComposerImage(attachment);
+            }
+
+            mention = new ComposerMention
+            {
+                RelativePath = relative,
+                FullPath = full,
+                DisplayName = MentionFormatter.GetDisplayName(relative, isDirectory),
+                ParentPath = MentionFormatter.GetParentPath(relative),
+                Kind = kind
+            };
+
+            return true;
+        }
+
+        /// <summary>加入一张图片附件；同一 SHA-256 只保留一份。</summary>
+        public void AddComposerImage(ComposerImageAttachment image)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            foreach (ComposerImageAttachment existing in ComposerImages)
+            {
+                if (!string.IsNullOrEmpty(existing.Sha256)
+                    && string.Equals(existing.Sha256, image.Sha256, StringComparison.Ordinal))
+                {
+                    return;
+                }
+            }
+
+            ComposerImages.Add(image);
+            OnPropertyChanged(nameof(HasComposerImages));
+            OnPropertyChanged(nameof(CanSend));
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        /// <summary>`@` 选中图片文件后把内容读成附件；失败只提示，引用 chip 仍可保留。</summary>
+        public bool AttachImageForMention(ComposerMention mention)
+        {
+            if (mention == null || mention.Kind != ComposerMentionKind.Image)
+            {
+                return false;
+            }
+
+            if (ComposerImages.Count >= ImageAttachmentPolicy.MaxImagesPerMessage)
+            {
+                AddNotice(
+                    "无法添加图片",
+                    "一条消息最多携带 " + ImageAttachmentPolicy.MaxImagesPerMessage + " 张图片。",
+                    true);
+                return false;
+            }
+
+            string full = mention.FullPath;
+            if (string.IsNullOrEmpty(full) && _workspace != null)
+            {
+                full = System.IO.Path.Combine(
+                    _workspace.Path,
+                    mention.RelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            }
+
+            ComposerImageAttachment attachment;
+            string error;
+            if (!ImageAttachmentLoader.TryLoad(full, mention.RelativePath, out attachment, out error))
+            {
+                AddNotice("无法添加图片", error, true);
+                return false;
+            }
+
+            mention.FullPath = full;
+            AddComposerImage(attachment);
+            return true;
+        }
+
+        /// <summary>`+` 按钮：系统文件选择器 → 逐个插入引用 chip。</summary>
+        public async Task AttachFilesAsync()
+        {
+            if (_workspace == null)
+            {
+                StatusText = "请先在左栏选择工作区。";
+                return;
+            }
+
+            if (_filePicker == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<string> paths = _filePicker.PickFiles(
+                "添加文件或图片",
+                _workspace.Path,
+                "所有文件|*.*");
+
+            if (paths == null || paths.Count == 0)
+            {
+                return;
+            }
+
+            var mentions = new List<ComposerMention>();
+            foreach (string path in paths)
+            {
+                ComposerMention mention;
+                string error;
+                if (TryCreateComposerMention(path, out mention, out error))
+                {
+                    mentions.Add(mention);
+                }
+                else if (!string.IsNullOrEmpty(error))
+                {
+                    AddNotice("无法添加", error, true);
+                }
+            }
+
+            await Task.Yield();
+
+            EventHandler<ComposerMentionsEventArgs> handler = MentionInsertRequested;
+            if (mentions.Count > 0 && handler != null)
+            {
+                handler(this, new ComposerMentionsEventArgs(mentions));
+            }
+        }
+
+        /// <summary>视图在菜单选中命令后调用。</summary>
+        public void ExecuteComposerCommand(ComposerCommand command)
+        {
+            if (command == null)
+            {
+                return;
+            }
+
+            switch (command.Kind)
+            {
+                case ComposerCommandKind.Plan:
+                    SetPlanMode(true);
+                    break;
+                case ComposerCommandKind.Work:
+                    SetPlanMode(false);
+                    break;
+                case ComposerCommandKind.Compact:
+                    FireAndForget(CompactConversationAsync());
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// `/compact`：请当前模型把较早的对话压成摘要，之后只把摘要与最近消息送进上下文。
+        /// 运行中不允许压缩，避免和正在进行的轮次抢历史。
+        /// </summary>
+        public async Task CompactConversationAsync()
+        {
+            IAgentSession session = CurrentSession;
+            if (session == null)
+            {
+                AddNotice("无法压缩", "这个会话还没有任何对话。", true);
+                return;
+            }
+
+            if (IsRunning)
+            {
+                AddNotice("无法压缩", "请等这一轮回答结束，或在停止后再压缩。", true);
+                return;
+            }
+
+            StatusText = "正在压缩对话…";
+            try
+            {
+                AgentCompactionResult result = await session.CompactAsync(CancellationToken.None);
+                if (result != null && result.Succeeded)
+                {
+                    string body = "已把较早的 " + result.CoveredMessages + " 条消息收进摘要。";
+                    if (!string.IsNullOrWhiteSpace(result.Summary))
+                    {
+                        body += Environment.NewLine + SummarizeForNotice(result.Summary);
+                    }
+
+                    AddNotice("已压缩对话", body, false);
+                }
+                else
+                {
+                    AddNotice(
+                        "压缩失败",
+                        result == null ? "模型没有返回摘要。" : result.Error,
+                        true);
+                }
+            }
+            catch (Exception exception)
+            {
+                AddNotice("压缩失败", exception.Message, true);
+            }
+            finally
+            {
+                StatusText = null;
+            }
+        }
+
+        private static string SummarizeForNotice(string summary)
+        {
+            string text = (summary ?? string.Empty).Trim();
+            if (text.Length > 180)
+            {
+                text = text.Substring(0, 180).TrimEnd() + "…";
+            }
+
+            return text;
+        }
+
+        public sealed class ComposerMentionsEventArgs : EventArgs
+        {
+            public ComposerMentionsEventArgs(IReadOnlyList<ComposerMention> mentions)
+            {
+                Mentions = mentions ?? new List<ComposerMention>();
+            }
+
+            public IReadOnlyList<ComposerMention> Mentions { get; private set; }
         }
 
         private static string NewSessionId()
@@ -1266,6 +1672,51 @@ namespace MiaoWu.App.ViewModels
         // 事件应用
         // ---------------------------------------------------------------
 
+        /// <summary>压缩边界落在第几条消息之后：优先按 id 定位，旧记录退回条数。</summary>
+        private static int ResolveCompactionBoundary(
+            AgentCompaction compaction,
+            IReadOnlyList<AgentMessage> messages)
+        {
+            if (compaction == null)
+            {
+                return -1;
+            }
+
+            if (!string.IsNullOrEmpty(compaction.LastCoveredMessageId))
+            {
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    if (messages[i] != null
+                        && string.Equals(messages[i].Id, compaction.LastCoveredMessageId, StringComparison.Ordinal))
+                    {
+                        return i + 1;
+                    }
+                }
+            }
+
+            int covered = compaction.CoveredMessages;
+            if (covered <= 0)
+            {
+                return 0;
+            }
+
+            return covered > messages.Count ? messages.Count : covered;
+        }
+
+        private void AddCompactionItem(AgentCompaction compaction)
+        {
+            if (compaction == null)
+            {
+                return;
+            }
+
+            DateTimeOffset at = compaction.CompactedAt == default(DateTimeOffset)
+                ? DateTimeOffset.Now
+                : compaction.CompactedAt;
+            Items.Add(new CompactionChatItemViewModel(compaction.CoveredMessages, compaction.Summary, at));
+            OnPropertyChanged(nameof(IsEmpty));
+        }
+
         private void ApplySnapshot(AgentSessionSnapshot snapshot)
         {
             if (snapshot == null || !string.Equals(snapshot.SessionId, _sessionId, StringComparison.Ordinal))
@@ -1284,11 +1735,27 @@ namespace MiaoWu.App.ViewModels
 
             _title = snapshot.Title;
             IsRunning = snapshot.State == AgentSessionState.Running || snapshot.State == AgentSessionState.Cancelling;
-            UpdateUsage(snapshot.LastUsage, snapshot.EstimatedContextTokens);
+            UpdateMeter(snapshot.Meter);
 
-            foreach (AgentMessage message in snapshot.Messages ?? new List<AgentMessage>())
+            var snapshotMessages = snapshot.Messages ?? new List<AgentMessage>();
+            int compactionBoundary = snapshot.Compaction == null
+                ? -1
+                : ResolveCompactionBoundary(snapshot.Compaction, snapshotMessages);
+
+            for (int i = 0; i < snapshotMessages.Count; i++)
             {
-                ApplyMessage(message, false);
+                if (compactionBoundary == i)
+                {
+                    AddCompactionItem(snapshot.Compaction);
+                }
+
+                ApplyMessage(snapshotMessages[i], false);
+            }
+
+            // 压缩边界：按“被覆盖的最后一条消息”定位，插在它后面；重启回放也保留同一条分隔行。
+            if (snapshot.Compaction != null && (compactionBoundary < 0 || compactionBoundary >= snapshotMessages.Count))
+            {
+                AddCompactionItem(snapshot.Compaction);
             }
 
             foreach (ToolExecution execution in snapshot.ToolExecutions ?? new List<ToolExecution>())
@@ -1362,6 +1829,18 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
+            var compacted = evt as SessionCompactedEvent;
+            if (compacted != null)
+            {
+                CloseProcessGroup(true, compacted.Timestamp);
+                Items.Add(new CompactionChatItemViewModel(
+                    compacted.CoveredMessages,
+                    compacted.Summary,
+                    compacted.Timestamp));
+                OnPropertyChanged(nameof(IsEmpty));
+                return;
+            }
+
             // 计划模式可能被 exit_plan_mode 在轮次中改掉：事件到达时同步按钮状态。
             var planModeChanged = evt as PlanModeChangedEvent;
             if (planModeChanged != null)
@@ -1420,7 +1899,6 @@ namespace MiaoWu.App.ViewModels
                     AddAssistant(completed.Message, true);
                 }
 
-                UpdateUsage(completed.Usage, -1);
                 return;
             }
 
@@ -1508,7 +1986,7 @@ namespace MiaoWu.App.ViewModels
             var usage = evt as UsageChangedEvent;
             if (usage != null)
             {
-                UpdateUsage(usage.Usage, usage.EstimatedContextTokens);
+                UpdateMeter(usage.Meter);
                 return;
             }
 
@@ -1547,6 +2025,7 @@ namespace MiaoWu.App.ViewModels
                     {
                         CloseProcessGroup(true, message.CreatedAt);
                         var item = new UserChatItemViewModel(message.Id, message.GetText(), message.CreatedAt, _clipboard);
+                        item.SetImagesFromBlocks(message.Blocks);
                         Items.Add(item);
                         _userItems[message.Id] = item;
                         OnPropertyChanged(nameof(IsEmpty));
@@ -1817,24 +2296,14 @@ namespace MiaoWu.App.ViewModels
         // 其他
         // ---------------------------------------------------------------
 
-        private void UpdateUsage(TokenUsage usage, int estimatedContext)
+        private void UpdateMeter(SessionMeter meter)
         {
-            if (usage != null && usage.GetTotal() > 0)
+            if (meter == null)
             {
-                UsageText = TokenEstimator.Format(usage.GetTotal()) + " tokens";
+                return;
             }
 
-            if (estimatedContext > 0)
-            {
-                ModelDescriptor model = _app.Models.Resolve(
-                    _selectedModel == null ? null : _selectedModel.ProviderId,
-                    _selectedModel == null ? null : _selectedModel.ModelId);
-
-                int window = model == null ? 0 : model.ContextWindow;
-                ContextText = window > 0
-                    ? TokenEstimator.Format(estimatedContext) + " / " + TokenEstimator.Format(window)
-                    : TokenEstimator.Format(estimatedContext);
-            }
+            ComposerDock.Update(meter);
         }
 
         private void RefreshModelOptions()

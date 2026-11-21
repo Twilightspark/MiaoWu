@@ -104,12 +104,23 @@ namespace MiaoWu.Core.Agents
         public TokenUsage Usage { get; set; }
 
         public int EstimatedContextTokens { get; set; }
+
+        /// <summary>三条会话读数的聚合；旧订阅方可以继续只读上面两个字段。</summary>
+        public SessionMeter Meter { get; set; }
     }
 
     /// <summary>计划模式切换（UI 用它同步开关状态）。</summary>
     public sealed class PlanModeChangedEvent : AgentEvent
     {
         public bool Active { get; set; }
+    }
+
+    /// <summary>对话压缩完成。UI 用它插一条“已压缩 N 条消息”的分隔行。</summary>
+    public sealed class SessionCompactedEvent : AgentEvent
+    {
+        public string Summary { get; set; }
+
+        public int CoveredMessages { get; set; }
     }
 
     public sealed class SnapshotRequiredEvent : AgentEvent

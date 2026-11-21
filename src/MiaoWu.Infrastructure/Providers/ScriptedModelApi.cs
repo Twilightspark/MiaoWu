@@ -56,6 +56,9 @@ namespace MiaoWu.Infrastructure.Providers
         /// <summary>最近一次 <see cref="Open"/> 的会话 ID（来自请求头里的 sessionId）。</summary>
         public string LastSessionId { get; private set; }
 
+        /// <summary>最近一次 <see cref="Open"/> 的完整请求；压缩用例据此断言上下文切点。</summary>
+        public LlmRequest LastRequest { get; private set; }
+
         public void EnqueueText(string text)
         {
             var events = new List<LlmStreamEvent>();
@@ -153,6 +156,7 @@ namespace MiaoWu.Infrastructure.Providers
             {
                 LastModel = model;
                 LastSessionId = request == null ? null : request.SessionId;
+                LastRequest = request;
                 turn = _turns.Count > 0
                     ? _turns.Dequeue()
                     : new ScriptedTurn

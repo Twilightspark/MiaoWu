@@ -12,11 +12,11 @@
              d:DesignHeight="856"
              x:Name="CanvasRoot"
              Focusable="False"
-             Background="{DynamicResource Brush.Canvas}"
+             Background="Transparent"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True"
-             AutomationProperties.AutomationId="MiddlePane"
-             AutomationProperties.Name="{x:Static res:Strings.MiddlePaneAutomation}">
+             AutomationProperties.AutomationId="DocumentPane"
+             AutomationProperties.Name="{x:Static res:Strings.RightPaneAutomation}">
 
     <UserControl.InputBindings>
         <KeyBinding Key="F" Modifiers="Control" Command="{Binding FindCommand}" />
@@ -123,7 +123,7 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid Background="{DynamicResource Brush.Canvas}">
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -342,7 +342,7 @@
                             Focusable="False"
                             AutomationProperties.AutomationId="DocumentHost" />
 
-            <Grid Background="{DynamicResource Brush.Canvas}"
+            <Grid Background="Transparent"
                   Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel MaxWidth="380"
                             HorizontalAlignment="Center"

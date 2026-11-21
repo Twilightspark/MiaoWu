@@ -150,6 +150,12 @@ namespace MiaoWu.App.Views
 
         private void OnClosed(object sender, EventArgs e)
         {
+            if (_viewModel != null && _viewModel.ConfirmPrompt.IsOpen)
+            {
+                // 非交互路径（托盘退出、异常关闭）也要放掉嵌套消息循环。
+                _viewModel.ConfirmPrompt.Cancel();
+            }
+
             if (_saveTimer != null)
             {
                 _saveTimer.Stop();
@@ -177,6 +183,13 @@ namespace MiaoWu.App.Views
             if (_viewModel == null || _viewModel.IsExiting)
             {
                 return;
+            }
+
+            // 二次确认浮层正卡在嵌套消息循环里时，先按取消收掉它，
+            // 否则关闭 / 退出的流程会被一个看不见选择结果的浮层挂住。
+            if (_viewModel.ConfirmPrompt.IsOpen)
+            {
+                _viewModel.ConfirmPrompt.Cancel();
             }
 
             // 首次引导阶段关闭窗口等于退出应用，不隐藏到托盘。
