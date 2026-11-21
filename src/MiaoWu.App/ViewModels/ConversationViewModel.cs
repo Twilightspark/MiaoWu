@@ -378,19 +378,13 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// 新会话欢迎态的标题。没有工作区时提示先选择工作区；有工作区时邀请开始探索。
+        /// 两种状态共用同一版式，输入卡都居中放在标题下面。
+        /// </summary>
         public string EmptyTitle
         {
-            get { return _workspace == null ? "先选择工作区" : "开始一个新会话"; }
-        }
-
-        public string EmptyBody
-        {
-            get
-            {
-                return _workspace == null
-                    ? "工作区是会话的归属。先在左栏新建工作区或选择已有工作区，然后回到这里输入。"
-                    : "在下方描述你想让 MiaoWu 做的事。写文件或执行命令前，它会先征求你的同意。";
-            }
+            get { return _workspace == null ? "请选择工作区" : "开始新的探索"; }
         }
 
         public bool CanPickModel
@@ -555,10 +549,13 @@ namespace MiaoWu.App.ViewModels
             get { return _workspace != null; }
         }
 
-        /// <summary>没有消息且草稿为空时显示空态；开始输入后空态让位给正文。</summary>
+        /// <summary>
+        /// 还没有消息时进入欢迎态；欢迎态的输入卡居中，发出一条消息后才落回底部。
+        /// 这里不看草稿：开始输入时输入卡不能从中间跳到栏底。
+        /// </summary>
         public bool IsEmpty
         {
-            get { return Items.Count == 0 && string.IsNullOrWhiteSpace(_draft); }
+            get { return Items.Count == 0; }
         }
 
         public bool IsRenaming
@@ -662,7 +659,6 @@ namespace MiaoWu.App.ViewModels
                 _workspace = workspace;
                 OnPropertyChanged(nameof(ComposerPlaceholder));
                 OnPropertyChanged(nameof(EmptyTitle));
-                OnPropertyChanged(nameof(EmptyBody));
                 OnPropertyChanged(nameof(SendToolTip));
                 return;
             }
@@ -684,7 +680,6 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(SessionSubtitle));
             OnPropertyChanged(nameof(ComposerPlaceholder));
             OnPropertyChanged(nameof(EmptyTitle));
-            OnPropertyChanged(nameof(EmptyBody));
             OnPropertyChanged(nameof(CanSend));
             OnPropertyChanged(nameof(SendToolTip));
             CommandManager.InvalidateRequerySuggested();
@@ -776,7 +771,6 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(ComposerPlaceholder));
             OnPropertyChanged(nameof(EmptyTitle));
-            OnPropertyChanged(nameof(EmptyBody));
             OnPropertyChanged(nameof(SendToolTip));
             CommandManager.InvalidateRequerySuggested();
         }

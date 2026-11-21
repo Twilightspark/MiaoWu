@@ -80,6 +80,21 @@ namespace MiaoWu.App.Converters
         }
     }
 
+    /// <summary>欢迎态把底部空行撑成等高的 *，离开欢迎态后收成 0。</summary>
+    public sealed class BooleanToStarGridLengthConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            bool star = value is bool && (bool)value;
+            return star ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
     /// <summary>折叠时隐藏右分隔条。</summary>
     public sealed class InverseBooleanToVisibilityConverter : IValueConverter
     {

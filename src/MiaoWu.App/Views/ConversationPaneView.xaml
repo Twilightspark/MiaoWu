@@ -23,6 +23,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibility" />
+        <conv:BooleanToStarGridLengthConverter x:Key="BoolToStar" />
         <conv:ResourceKeyToGeometryConverter x:Key="MenuIcon" />
         <conv:PercentToArcConverter x:Key="PercentToArc" />
 
@@ -1024,11 +1025,15 @@
     </UserControl.Resources>
 
     <Grid>
+        <!-- 欢迎态：标题 + 输入卡作为一组落在第 2 行，末尾第 4 行用等高的 * 把这一组顶到中间；
+             发出第一条消息后第 4 行收成 0，整组落回底部。 -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="WelcomeSpacerRow"
+                           Height="{Binding IsEmpty, Converter={StaticResource BoolToStar}}" />
         </Grid.RowDefinitions>
 
         <!-- 会话头：标题 + 更多。轮次计时在问题气泡下方，标题栏不再放计时。 -->
@@ -1084,7 +1089,8 @@
                         AutomationProperties.Name="{Binding DataContext.ToggleRightPaneToolTip, RelativeSource={RelativeSource AncestorType={x:Type views:ShellView}}}"
                         KeyboardNavigation.TabIndex="100">
                     <Grid Width="{StaticResource Metric.Icon}" Height="{StaticResource Metric.Icon}">
-                        <Path Fill="{DynamicResource Brush.Text2}">
+                        <!-- 图标与「更多」「+」同档：静止态 tertiary，避免折叠按钮比相邻图标更重。 -->
+                        <Path Fill="{DynamicResource Brush.Text3}">
                             <Path.Style>
                                 <Style TargetType="Path" BasedOn="{StaticResource Icon}">
                                     <Setter Property="Data" Value="{StaticResource Ico.PanelCollapse}" />
@@ -1136,30 +1142,33 @@
             </ListBox>
         </Grid>
 
-        <!-- 空态：新会话不需要先点按钮，直接在下方输入即可创建。 -->
-        <StackPanel Grid.Row="1"
-                    Margin="28,0"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock HorizontalAlignment="Center"
-                       Text="{Binding EmptyTitle}"
-                       Style="{StaticResource Text.Section}" />
-            <TextBlock Margin="0,6,0,0"
-                       MaxWidth="288"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center"
-                       Text="{Binding EmptyBody}"
-                       Style="{StaticResource Text.Empty}"
-                       Foreground="{DynamicResource Brush.Text3}" />
-        </StackPanel>
+        <!-- 欢迎态：应用图标 + 标题，下面接输入卡；有 / 无工作区保持同一版式。
+             没有工作区时只把输入卡挡住，不隐藏、不改高度。 -->
+        <StackPanel x:Name="ComposerGroup"
+                    Grid.Row="2"
+                    MaxWidth="{StaticResource Metric.Composer.MaxWidth}"
+                    Margin="28,0,28,0"
+                    HorizontalAlignment="Stretch">
+            <StackPanel Margin="0,0,0,24"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+                <Image Width="{StaticResource Metric.Icon.Brand}"
+                       Height="{StaticResource Metric.Icon.Brand}"
+                       VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality"
+                       Source="pack://application:,,,/MiaoWu;component/Assets/Branding/MiaoWu.ico" />
+                <TextBlock x:Name="WelcomeTitle"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center"
+                           Text="{Binding EmptyTitle}"
+                           Style="{StaticResource Text.H1}" />
+            </StackPanel>
 
-        <!-- 输入框：正文 + 工具行。工作区入口在左栏，权限说明不占常驻位置。 -->
-        <Border x:Name="RightInputShell"
-                Grid.Row="2"
-                Height="{StaticResource Metric.Input.Height}"
-                Margin="14,0,14,4"
-                Padding="{StaticResource Pad.Input}">
+            <!-- 输入框：正文 + 工具行。工作区入口在左栏，权限说明不占常驻位置。 -->
+            <Border x:Name="RightInputShell"
+                    Height="{StaticResource Metric.Input.Height}"
+                    Padding="{StaticResource Pad.Input}">
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="Background" Value="{DynamicResource Brush.Canvas}" />
@@ -1189,6 +1198,8 @@
                                              FontFamily="{StaticResource Font.Family}"
                                              FontSize="{StaticResource Font.Body.Size}"
                                              Foreground="{DynamicResource Brush.Text}"
+                                             Focusable="{Binding HasWorkspace}"
+                                             IsTabStop="{Binding HasWorkspace}"
                                              PreviewKeyDown="OnComposerKeyDown"
                                              DraftChanged="OnComposerDraftChanged"
                                              CaretMoved="OnComposerCaretMoved"
@@ -1417,8 +1428,19 @@
                         </Border>
                     </Border>
                 </Popup>
+
+                <!-- 没有工作区时只挡住输入卡：版式、尺寸、文字都不变，鼠标点击不落到编辑器。 -->
+                <Border x:Name="ComposerDisabledOverlay"
+                        Grid.RowSpan="2"
+                        Panel.ZIndex="20"
+                        Background="Transparent"
+                        Cursor="Arrow"
+                        ToolTip="请先在左栏选择工作区"
+                        Visibility="{Binding HasWorkspace, Converter={StaticResource InverseBoolToVisibility}}"
+                        AutomationProperties.Name="未选择工作区，输入不可用" />
             </Grid>
         </Border>
+        </StackPanel>
 
         <!-- 输入卡下方读数：居中的三个只读 pill；没有数据整条隐藏。
              高度固定 22（20 行高 + 上下 1），读数异步到达也不会顶动输入卡。 -->

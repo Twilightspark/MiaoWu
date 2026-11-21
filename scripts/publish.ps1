@@ -117,37 +117,11 @@ if ($BundleDotNet) {
     Write-Host ("DOTNET_REDIST_SIZE=" + (Get-Item $DotNetRedist).Length)
 }
 
-# 签名材料：默认用 .artifacts\signing 下的开发自签名证书；也可以指向真实 PFX
-# （MIAOWU_SIGN_PFX / MIAOWU_SIGN_PFX_PASSWORD）。没有材料就跳过签名，不影响出包。
-$signScript = Join-Path $repoRoot "scripts\sign.ps1"
-$signingDirectory = Join-Path $repoRoot ".artifacts\signing"
-$signingAvailable = (Test-Path (Join-Path $signingDirectory "miaowu-dev.cer")) -and
-    (Test-Path (Join-Path $signingDirectory "miaowu-dev.key.json"))
-if (-not $signingAvailable -and -not [string]::IsNullOrWhiteSpace($env:MIAOWU_SIGN_PFX)) {
-    $signingAvailable = $true
-}
-
-if ($signingAvailable -and (Test-Path $signScript)) {
-    $appExe = Join-Path $output "MiaoWu.exe"
-    Write-Host "SIGNING app exe"
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $signScript -Path $appExe
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "SIGN_FAILED app exe"
-        exit 1
-    }
-}
-else {
-    Write-Host "SIGN_SKIPPED 没有签名材料（.artifacts\signing 或 MIAOWU_SIGN_PFX）"
-}
-
+# 签名不在这里做：应用 exe 与安装包默认保持未签名。
+# 需要签名时手工跑 scripts\sign.ps1（开发自签名）或 scripts\sign.ps1 -PfxPath <CA 证书.pfx>，
+# 对产物逐个签；publish.ps1 既不加 /DSIGN，也不改 Inno 的 SignedUninstaller。
 $iss = Join-Path $repoRoot "installer\MiaoWu.iss"
 $isccArgs = @()
-if ($signingAvailable) {
-    # Inno 需要命令行里带 $f（待签文件）；SignTool 同时给 unins000.exe 与 Setup.exe 签名。
-    $signToolCommand = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + $signScript + '" -Path $f'
-    $isccArgs += "/DSIGN"
-    $isccArgs += ("/Smiaowu=" + $signToolCommand)
-}
 
 if ($BundleDotNet) {
     # 这两个宏只影响 [Files]/[Code] 与产物名，小包不受影响。
@@ -169,15 +143,6 @@ if ((Test-Path $patchScript) -and (Test-Path $setup)) {
     if ($LASTEXITCODE -ne 0) {
         Write-Host "MANIFEST_PATCH_FAILED"
         exit 1
-    }
-
-    if ($signingAvailable) {
-        # 改过清单，Inno 编译期的签名失效，这里重新签一次。
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $signScript -Path $setup
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "SIGN_FAILED setup after manifest patch"
-            exit 1
-        }
     }
 }
 
@@ -208,29 +173,6 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 Remove-Item $stage -Recurse -Force
 Write-Host "PORTABLE=$portable"
 
-# 一键提权安装：双击它就等于「右键 → 以管理员身份运行」。
-# 这样即使启动入口把进程压到低完整性（SetupLdr 解包会报 Error 5），也会先弹 UAC 再启动。
-# 文件名写死到具体安装包，避免同目录同时有小包与全量包时抓到错的那个。
-$runAsSuffix = "-install-as-admin.cmd"
-if ($BundleDotNet) {
-    $runAsSuffix = "-install-offline-as-admin.cmd"
-}
-
-$runAsCommand = Join-Path $installerDir "MiaoWu-$version$runAsSuffix"
-$setupFileName = Split-Path -Leaf $setup
-$runAsLines = @(
-    '@echo off',
-    'setlocal',
-    ('set "SETUP=%~dp0' + $setupFileName + '"'),
-    'if not exist "%SETUP%" (',
-    ('  echo ' + $setupFileName + ' was not found next to this file.'),
-    '  pause',
-    '  exit /b 1',
-    ')',
-    'powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath ''%SETUP%'' -Verb RunAs"'
-)
-[IO.File]::WriteAllLines($runAsCommand, $runAsLines, (New-Object System.Text.ASCIIEncoding))
-Write-Host "RUN_AS_ADMIN=$runAsCommand"
 Write-Host ("BUNDLE_DOTNET=" + $(if ($BundleDotNet) { "yes" } else { "no" }))
 if (-not $BundleDotNet) {
     # 提醒一句：本地已经有离线安装程序时，加个开关就能顺带出全量包。
@@ -250,14 +192,6 @@ if (Test-Path $setup) {
     Write-Host "SETUP=$setup"
     Write-Host "SHA256=$hash"
     Write-Host ("SIZE=" + (Get-Item $setup).Length)
-    $signature = Get-AuthenticodeSignature -LiteralPath $setup
-    if ($null -ne $signature.SignerCertificate) {
-        Write-Host ("SETUP_SIGNER=" + $signature.SignerCertificate.Subject)
-        Write-Host ("SETUP_SIGNATURE=" + $signature.Status)
-    }
-    else {
-        Write-Host "SETUP_SIGNATURE=NotSigned"
-    }
 }
 
 exit 0

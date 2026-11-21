@@ -234,6 +234,8 @@
     <sys:Double x:Key="Metric.Input.Height">132</sys:Double>
     <sys:Double x:Key="Metric.ModelPicker.Width">248</sys:Double>
     <sys:Double x:Key="Metric.ModelPicker.MaxHeight">280</sys:Double>
+    <!-- 输入卡最大宽度：中栏再宽也不铺满，两侧至少留出 28 的呼吸区 -->
+    <sys:Double x:Key="Metric.Composer.MaxWidth">720</sys:Double>
     <sys:Double x:Key="Metric.Notification.Width">384</sys:Double>
     <sys:Double x:Key="Metric.Notification.Right">16</sys:Double>
     <sys:Double x:Key="Metric.Notification.Bottom">172</sys:Double>

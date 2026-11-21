@@ -121,8 +121,11 @@ namespace MiaoWu.App.Controls
                 return;
             }
 
+            // 首次绑定发生在 Loaded 之前：此时没有可动画的 ActualWidth，
+            // 直接把初始状态（尤其是“启动默认折叠”）落到属性上。
             if (!_initialized)
             {
+                SnapToState();
                 return;
             }
 

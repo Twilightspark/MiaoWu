@@ -132,7 +132,10 @@ namespace MiaoWu.App.ViewModels
             // 数值与 Themes/Tokens.xaml 中的 Metric.* 保持一致。
             _layoutPolicy = new PaneLayoutPolicy(new PaneMetrics());
             _layoutPolicy.SetPreferred(_settings.Ui.LeftPaneWidth, _settings.Ui.RightPaneWidth);
-            _isRightPaneCollapsed = _settings.Ui.IsRightPaneCollapsed;
+
+            // 启动默认收起右栏（文件 / 预览），把中间问答放到最大；用户仍可用
+            // Ctrl+J 或会话头按钮展开。这里不恢复上次的展开状态，避免冷启动又变成三栏挤在一起。
+            _isRightPaneCollapsed = true;
             _layout = _layoutPolicy.Compute(_windowWidth, _isRightPaneCollapsed);
 
             WorkspaceCollection collection = LoadWorkspaces(_workspaceStore);

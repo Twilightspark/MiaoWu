@@ -2,11 +2,12 @@
 
 MiaoWu 是一个本地优先的 Windows 桌面 AI 智能体工作台：把工作区文件、会话与模型调用放进同一个窗口，让智能体在你的目录里读文件、改代码、执行命令，每一步都可审批、可回溯。
 
-当前版本：**v0.5.0**（功能高速开发中，尚不具备使用条件）。变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：**v0.5.1**（功能高速开发中，尚不具备使用条件）。变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 特性
 
-- **工作区为中心**：左栏管理多个工作区与会话，中栏与智能体对话，右栏预览 Markdown、文本、代码、图片与 diff。
+- **工作区为中心**：左栏管理多个工作区与会话，中栏与智能体对话，右栏预览 Markdown、文本、代码、图片与 diff；启动时右栏默认收起，把问答放到最大（`Ctrl+J` 或问答头部按钮展开）。
+- **新会话欢迎态**：品牌图标 + 标题与输入卡作为一组居中，输入卡最宽 720；发出第一条消息后整组滑回栏底。没有工作区时输入卡原地挡住并提示先在左栏选择，版式不跳动。
 - **左栏可直接打理**：工作区置顶/重命名/清除会话/删除，会话重命名/置顶/归档/删除，文件重命名与删除（进回收站）；改动即时写回本地，右栏标签同步。
 - **多模型接入**：支持 OpenAI-compatible 与 Anthropic Messages 两种协议，第三方预置与自定义供应商并存；模型可在设置中增删与热切换，也可按 Base URL 从 `/models` 一键获取，应用启动与首次引导完成后还会在后台自动补齐新模型；API Key 使用 Windows DPAPI 加密保存在本机。
 - **可读的对话**：用户消息是右对齐气泡，助手正文左对齐；工具调用与思考过程按轮折进一行「执行过程」，收起后显示「已完成，用时 N秒」（运行中「运行中，用时 N秒」），点开才看每一步；工具行用中文动作名、参数摘要与状态点，不再摊 JSON。时间、模型与用量收在每条回答的尾部，会话标题旁显示累计运行时长，生成中还有本轮计时。消息流只在你看到底部时跟随新内容，往上翻不会被拉回。
@@ -63,15 +64,13 @@ installer/                 # Inno Setup 安装脚本
 
 `scripts\publish.ps1` 执行 Release 构建；检测到 Inno Setup 6 时会一并生成安装包与便携包：
 
-- `.artifacts\installer\MiaoWu-0.5.0-setup.exe`：**管理员安装**（`%ProgramFiles%\MiaoWu`），
+- `.artifacts\installer\MiaoWu-0.5.1-setup.exe`：**管理员安装**（`%ProgramFiles%\MiaoWu`），
   **双击即弹 UAC**（`publish.ps1` 编译后用 `scripts\patch-setup-manifest.ps1` 把 SetupLdr 清单改成
   `requireAdministrator`，Windows 在进程创建时就提权）；.NET Framework 4.8 检测，开始菜单 /
   可选公共桌面与开机启动，卸载时询问是否保留 `%USERPROFILE%\.miaowu`；装完以原用户身份启动，
   运行期不需要管理员。
-- `.artifacts\installer\MiaoWu-0.5.0-portable.zip`：不经过安装器，解压即用，供临时目录不可写时兜底。
-- `.artifacts\installer\MiaoWu-0.5.0-install-as-admin.cmd`：兜底入口，双击等价于右键「以管理员身份运行」，
-  放在安装包同一目录下使用。
-- `.artifacts\installer\MiaoWu-0.5.0-setup-offline.exe`：**全量包**，内嵌 .NET Framework 4.8 离线安装程序
+- `.artifacts\installer\MiaoWu-0.5.1-portable.zip`：不经过安装器，解压即用，供临时目录不可写时兜底。
+- `.artifacts\installer\MiaoWu-0.5.1-setup-offline.exe`：**全量包**，内嵌 .NET Framework 4.8 离线安装程序
   （约 105 MB）。目标机缺 4.8 时，安装器在「准备安装」阶段静默装好 4.8 再继续；已有 4.8 的机器只多背体积，
   不会重复安装。生成方式：
 
@@ -93,25 +92,31 @@ Inno Setup 装在非默认目录时，先设 `INNO_SETUP_DIR` 指向安装目录
 安装器启动时报 `Setup was unable to create the directory "...\Temp\is-*.tmp"`（Error 5）是老版本的
 症状：SetupLdr 要先把安装器副本解到 `%TEMP%`，低完整性进程（受限终端、沙箱、部分安全软件）写不了
 Medium 标记的 Temp。现在 `setup.exe` 的清单是 `requireAdministrator`，双击会在进程创建时先弹 UAC，
-解包发生在高完整性进程里；万一某个启动入口仍然绕过提权，用同目录的
-`MiaoWu-0.5.0-install-as-admin.cmd` 或 `Start-Process -FilePath <setup.exe> -Verb RunAs`。
+解包发生在高完整性进程里；万一某个启动入口仍然绕过提权，用
+`Start-Process -FilePath <setup.exe> -Verb RunAs` 手动提权启动。
 从旧版**每用户安装**升级到这版之前，先在「应用和功能」里卸载旧版（旧版装在 `%LOCALAPPDATA%\Programs\MiaoWu`）。
 
 ## 签名
 
-`scripts\sign.ps1` 给 `MiaoWu.exe` 与安装包做 Authenticode 签名，`publish.ps1` 检测到签名材料就会自动调用：
+构建产物默认**不签名**：`scripts\publish.ps1` 不调用签名工具，`MiaoWu.exe`、安装包与卸载程序都保持未签名
+（UAC 与 SmartScreen 会显示“未知发布者”）。需要签名时手工执行：
 
-- **开发期自签名**：`powershell -File scripts\sign.ps1 -CreateDevCertificate` 生成
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path src\MiaoWu.App\bin\Release\net48\MiaoWu.exe
+powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path .artifacts\installer\MiaoWu-0.5.1-setup.exe
+```
+
+- **开发自签名**：`powershell -File scripts\sign.ps1 -CreateDevCertificate` 生成
   `.artifacts\signing\miaowu-dev.cer` 与 `miaowu-dev.key.json`。私钥用 `RSAParameters` 读文件、
   `CopyWithPrivateKey` 组合，不写用户证书存储，所以在受限终端里也能签。
 - **让签名变 Valid**：`powershell -File scripts\trust-dev-cert.ps1` 把证书装进“当前用户”的
   **受信任的根证书颁发机构**与**受信任的发布者**（不需要管理员）。不装的话签名状态是
   `UnknownError`（根证书不受信任），UAC 仍显示“未知发布者”。
-- **正式发布**：设 `MIAOWU_SIGN_PFX` / `MIAOWU_SIGN_PFX_PASSWORD` 指向 CA 签发的代码签名证书，
-  `publish.ps1` 会自动传给 `sign.ps1`。**自签名证书不能解除 SmartScreen 的“未知发布者”**，
-  对外分发必须换成 OV/EV 证书。
-- **卸载程序**：安装包在编译期由 Inno 的 SignTool 签名（`/DSIGN`，脚本里 `SignedUninstaller=yes`），
-  所以卸载时同样是已知发布者；没有签名材料时自动退回不签名的构建。
+- **正式发布**：用 `-PfxPath` / `-PfxPassword`（或环境变量 `MIAOWU_SIGN_PFX` /
+  `MIAOWU_SIGN_PFX_PASSWORD`）指向 CA 签发的代码签名证书。**自签名证书不能解除 SmartScreen 的
+  “未知发布者”**，对外分发必须换成 OV/EV 证书。
+- **卸载程序**：默认不签。要给 `unins000.exe` 也签名，需要在 `installer/MiaoWu.iss` 里自行启用
+  `SignTool` 与 `SignedUninstaller`，并在编译时传 `/DSIGN`。
 
 ## 权限模型
 

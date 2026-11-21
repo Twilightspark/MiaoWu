@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using MiaoWu.App.ViewModels;
 using MiaoWu.Core.Input;
@@ -22,10 +23,14 @@ namespace MiaoWu.App.Views
         /// <summary>距底多少像素内仍算“贴底”，避免 1px 抖动导致跟随中断。</summary>
         private const double BottomTolerance = 6;
 
+        private const int ComposerSettleMilliseconds = 180;
+
         private ConversationViewModel _viewModel;
         private ScrollViewer _scroller;
         private bool _stickToBottom = true;
         private bool _scrollQueued;
+        private bool _welcomeLayout;
+        private bool _composerSettleQueued;
 
         public ConversationPaneView()
         {
@@ -107,6 +112,19 @@ namespace MiaoWu.App.Views
 
         private void OnItemsChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
+            // 欢迎态（0 条消息）→ 正常态：底部星号行会从 S 收成 0，输入卡正好下移 S。
+            // 先记住这个像素高度，布局切换后再用等量 Y 偏移把整组送回旧位置，然后滑回 0。
+            bool wasWelcome = _welcomeLayout;
+            _welcomeLayout = _viewModel == null || _viewModel.IsEmpty;
+            if (wasWelcome && !_welcomeLayout && e.Action != NotifyCollectionChangedAction.Reset)
+            {
+                double spacerHeight = WelcomeSpacerRow == null ? 0 : WelcomeSpacerRow.ActualHeight;
+                if (spacerHeight > 1)
+                {
+                    QueueComposerSettle(-spacerHeight);
+                }
+            }
+
             if (e.Action == NotifyCollectionChangedAction.Reset)
             {
                 // 会话切换 / 重放会把列表清空重建，新会话从底部开始看。
@@ -125,6 +143,57 @@ namespace MiaoWu.App.Views
             {
                 QueueScrollToEnd();
             }
+        }
+
+        /// <summary>
+        /// 等布局落定后，把整组从旧位置（负偏移）平移回 0，形成“发送后从中间落回底部”的过渡。
+        /// 只动画一个 Y 偏移，不改宽度或行高，避免文字在动画中反复重排。
+        /// </summary>
+        private void QueueComposerSettle(double offset)
+        {
+            if (_composerSettleQueued || Math.Abs(offset) < 1)
+            {
+                return;
+            }
+
+            _composerSettleQueued = true;
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    _composerSettleQueued = false;
+                    if (!SystemParameters.ClientAreaAnimation || ComposerGroup == null)
+                    {
+                        return;
+                    }
+
+                    UpdateLayout();
+
+                    var transform = ComposerGroup.RenderTransform as TranslateTransform;
+                    if (transform == null)
+                    {
+                        transform = new TranslateTransform();
+                        ComposerGroup.RenderTransform = transform;
+                    }
+
+                    transform.BeginAnimation(TranslateTransform.YProperty, null);
+                    transform.Y = offset;
+
+                    var animation = new DoubleAnimation
+                    {
+                        From = offset,
+                        To = 0,
+                        Duration = TimeSpan.FromMilliseconds(ComposerSettleMilliseconds),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                        FillBehavior = FillBehavior.Stop
+                    };
+                    animation.Completed += (sender, args) =>
+                    {
+                        transform.BeginAnimation(TranslateTransform.YProperty, null);
+                        transform.Y = 0;
+                    };
+                    transform.BeginAnimation(TranslateTransform.YProperty, animation);
+                }),
+                DispatcherPriority.Render);
         }
 
         private static bool ContainsUserMessage(System.Collections.IList items)
@@ -231,6 +300,7 @@ namespace MiaoWu.App.Views
             }
 
             _viewModel = viewModel;
+            _welcomeLayout = _viewModel == null || _viewModel.IsEmpty;
 
             if (_viewModel != null)
             {
