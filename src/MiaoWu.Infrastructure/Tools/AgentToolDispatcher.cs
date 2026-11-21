@@ -97,7 +97,19 @@ namespace MiaoWu.Infrastructure.Tools
                     return execution;
                 }
 
-                bool needsApproval = tool.RequiresApproval || execution.Risk >= ToolRisk.High;
+                // DSH 的 never 策略：从不询问，需要审批的动作直接放行；
+                // 风险分级为 Blocked 的情况在上一段已经返回，不受策略影响。
+                bool policyAllows = context.ApprovalPolicy != ToolApprovalPolicy.Never;
+                bool needsApproval = policyAllows
+                    && (tool.RequiresApproval || execution.Risk >= ToolRisk.High);
+                if (!policyAllows && (tool.RequiresApproval || execution.Risk >= ToolRisk.High))
+                {
+                    string suffix = "会话审批策略为 never，自动放行。";
+                    execution.RiskReason = string.IsNullOrEmpty(execution.RiskReason)
+                        ? suffix
+                        : execution.RiskReason + " " + suffix;
+                }
+
                 if (needsApproval)
                 {
                     try

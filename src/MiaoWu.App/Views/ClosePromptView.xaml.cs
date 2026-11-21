@@ -11,8 +11,8 @@ using MiaoWu.App.ViewModels;
 namespace MiaoWu.App.Views
 {
     /// <summary>
-    /// 关闭确认浮层：遮罩点击 / Esc 取消，Tab 在浮层内循环，打开时焦点落在
-    /// “最小化到托盘”上。关闭后把焦点还给打开前的控件；不新开 Window。
+    /// 关闭确认浮层：遮罩点击 / Esc / 右上角图标按钮取消，Tab 在浮层内循环，
+    /// 打开时焦点落在“后台运行”上。关闭后把焦点还给打开前的控件；不新开 Window。
     /// </summary>
     public partial class ClosePromptView : UserControl
     {

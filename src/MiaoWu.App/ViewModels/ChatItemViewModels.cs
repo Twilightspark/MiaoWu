@@ -11,6 +11,7 @@ using MiaoWu.Core.Markdown;
 using MiaoWu.Core.Models;
 using MiaoWu.Core.Text;
 using MiaoWu.Infrastructure.Json;
+using MiaoWu.Infrastructure.Tools;
 
 namespace MiaoWu.App.ViewModels
 {
@@ -801,9 +802,16 @@ namespace MiaoWu.App.ViewModels
         {
             CallId = call == null ? null : call.Id;
             ToolName = call == null ? "tool" : call.Name;
-            DisplayName = GetDisplayName(ToolName);
             ArgumentsJson = call == null ? null : call.ArgumentsJson;
-            Summary = BuildArgumentsSummary(ToolName, ArgumentsJson);
+
+            // 工具行投影：标题与摘要都从统一投影器来，认不出的工具退回旧映射。
+            ToolPresentation presentation = ToolPresentationBuilder.ProjectCall(ToolName, ArgumentsJson);
+            DisplayName = string.IsNullOrWhiteSpace(presentation.Title)
+                ? GetDisplayName(ToolName)
+                : presentation.Title;
+            Summary = string.IsNullOrWhiteSpace(presentation.Summary)
+                ? BuildArgumentsSummary(ToolName, ArgumentsJson)
+                : presentation.Summary;
             StatusText = "准备中";
             _isPending = true;
 
@@ -827,14 +835,22 @@ namespace MiaoWu.App.ViewModels
         private static readonly System.Collections.Generic.Dictionary<string, string> ToolTitles =
             new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                { "list_dir", "列出目录" },
-                { "read_file", "读取文件" },
-                { "search_files", "搜索文件" },
-                { "find_files", "查找文件" },
-                { "edit_file", "编辑文件" },
-                { "write_file", "写入文件" },
-                { "run_command", "执行命令" },
-                { "load_skill", "加载技能" }
+                { "read", "读取文件" },
+                { "grep", "搜索文件" },
+                { "glob", "查找文件" },
+                { "edit", "编辑文件" },
+                { "write", "写入文件" },
+                { "pwsh", "执行命令" },
+                { "skill", "加载技能" },
+                { "web_fetch", "抓取网页" },
+                { "working_directory", "工作目录" },
+                { "job_list", "后台任务" },
+                { "job_output", "读取后台输出" },
+                { "job_kill", "终止后台任务" },
+                { "present", "交付文件" },
+                { "create_goal", "建立目标" },
+                { "get_goal", "读取目标" },
+                { "update_goal", "更新目标" }
             };
 
         public static string GetDisplayName(string toolName)
@@ -1025,7 +1041,9 @@ namespace MiaoWu.App.ViewModels
             Output = (result.Content ?? string.Empty).TrimEnd();
             ErrorText = result.ErrorMessage;
             StatusText = StatusToText(result.Status);
-            Summary = string.IsNullOrWhiteSpace(result.Summary) ? Summary : result.Summary;
+            Summary = string.IsNullOrWhiteSpace(result.Summary)
+                ? ToolPresentationBuilder.ProjectResult(ToolName, result)
+                : result.Summary;
         }
 
         public void ApplyMessage(AgentMessage message)
@@ -1092,11 +1110,6 @@ namespace MiaoWu.App.ViewModels
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     text = ReadArgument(root, "path");
-                }
-
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    text = ReadArgument(root, "query");
                 }
 
                 if (string.IsNullOrWhiteSpace(text))
@@ -1538,23 +1551,23 @@ namespace MiaoWu.App.ViewModels
                 }
 
                 string name = tool.ToolName ?? string.Empty;
-                if (name == "read_file" || name == "list_dir")
+                if (name == "read")
                 {
                     read++;
                 }
-                else if (name == "search_files" || name == "find_files")
+                else if (name == "grep" || name == "glob")
                 {
                     search++;
                 }
-                else if (name == "write_file" || name == "edit_file")
+                else if (name == "write" || name == "edit")
                 {
                     write++;
                 }
-                else if (name == "run_command")
+                else if (name == "pwsh")
                 {
                     command++;
                 }
-                else if (name == "load_skill")
+                else if (name == "skill")
                 {
                     skill++;
                 }

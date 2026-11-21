@@ -295,7 +295,7 @@ namespace MiaoWu.Tests.Agents
             _api.EnqueueToolCalls(new ScriptedModelApi.ToolCallScript
             {
                 Id = "call_1",
-                Name = "read_file",
+                Name = "read",
                 ArgumentsJson = "{\"path\":\"a.txt\"}"
             });
             _api.EnqueueText("文件里写的是 hello。");
@@ -306,7 +306,7 @@ namespace MiaoWu.Tests.Agents
             await WaitIdleAsync(session);
 
             Assert.Single(executor.Calls);
-            Assert.Equal("read_file", executor.Calls[0].Name);
+            Assert.Equal("read", executor.Calls[0].Name);
 
             AgentSessionSnapshot snapshot = session.Snapshot();
             Assert.Equal(4, snapshot.Messages.Count);
@@ -586,7 +586,7 @@ namespace MiaoWu.Tests.Agents
                     Result = ToolResult.Success(
                         call,
                         "来自工具的不可信内容",
-                        "read_file a.txt",
+                        "read a.txt",
                         true,
                         false)
                 });
@@ -601,7 +601,7 @@ namespace MiaoWu.Tests.Agents
                 {
                     new ToolDefinition
                     {
-                        Name = "read_file",
+                        Name = "read",
                         Description = "读取文件",
                         ParametersJson = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}",
                         PromptSnippet = "读取文件",

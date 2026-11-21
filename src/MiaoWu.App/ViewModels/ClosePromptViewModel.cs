@@ -31,13 +31,6 @@ namespace MiaoWu.App.ViewModels
     /// </summary>
     public sealed class ClosePromptViewModel : ObservableObject
     {
-        private const string TrayDescription =
-            "关闭窗口后，智能体可以继续在系统托盘后台生成；选择退出应用会取消当前生成并保存已生成的内容。";
-
-        private const string NoTrayDescription =
-            "当前以受限权限运行（例如从 VS Code 或沙箱终端启动），Windows 不会显示系统托盘图标。"
-            + "关闭窗口将最小化到任务栏；从资源管理器直接运行 MiaoWu.exe 可使用托盘。";
-
         private bool _isOpen;
         private bool _rememberChoice;
         private bool _trayAvailable = true;
@@ -69,27 +62,17 @@ namespace MiaoWu.App.ViewModels
             get { return _trayAvailable; }
         }
 
-        public string Description
-        {
-            get { return _trayAvailable ? TrayDescription : NoTrayDescription; }
-        }
-
-        public string MinimizeLabel
-        {
-            get { return _trayAvailable ? "最小化到托盘" : "最小化到任务栏"; }
-        }
-
         public string MinimizeAutomationName
         {
             get
             {
                 return _trayAvailable
-                    ? "最小化到系统托盘"
-                    : "最小化到任务栏，保留任务栏按钮";
+                    ? "后台运行，最小化到系统托盘"
+                    : "后台运行，最小化到任务栏";
             }
         }
 
-        /// <summary>托盘不可用时把按钮与说明改成“最小化到任务栏”，由 MainWindow 执行降级。</summary>
+        /// <summary>托盘不可用时只影响读屏名：按钮文案固定为“后台运行”，由 MainWindow 降级到任务栏。</summary>
         public void SetTrayAvailability(bool available)
         {
             if (_trayAvailable == available)
@@ -99,8 +82,6 @@ namespace MiaoWu.App.ViewModels
 
             _trayAvailable = available;
             OnPropertyChanged(nameof(TrayAvailable));
-            OnPropertyChanged(nameof(Description));
-            OnPropertyChanged(nameof(MinimizeLabel));
             OnPropertyChanged(nameof(MinimizeAutomationName));
         }
 

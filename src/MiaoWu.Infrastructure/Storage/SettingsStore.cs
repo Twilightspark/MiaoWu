@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using MiaoWu.Core.Abstractions;
+using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Documents;
 using MiaoWu.Core.Settings;
 using MiaoWu.Infrastructure.Json;
@@ -150,9 +151,11 @@ namespace MiaoWu.Infrastructure.Storage
             value.MaxTurnsPerRun = GetInt(node, "maxTurnsPerRun", value.MaxTurnsPerRun);
             value.MaxToolCallsPerTurn = GetInt(node, "maxToolCallsPerTurn", value.MaxToolCallsPerTurn);
             value.MaxParallelReadTools = GetInt(node, "maxParallelReadTools", value.MaxParallelReadTools);
+            value.ApprovalPolicy = ReadApprovalPolicy(node);
             value.SkillsEnabled = GetBool(node, "skillsEnabled", value.SkillsEnabled);
             value.ContextFilesEnabled = GetBool(node, "contextFilesEnabled", value.ContextFilesEnabled);
             value.AutoTitle = GetBool(node, "autoTitle", value.AutoTitle);
+            value.GoalAutoContinue = GetBool(node, "goalAutoContinue", value.GoalAutoContinue);
             value.ShowLogOnError = GetBool(node, "showLogOnError", value.ShowLogOnError);
             value.OnboardingCompleted = GetBool(node, "onboardingCompleted", value.OnboardingCompleted);
             value.ProxyMode = GetString(node, "proxyMode") ?? value.ProxyMode;
@@ -212,6 +215,19 @@ namespace MiaoWu.Infrastructure.Storage
             }
 
             return CloseWindowAction.Ask;
+        }
+
+        private static ToolApprovalPolicy ReadApprovalPolicy(JsonValue node)
+        {
+            JsonValue policy = node.Get("approvalPolicy");
+            if (policy != null && policy.Kind == JsonKind.String)
+            {
+                return string.Equals(policy.AsString(), "never", StringComparison.OrdinalIgnoreCase)
+                    ? ToolApprovalPolicy.Never
+                    : ToolApprovalPolicy.Ask;
+            }
+
+            return ToolApprovalPolicy.Ask;
         }
 
         public void Save(AppSettings settings)
@@ -298,9 +314,12 @@ namespace MiaoWu.Infrastructure.Storage
             agent["maxTurnsPerRun"] = JsonValue.From(agentValue.MaxTurnsPerRun);
             agent["maxToolCallsPerTurn"] = JsonValue.From(agentValue.MaxToolCallsPerTurn);
             agent["maxParallelReadTools"] = JsonValue.From(agentValue.MaxParallelReadTools);
+            agent["approvalPolicy"] = JsonValue.From(
+                agentValue.ApprovalPolicy == ToolApprovalPolicy.Never ? "never" : "ask");
             agent["skillsEnabled"] = JsonValue.From(agentValue.SkillsEnabled);
             agent["contextFilesEnabled"] = JsonValue.From(agentValue.ContextFilesEnabled);
             agent["autoTitle"] = JsonValue.From(agentValue.AutoTitle);
+            agent["goalAutoContinue"] = JsonValue.From(agentValue.GoalAutoContinue);
             agent["showLogOnError"] = JsonValue.From(agentValue.ShowLogOnError);
             agent["onboardingCompleted"] = JsonValue.From(agentValue.OnboardingCompleted);
             agent["proxyMode"] = JsonValue.From(agentValue.ProxyMode ?? "system");

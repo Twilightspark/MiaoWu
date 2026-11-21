@@ -217,7 +217,7 @@ namespace MiaoWu.Infrastructure.Tools
                 return execution;
             }
 
-            bool tail = call != null && string.Equals(call.Name, ToolNames.RunCommand, StringComparison.OrdinalIgnoreCase);
+            bool tail = call != null && string.Equals(call.Name, ToolNames.Pwsh, StringComparison.OrdinalIgnoreCase);
             ToolOutputTruncation truncation = ToolOutputBudget.Apply(content, tail, null);
 
             if (truncation.Truncated && result.IsSuccess && context != null)
@@ -245,8 +245,38 @@ namespace MiaoWu.Infrastructure.Tools
                 result.Truncated = true;
                 result.Truncation = truncation;
             }
+            else if ((result.Content ?? string.Empty).Length > ToolResultPruner.ThresholdChars)
+            {
+                // 行/字节预算没超，但单条结果仍然很长：保留头尾、省略中间，
+                // 对齐 DSH 的 8192 / 4096 / 1024 工具结果修剪。
+                result.Content = ToolResultPruner.Prune(result.Content);
+            }
 
             return execution;
+        }
+    }
+
+    /// <summary>
+    /// 单条工具结果的轻量修剪：超过 8192 字符时保留头 4096 + 尾 1024，中间标注省略字数。
+    /// 与输出预算、溢出落盘是三层不同机制，不要互相替代。
+    /// </summary>
+    public static class ToolResultPruner
+    {
+        public const int ThresholdChars = 8192;
+        public const int HeadChars = 4096;
+        public const int TailChars = 1024;
+
+        public static string Prune(string content)
+        {
+            if (string.IsNullOrEmpty(content) || content.Length <= ThresholdChars)
+            {
+                return content;
+            }
+
+            int omitted = content.Length - HeadChars - TailChars;
+            return content.Substring(0, HeadChars)
+                + "\n\n…[中间省略 " + omitted + " 字]…\n\n"
+                + content.Substring(content.Length - TailChars);
         }
     }
 }

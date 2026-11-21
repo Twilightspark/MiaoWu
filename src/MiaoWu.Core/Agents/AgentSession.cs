@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Abstractions;
+using MiaoWu.Core.Agents.Goals;
 using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Errors;
@@ -47,18 +48,24 @@ namespace MiaoWu.Core.Agents
         private int _pendingCount;
         private TokenUsage _lastUsage;
         private AgentError _lastError;
-        private int _turnIndex;
+        private int _stepIndex;
+        private readonly List<PendingInput> _nextStep = new List<PendingInput>();
         private int _estimatedContextTokens;
         private DateTimeOffset _lastActivity;
         private Task _loopTask;
         private CancellationTokenSource _runCts;
         private WorkspacePathSandbox _sandbox;
+        private string _workingDirectory;
+        private ISessionWorkingDirectory _workingDirectoryHost;
+        private ISessionPlanMode _planModeHost;
+        private bool _planMode;
         private bool _disposed;
         private bool _firstMessage = true;
         private bool _titlePinned;
         private bool _autoTitlePending;
         private string _firstUserText;
         private int _modelTitleStarted;
+        private int _goalContinuationCount;
 
         private IConversationStore Store
         {
@@ -83,6 +90,21 @@ namespace MiaoWu.Core.Agents
             _options.HistoryLimit = _options.HistoryLimit <= 0 ? 200 : _options.HistoryLimit;
             _options.MaxTurnsPerRun = _options.MaxTurnsPerRun <= 0 ? 24 : _options.MaxTurnsPerRun;
             _options.MaxToolCallsPerTurn = _options.MaxToolCallsPerTurn <= 0 ? 8 : _options.MaxToolCallsPerTurn;
+            if (_options.MaxParallelToolCalls <= 0)
+            {
+                _options.MaxParallelToolCalls = 10;
+            }
+
+            if (_options.MaxParallelToolCalls > 16)
+            {
+                _options.MaxParallelToolCalls = 16;
+            }
+
+            if (_options.MaxGoalContinuationRounds <= 0)
+            {
+                _options.MaxGoalContinuationRounds = 8;
+            }
+
             _lastActivity = Now;
 
             if (transcript != null)
@@ -215,11 +237,12 @@ namespace MiaoWu.Core.Agents
                     LastError = _lastError == null ? null : _lastError.Clone(),
                     PendingCount = _pendingCount,
                     Title = _title,
-                    TurnIndex = _turnIndex,
+                    StepIndex = _stepIndex,
                     ToolExecutions = new List<ToolExecution>(_toolExecutions),
                     ProviderId = _providerId,
                     ModelId = _modelId,
-                    EstimatedContextTokens = _estimatedContextTokens
+                    EstimatedContextTokens = _estimatedContextTokens,
+                    PlanMode = _planMode
                 };
             }
         }
@@ -260,8 +283,13 @@ namespace MiaoWu.Core.Agents
                 }
 
                 _pendingCount++;
+
+                // 用户亲自发话，重新给目标自动续跑计数；上一轮用户输入引发的续跑不再压着新问题。
+                _goalContinuationCount = 0;
             }
 
+            bool steer = mode == AgentSendMode.Steer || mode == AgentSendMode.Inject;
+            bool activeSteer = false;
             string messageId = string.IsNullOrWhiteSpace(input.ClientMessageId)
                 ? NewId("m")
                 : input.ClientMessageId;
@@ -277,21 +305,48 @@ namespace MiaoWu.Core.Agents
                 Completion = completion
             };
 
+            AgentRun run;
             lock (_gate)
             {
                 _messages.Add(userMessage);
                 _lastActivity = Now;
+
+                // 只有轮次真的在跑时才可能「插进下一个步骤」；空闲时 steer 退化为
+                // 普通排队，否则这条消息会永远等不到步骤边界。
+                activeSteer = steer && _state == AgentSessionState.Running;
+                if (activeSteer)
+                {
+                    pending.MessagePublished = true;
+                    _nextStep.Add(pending);
+                    run = new AgentRun
+                    {
+                        RunId = _activeRunId,
+                        UserMessageId = userMessage.Id,
+                        AssistantMessageId = null,
+                        Completion = Task.CompletedTask
+                    };
+                }
+                else
+                {
+                    run = new AgentRun
+                    {
+                        RunId = NewId("r"),
+                        UserMessageId = userMessage.Id,
+                        AssistantMessageId = null,
+                        Completion = completion.Task
+                    };
+                }
+
+                pending.Run = run;
             }
 
-            var run = new AgentRun
+            if (activeSteer)
             {
-                RunId = NewId("r"),
-                UserMessageId = userMessage.Id,
-                AssistantMessageId = null,
-                Completion = completion.Task
-            };
+                // 插话立刻进时间线；持久化由步骤边界统一完成，避免与队列消息乱序。
+                Publish(new MessageStartedEvent { Message = userMessage.Clone() });
+                return Task.FromResult(run);
+            }
 
-            pending.Run = run;
             _inbox.Enqueue(pending);
             EnsureLoop();
             return Task.FromResult(run);
@@ -325,7 +380,22 @@ namespace MiaoWu.Core.Agents
             if (clearPending)
             {
                 drained = _inbox.Drain().ToArray();
+                PendingInput[] drainedSteps;
+                lock (_gate)
+                {
+                    drainedSteps = _nextStep.ToArray();
+                    _nextStep.Clear();
+                }
+
                 foreach (PendingInput pending in drained)
+                {
+                    if (pending.Completion != null)
+                    {
+                        pending.Completion.TrySetResult(null);
+                    }
+                }
+
+                foreach (PendingInput pending in drainedSteps)
                 {
                     if (pending.Completion != null)
                     {
@@ -696,8 +766,15 @@ namespace MiaoWu.Core.Agents
                 pending.Run.AssistantMessageId = assistantId;
             }
 
+            // 每条新的用户输入开启一轮；重跑（retry）沿用同一条用户消息，不计入目标轮次。
+            if (!pending.ReuseUserMessage)
+            {
+                RecordGoalRoundStarted();
+            }
+
             AgentMessage assistant = null;
             bool hasPartial = false;
+            bool runCompleted = false;
             Task titleTask = null;
 
             try
@@ -705,38 +782,52 @@ namespace MiaoWu.Core.Agents
                 if (!pending.ReuseUserMessage)
                 {
                     await PersistUserMessageAsync(pending.UserMessage).ConfigureAwait(false);
-                    Publish(new MessageStartedEvent { Message = pending.UserMessage.Clone() });
+                    if (!pending.MessagePublished)
+                    {
+                        Publish(new MessageStartedEvent { Message = pending.UserMessage.Clone() });
+                    }
+
                     TryAutoTitle(pending.UserMessage);
                 }
 
-                int turnIndex = 0;
+                int stepIndex = 0;
                 bool continueRun = true;
                 IReadOnlyList<ToolDefinition> definitions = GetToolDefinitions();
-                int maxTurns = Math.Max(1, _options.MaxTurnsPerRun);
+                int maxSteps = Math.Max(1, _options.MaxTurnsPerRun);
 
                 // 一次运行只解析一次模型：中途在别的会话里换模型，从下一条消息开始生效，
-                // 不会把正在多轮执行的这一轮切成两个模型。
+                // 不会把正在多步执行的这一轮切成两个模型。
                 ModelDescriptor model = ResolveModel(pending.Input, out ProviderCredential credential);
 
-                while (continueRun && turnIndex < maxTurns)
+                while (continueRun && stepIndex < maxSteps)
                 {
-                    turnIndex++;
+                    // 步骤边界领取插话：DSH 的 next-step 队列在这里清空。
+                    await ConsumeStepInputsAsync().ConfigureAwait(false);
+
+                    stepIndex++;
                     lock (_gate)
                     {
-                        _turnIndex = turnIndex;
+                        _stepIndex = stepIndex;
                     }
 
-                    Publish(new TurnStartedEvent { RunId = runId, TurnIndex = turnIndex });
-
-                    if (turnIndex == 1)
+                    string stepAssistantId = stepIndex == 1 ? assistantId : NewId("m");
+                    Publish(new StepStartedEvent
                     {
-                        // 首轮一开始就用这一轮实际使用的路由发标题请求：与主回答并行推进，
+                        RunId = runId,
+                        StepIndex = stepIndex,
+                        AssistantMessageId = stepAssistantId,
+                        IsFirstStep = stepIndex == 1
+                    });
+
+                    if (stepIndex == 1)
+                    {
+                        // 首步一开始就用这一轮实际使用的路由发标题请求：与主回答并行推进，
                         // 但属于本轮执行的一部分，本轮结束前会等它收敛。
                         titleTask = StartModelTitle(model, credential);
                     }
-                    string turnAssistantId = turnIndex == 1 ? assistantId : NewId("m");
+
                     RunTurnResult llmResult = await RunOneTurnAsync(
-                        turnAssistantId,
+                        stepAssistantId,
                         pending,
                         model,
                         credential,
@@ -758,6 +849,7 @@ namespace MiaoWu.Core.Agents
                         {
                             IReadOnlyList<ToolResult> results = await ExecuteToolCallsAsync(
                                 calls,
+                                definitions,
                                 runId,
                                 runCts.Token).ConfigureAwait(false);
 
@@ -771,16 +863,34 @@ namespace MiaoWu.Core.Agents
                         }
                     }
 
-                    Publish(new TurnCompletedEvent
+                    // 插话让轮次继续：DSH 在 turnEnds 时只要 next-step 还有输入就不结束。
+                    if (!willContinue && HasPendingStepInputs())
+                    {
+                        willContinue = true;
+                    }
+
+                    StepEndReason stepReason = assistant.StopReason == StopReason.Length
+                        ? StepEndReason.MaxTokens
+                        : (calls.Count > 0 ? StepEndReason.ToolCalls : StepEndReason.Completed);
+
+                    Publish(new StepCompletedEvent
                     {
                         RunId = runId,
-                        TurnIndex = turnIndex,
+                        StepIndex = stepIndex,
+                        AssistantMessageId = stepAssistantId,
+                        Reason = stepReason,
                         StopReason = assistant.StopReason ?? StopReason.Stop,
                         Usage = assistant.Usage,
+                        ToolCallCount = calls.Count,
                         WillContinue = willContinue
                     });
 
                     continueRun = willContinue;
+                }
+
+                if (continueRun)
+                {
+                    _services.Logger.Warn("session.steps.exhausted", "轮次达到步骤上限 " + maxSteps + "，强制收敛。");
                 }
 
                 // 首轮的标题请求在本轮执行中已经发出；这里同步收敛，
@@ -795,6 +905,8 @@ namespace MiaoWu.Core.Agents
                     StopReason = assistant == null ? StopReason.Stop : (assistant.StopReason ?? StopReason.Stop),
                     Usage = assistant == null ? null : assistant.Usage
                 });
+
+                runCompleted = true;
             }
             catch (OperationCanceledException)
             {
@@ -827,6 +939,21 @@ namespace MiaoWu.Core.Agents
 
                 runCts.Dispose();
 
+                // 轮次结束时还留在 next-step 里的插话不能丢：转成下一次轮次的输入。
+                // 它们可能已经发布过消息，重排后不再重复发布。
+                List<PendingInput> leftovers = DrainStepInputs(false);
+                foreach (PendingInput leftover in leftovers)
+                {
+                    try
+                    {
+                        _inbox.Enqueue(leftover);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // 会话已关闭，丢弃。
+                    }
+                }
+
                 if (pending.Completion != null)
                 {
                     pending.Completion.TrySetResult(null);
@@ -834,6 +961,13 @@ namespace MiaoWu.Core.Agents
 
                 Publish(new StateChangedEvent { State = AgentSessionState.Idle });
                 RaiseSummary();
+
+                // 正常收尾的轮次才考虑目标续跑；取消、失败与“用户刚插话”都不续。
+                // 放在 Idle 之后入队：监听者先看到这一轮结束，再看到自动续跑开始。
+                if (runCompleted && leftovers.Count == 0)
+                {
+                    TryEnqueueGoalContinuation();
+                }
             }
         }
 
@@ -1258,109 +1392,334 @@ namespace MiaoWu.Core.Agents
             return calls;
         }
 
+        /// <summary>
+        /// 执行一步内的工具调用。对齐 DSH 的调度语义：
+        /// 独占调用形成屏障，连续的可并行调用进入有界池；结果始终按模型给出的顺序提交。
+        /// </summary>
         private async Task<IReadOnlyList<ToolResult>> ExecuteToolCallsAsync(
             IReadOnlyList<ToolCall> calls,
+            IReadOnlyList<ToolDefinition> definitions,
             string runId,
             CancellationToken cancellationToken)
         {
-            var results = new List<ToolResult>();
             int maxCalls = Math.Max(1, _options.MaxToolCallsPerTurn);
+            int count = Math.Min(calls.Count, maxCalls);
+            var results = new ToolResult[calls.Count];
+            Dictionary<string, ToolDefinition> byName = IndexDefinitions(definitions);
+            int parallelLimit = Math.Max(1, _options.MaxParallelToolCalls);
 
-            for (int i = 0; i < calls.Count && i < maxCalls; i++)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                ToolCall call = calls[i];
-                ToolContext context = CreateToolContext(call);
-                var execution = new ToolExecution
+                int index = 0;
+                while (index < count)
                 {
-                    Call = call,
-                    Risk = ToolRisk.Medium,
-                    Decision = ToolExecutionDecision.Auto
-                };
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                Publish(new ToolExecutionStartedEvent { Execution = execution });
+                    bool parallel = IsParallelSafe(byName, calls[index]);
+                    int end = index + 1;
+                    if (parallel)
+                    {
+                        while (end < count && IsParallelSafe(byName, calls[end]))
+                        {
+                            end++;
+                        }
+                    }
 
-                ToolExecution completed;
-                try
-                {
-                    completed = await _services.Tools
-                        .ExecuteAsync(call, context, cancellationToken)
-                        .ConfigureAwait(false);
+                    if (parallel && end - index > 1)
+                    {
+                        await RunParallelBatchAsync(
+                            calls,
+                            results,
+                            byName,
+                            index,
+                            end,
+                            parallelLimit,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        ToolExecution execution = await ExecuteOneAsync(
+                            calls[index],
+                            LookupDefinition(byName, calls[index]),
+                            cancellationToken).ConfigureAwait(false);
+                        results[index] = execution.Result;
+                        await AppendToolMessageAsync(calls[index], execution.Result).ConfigureAwait(false);
+                    }
+
+                    index = end;
                 }
-                catch (OperationCanceledException)
+            }
+            catch (OperationCanceledException)
+            {
+                // 取消/中断时也要保证每个 tool/call 都有 tool/result，否则下一次请求在提供方侧会 400。
+                await FillMissingResultsAsync(
+                    calls,
+                    results,
+                    count,
+                    ToolResultStatus.Cancelled,
+                    "aborted_before_dispatch",
+                    "工具调用已中止，结果未知。").ConfigureAwait(false);
+                throw;
+            }
+            catch (Exception)
+            {
+                await FillMissingResultsAsync(
+                    calls,
+                    results,
+                    count,
+                    ToolResultStatus.Failed,
+                    "tool_outcome_unknown",
+                    "工具调用失败，结果未知。").ConfigureAwait(false);
+                throw;
+            }
+
+            if (calls.Count > count)
+            {
+                for (int i = count; i < calls.Count; i++)
+                {
+                    ToolResult overflow = ToolResult.Failure(
+                        calls[i],
+                        ToolResultStatus.Cancelled,
+                        "tool_call_budget_exceeded",
+                        "本步工具调用超过上限 " + maxCalls + "，未执行。");
+                    results[i] = overflow;
+                    await AppendToolMessageAsync(calls[i], overflow).ConfigureAwait(false);
+                }
+            }
+
+            return results.ToList();
+        }
+
+        private async Task RunParallelBatchAsync(
+            IReadOnlyList<ToolCall> calls,
+            ToolResult[] results,
+            Dictionary<string, ToolDefinition> byName,
+            int from,
+            int to,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            for (int start = from; start < to; start += limit)
+            {
+                int batchEnd = Math.Min(to, start + limit);
+                var tasks = new List<Task<ToolExecution>>(batchEnd - start);
+                for (int i = start; i < batchEnd; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    tasks.Add(ExecuteOneAsync(calls[i], LookupDefinition(byName, calls[i]), cancellationToken));
+                }
+
+                ToolExecution[] executions = await Task.WhenAll(tasks).ConfigureAwait(false);
+                for (int i = 0; i < executions.Length; i++)
+                {
+                    results[start + i] = executions[i].Result;
+                }
+
+                // 消息按模型顺序落盘，完成先后不影响历史顺序。
+                for (int i = 0; i < executions.Length; i++)
+                {
+                    await AppendToolMessageAsync(calls[start + i], executions[i].Result).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task<ToolExecution> ExecuteOneAsync(
+            ToolCall call,
+            ToolDefinition definition,
+            CancellationToken cancellationToken)
+        {
+            ToolContext context = CreateToolContext(call);
+            var execution = new ToolExecution
+            {
+                Call = call,
+                Risk = ToolRisk.Medium,
+                Decision = ToolExecutionDecision.Auto
+            };
+
+            Publish(new ToolExecutionStartedEvent { Execution = execution });
+
+            // DSH 的超时阶段：只有工具声明了 timeoutMs 才设上限，超时落成普通工具结果，
+            // 不当作会话取消——模型下一步能看到「工具超时」并自己决定重试或换路。
+            int timeoutMs = definition == null ? 0 : definition.TimeoutMs;
+            CancellationTokenSource timeoutCts = null;
+            CancellationToken callToken = cancellationToken;
+            if (timeoutMs > 0)
+            {
+                timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(timeoutMs);
+                callToken = timeoutCts.Token;
+            }
+
+            ToolExecution completed;
+            try
+            {
+                completed = await _services.Tools
+                    .ExecuteAsync(call, context, callToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                bool timedOut = timeoutCts != null
+                    && timeoutCts.IsCancellationRequested
+                    && !cancellationToken.IsCancellationRequested;
+                if (!timedOut)
                 {
                     throw;
                 }
-                catch (Exception exception)
+
+                completed = new ToolExecution
                 {
-                    _services.Logger.Error("session.tool.crashed", "工具执行异常：" + call.Name, exception);
-                    completed = new ToolExecution
-                    {
-                        Call = call,
-                        Risk = ToolRisk.Medium,
-                        Decision = ToolExecutionDecision.Invalid,
-                        Result = ToolResult.Failure(
-                            call,
-                            ToolResultStatus.Failed,
-                            "tool_crashed",
-                            "工具执行过程中发生异常。")
-                    };
-                }
-
-                if (completed == null)
+                    Call = call,
+                    Risk = ToolRisk.Medium,
+                    Decision = ToolExecutionDecision.Invalid,
+                    Result = ToolResult.Failure(
+                        call,
+                        ToolResultStatus.Failed,
+                        "tool_timeout",
+                        "工具执行超过 " + timeoutMs + " ms，已取消。")
+                };
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Error("session.tool.crashed", "工具执行异常：" + call.Name, exception);
+                completed = new ToolExecution
                 {
-                    completed = new ToolExecution
-                    {
-                        Call = call,
-                        Risk = ToolRisk.Medium,
-                        Decision = ToolExecutionDecision.Invalid,
-                        Result = ToolResult.Failure(
-                            call,
-                            ToolResultStatus.Failed,
-                            "tool_no_result",
-                            "工具没有返回结果。")
-                    };
-                }
-
-                completed.Call = completed.Call ?? call;
-                completed.Result = completed.Result ?? ToolResult.Failure(
-                    call,
-                    ToolResultStatus.Failed,
-                    "tool_no_result",
-                    "工具没有返回结果。");
-
-                lock (_gate)
+                    Call = call,
+                    Risk = ToolRisk.Medium,
+                    Decision = ToolExecutionDecision.Invalid,
+                    Result = ToolResult.Failure(
+                        call,
+                        ToolResultStatus.Failed,
+                        "tool_crashed",
+                        "工具执行过程中发生异常。")
+                };
+            }
+            finally
+            {
+                if (timeoutCts != null)
                 {
-                    _toolExecutions.Add(completed);
+                    timeoutCts.Dispose();
                 }
-
-                Publish(new ToolExecutionCompletedEvent { Execution = completed });
-
-                ToolResult result = completed.Result;
-                results.Add(result);
-
-                AgentMessage toolMessage = AgentMessage.CreateToolResult(
-                    NewId("m"),
-                    call.Id,
-                    call.Name,
-                    BuildToolContentForModel(result),
-                    !result.IsSuccess,
-                    result.Truncated,
-                    result.FullOutputPath);
-
-                lock (_gate)
-                {
-                    _messages.Add(toolMessage);
-                }
-
-                await Store.AppendMessageAsync(
-                    _options.SessionId,
-                    toolMessage,
-                    CancellationToken.None).ConfigureAwait(false);
             }
 
-            return results;
+            if (completed == null)
+            {
+                completed = new ToolExecution
+                {
+                    Call = call,
+                    Risk = ToolRisk.Medium,
+                    Decision = ToolExecutionDecision.Invalid,
+                    Result = ToolResult.Failure(
+                        call,
+                        ToolResultStatus.Failed,
+                        "tool_no_result",
+                        "工具没有返回结果。")
+                };
+            }
+
+            completed.Call = completed.Call ?? call;
+            completed.Result = completed.Result ?? ToolResult.Failure(
+                call,
+                ToolResultStatus.Failed,
+                "tool_no_result",
+                "工具没有返回结果。");
+
+            lock (_gate)
+            {
+                _toolExecutions.Add(completed);
+            }
+
+            Publish(new ToolExecutionCompletedEvent { Execution = completed });
+            return completed;
+        }
+
+        private async Task AppendToolMessageAsync(ToolCall call, ToolResult result)
+        {
+            AgentMessage toolMessage = AgentMessage.CreateToolResult(
+                NewId("m"),
+                call.Id,
+                call.Name,
+                BuildToolContentForModel(result),
+                !result.IsSuccess,
+                result.Truncated,
+                result.FullOutputPath);
+
+            lock (_gate)
+            {
+                _messages.Add(toolMessage);
+            }
+
+            await Store.AppendMessageAsync(
+                _options.SessionId,
+                toolMessage,
+                CancellationToken.None).ConfigureAwait(false);
+        }
+
+        private async Task FillMissingResultsAsync(
+            IReadOnlyList<ToolCall> calls,
+            ToolResult[] results,
+            int count,
+            ToolResultStatus status,
+            string errorCode,
+            string message)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                if (results[i] != null)
+                {
+                    continue;
+                }
+
+                ToolResult repair = ToolResult.Failure(calls[i], status, errorCode, message);
+                results[i] = repair;
+                await AppendToolMessageAsync(calls[i], repair).ConfigureAwait(false);
+            }
+        }
+
+        private static Dictionary<string, ToolDefinition> IndexDefinitions(
+            IReadOnlyList<ToolDefinition> definitions)
+        {
+            var map = new Dictionary<string, ToolDefinition>(StringComparer.OrdinalIgnoreCase);
+            if (definitions == null)
+            {
+                return map;
+            }
+
+            foreach (ToolDefinition definition in definitions)
+            {
+                if (definition == null || string.IsNullOrWhiteSpace(definition.Name))
+                {
+                    continue;
+                }
+
+                if (!map.ContainsKey(definition.Name))
+                {
+                    map[definition.Name] = definition;
+                }
+            }
+
+            return map;
+        }
+
+        private static bool IsParallelSafe(Dictionary<string, ToolDefinition> byName, ToolCall call)
+        {
+            ToolDefinition definition;
+            return call != null
+                && !string.IsNullOrWhiteSpace(call.Name)
+                && byName.TryGetValue(call.Name, out definition)
+                && definition.ExecutionMode == ToolExecutionMode.Parallel;
+        }
+
+        private static ToolDefinition LookupDefinition(
+            Dictionary<string, ToolDefinition> byName,
+            ToolCall call)
+        {
+            ToolDefinition definition;
+            return call != null
+                && !string.IsNullOrWhiteSpace(call.Name)
+                && byName.TryGetValue(call.Name, out definition)
+                ? definition
+                : null;
         }
 
         private static string BuildToolContentForModel(ToolResult result)
@@ -1389,6 +1748,57 @@ namespace MiaoWu.Core.Agents
             return builder.ToString();
         }
 
+        // ---------------------------------------------------------------
+        // 收件箱：next-turn（_inbox）与 next-step（_nextStep）
+        // ---------------------------------------------------------------
+
+        /// <summary>把步骤边界之前排队的插话并入历史；只在步骤开始前调用。</summary>
+        private async Task ConsumeStepInputsAsync()
+        {
+            List<PendingInput> inputs = DrainStepInputs(true);
+            foreach (PendingInput input in inputs)
+            {
+                await PersistUserMessageAsync(input.UserMessage).ConfigureAwait(false);
+                if (!input.MessagePublished)
+                {
+                    Publish(new MessageStartedEvent { Message = input.UserMessage.Clone() });
+                }
+
+                if (input.Completion != null)
+                {
+                    input.Completion.TrySetResult(null);
+                }
+            }
+        }
+
+        private List<PendingInput> DrainStepInputs(bool adjustPendingCount)
+        {
+            lock (_gate)
+            {
+                if (_nextStep.Count == 0)
+                {
+                    return new List<PendingInput>();
+                }
+
+                var list = new List<PendingInput>(_nextStep);
+                _nextStep.Clear();
+                if (adjustPendingCount)
+                {
+                    _pendingCount = Math.Max(0, _pendingCount - list.Count);
+                }
+
+                return list;
+            }
+        }
+
+        private bool HasPendingStepInputs()
+        {
+            lock (_gate)
+            {
+                return _nextStep.Count > 0;
+            }
+        }
+
         private ToolContext CreateToolContext(ToolCall call)
         {
             WorkspacePathSandbox sandbox = GetSandbox();
@@ -1398,9 +1808,206 @@ namespace MiaoWu.Core.Agents
                 WorkspaceId = _options.WorkspaceId,
                 WorkspaceRoot = _options.WorkspaceRoot,
                 Sandbox = sandbox,
+                ApprovalPolicy = ResolveApprovalPolicy(),
+                WorkingDirectory = GetWorkingDirectoryHost(),
+                Plan = GetPlanModeHost(),
+                Goals = _options.Goals,
                 CallId = call == null ? null : call.Id,
                 Now = Now
             };
+        }
+
+        /// <summary>
+        /// 审批策略：宿主接入了实时 provider 时每次读取，否则用会话创建时的快照。
+        /// provider 抛异常就退回快照，审批不能因为设置读取失败而失效。
+        /// </summary>
+        private ToolApprovalPolicy ResolveApprovalPolicy()
+        {
+            Func<ToolApprovalPolicy> provider = _options.ApprovalPolicyProvider;
+            if (provider == null)
+            {
+                return _options.ApprovalPolicy;
+            }
+
+            try
+            {
+                return provider();
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.approval.policy", "读取审批策略失败：" + exception.Message);
+                return _options.ApprovalPolicy;
+            }
+        }
+
+        /// <summary>目标自动续跑开关：优先取实时 provider，异常时退回会话快照。</summary>
+        private bool ResolveGoalContinuation()
+        {
+            Func<bool> provider = _options.GoalContinuationProvider;
+            if (provider == null)
+            {
+                return _options.GoalContinuation;
+            }
+
+            try
+            {
+                return provider();
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.goal.continue", "读取续跑开关失败：" + exception.Message);
+                return _options.GoalContinuation;
+            }
+        }
+
+        private ISessionWorkingDirectory GetWorkingDirectoryHost()
+        {
+            lock (_gate)
+            {
+                if (_workingDirectoryHost == null)
+                {
+                    _workingDirectoryHost = new SessionWorkingDirectory(this);
+                }
+
+                return _workingDirectoryHost;
+            }
+        }
+
+        /// <summary>计划模式宿主：`exit_plan_mode` 审批通过后由工具调用。</summary>
+        private ISessionPlanMode GetPlanModeHost()
+        {
+            lock (_gate)
+            {
+                if (_planModeHost == null)
+                {
+                    _planModeHost = new SessionPlanMode(this);
+                }
+
+                return _planModeHost;
+            }
+        }
+
+        private sealed class SessionPlanMode : ISessionPlanMode
+        {
+            private readonly AgentSession _session;
+
+            public SessionPlanMode(AgentSession session)
+            {
+                _session = session;
+            }
+
+            public bool IsActive
+            {
+                get { return _session.PlanMode; }
+            }
+
+            public void ExitPlanMode()
+            {
+                _session.SetPlanMode(false);
+            }
+        }
+
+        /// <summary>目标轮次计数；目标状态不可用或写盘失败都不影响本轮执行。</summary>
+        private void RecordGoalRoundStarted()
+        {
+            if (_options.Goals == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _options.Goals.RecordRoundStarted();
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn(
+                    "session.goal.round",
+                    "目标轮次计数失败：" + exception.Message);
+            }
+        }
+
+        /// <summary>
+        /// 目标自动续跑（对齐 DSH 的 goal-round-driver）：一轮正常结束后，若目标仍是进行中、
+        /// 还有 maxGoalRounds 预算，且本次用户输入引发的续跑没到上限，就投递一条 continuation。
+        /// 续跑对模型表现为一条普通用户消息，对 UI 是可见的一轮；用户插话或取消后不再续。
+        /// </summary>
+        private void TryEnqueueGoalContinuation()
+        {
+            if (!ResolveGoalContinuation()
+                || _options.Goals == null
+                || _disposed
+                || _shutdown.IsCancellationRequested)
+            {
+                return;
+            }
+
+            AgentGoal goal;
+            try
+            {
+                goal = _options.Goals.Current;
+            }
+            catch (Exception exception)
+            {
+                _services.Logger.Warn("session.goal.continue", "读取目标失败：" + exception.Message);
+                return;
+            }
+
+            if (goal == null
+                || goal.Phase != GoalPhase.Active
+                || goal.RoundsStarted >= goal.MaxGoalRounds)
+            {
+                return;
+            }
+
+            int maxContinuations = _options.MaxGoalContinuationRounds;
+            lock (_gate)
+            {
+                if (maxContinuations > 0 && _goalContinuationCount >= maxContinuations)
+                {
+                    return;
+                }
+
+                _goalContinuationCount++;
+            }
+
+            string text = "继续推进目标 " + goal.Id
+                + "（第 " + (goal.RoundsStarted + 1).ToString() + " / " + goal.MaxGoalRounds + " 轮）。"
+                + "完成后用 update_goal 标记 complete；同一阻塞条件持续时用 blocked 并写清原因。";
+
+            var input = new AgentInput
+            {
+                ClientMessageId = NewId("m"),
+                Blocks = new List<AgentContentBlock>
+                {
+                    new AgentContentBlock { Type = "text", Text = text }
+                }
+            };
+
+            var continuation = new PendingInput
+            {
+                Input = input,
+                UserMessage = AgentMessage.CreateUser(input.ClientMessageId, text),
+                CancellationToken = CancellationToken.None,
+                Completion = new TaskCompletionSource<object>()
+            };
+
+            lock (_gate)
+            {
+                // 续跑对模型是一条普通用户消息，必须和 SendAsync 一样先进入内存历史，
+                // 否则下一步的请求装配会缺这一条。
+                _messages.Add(continuation.UserMessage);
+                _lastActivity = Now;
+            }
+
+            try
+            {
+                _inbox.Enqueue(continuation);
+            }
+            catch (InvalidOperationException)
+            {
+                // 会话已关闭，丢弃。
+            }
         }
 
         private WorkspacePathSandbox GetSandbox()
@@ -1416,6 +2023,32 @@ namespace MiaoWu.Core.Agents
             }
         }
 
+        public bool PlanMode
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _planMode;
+                }
+            }
+        }
+
+        public void SetPlanMode(bool active)
+        {
+            lock (_gate)
+            {
+                if (_planMode == active)
+                {
+                    return;
+                }
+
+                _planMode = active;
+            }
+
+            Publish(new PlanModeChangedEvent { Active = active });
+        }
+
         private IReadOnlyList<ToolDefinition> GetToolDefinitions()
         {
             if (!ToolsEnabled || _services.ToolDefinitions == null)
@@ -1425,7 +2058,9 @@ namespace MiaoWu.Core.Agents
 
             try
             {
-                return _services.ToolDefinitions.GetDefinitions() ?? new ToolDefinition[0];
+                IReadOnlyList<ToolDefinition> definitions =
+                    _services.ToolDefinitions.GetDefinitions() ?? new ToolDefinition[0];
+                return PlanModeToolFilter.Filter(definitions, PlanMode);
             }
             catch (Exception exception)
             {
@@ -2099,6 +2734,63 @@ namespace MiaoWu.Core.Agents
             return prefix + "_" + Guid.NewGuid().ToString("N").Substring(0, 16);
         }
 
+        /// <summary>
+        /// 会话工作目录。DSH 把它记进会话日志；MiaoWu 先只保存在内存里（重启回到工作区根），
+        /// 路径仍必须落在工作区内且真实存在。
+        /// </summary>
+        private sealed class SessionWorkingDirectory : ISessionWorkingDirectory
+        {
+            private readonly AgentSession _session;
+
+            public SessionWorkingDirectory(AgentSession session)
+            {
+                _session = session;
+            }
+
+            public string Current
+            {
+                get
+                {
+                    lock (_session._gate)
+                    {
+                        return string.IsNullOrWhiteSpace(_session._workingDirectory)
+                            ? _session._options.WorkspaceRoot
+                            : _session._workingDirectory;
+                    }
+                }
+            }
+
+            public bool TrySet(string absolutePath)
+            {
+                if (string.IsNullOrWhiteSpace(absolutePath))
+                {
+                    return false;
+                }
+
+                WorkspacePathSandbox sandbox = _session.GetSandbox();
+                if (sandbox == null)
+                {
+                    return false;
+                }
+
+                PathSandboxResult resolved = sandbox.Resolve(
+                    absolutePath,
+                    PathAccessKind.Directory,
+                    false);
+                if (!resolved.IsAllowed || !System.IO.Directory.Exists(resolved.NormalizedPath))
+                {
+                    return false;
+                }
+
+                lock (_session._gate)
+                {
+                    _session._workingDirectory = resolved.NormalizedPath;
+                }
+
+                return true;
+            }
+        }
+
         private sealed class PendingInput
         {
             public AgentInput Input;
@@ -2107,6 +2799,9 @@ namespace MiaoWu.Core.Agents
             public CancellationToken CancellationToken;
             public TaskCompletionSource<object> Completion;
             public AgentRun Run;
+
+            /// <summary>插话在入队时已经发布过 MessageStarted，消费时不要重复发布。</summary>
+            public bool MessagePublished;
         }
 
         private sealed class RunTurnResult

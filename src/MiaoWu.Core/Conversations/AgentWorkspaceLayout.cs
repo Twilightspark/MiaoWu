@@ -16,6 +16,7 @@ namespace MiaoWu.Core.Conversations
     /// &lt;workspace&gt;\.agent\
     /// ├─ skills\          # 工作区技能（用户可编辑，可随仓库提交）
     /// ├─ sessions\        # index.json + {sessionId}.jsonl
+    /// ├─ goals\           # {sessionId}.json：会话目标状态
     /// ├─ attachments\     # 会话附件（P3.5）
     /// └─ cache\           # 可随时删除的派生缓存
     /// </code>
@@ -26,6 +27,7 @@ namespace MiaoWu.Core.Conversations
         public const string DirectoryName = ".agent";
         public const string SkillsDirectoryName = "skills";
         public const string SessionsDirectoryName = "sessions";
+        public const string GoalsDirectoryName = "goals";
         public const string AttachmentsDirectoryName = "attachments";
         public const string CacheDirectoryName = "cache";
         public const string IndexFileName = "index.json";
@@ -74,6 +76,27 @@ namespace MiaoWu.Core.Conversations
             return Path.Combine(GetAgentDirectory(workspacePath), AttachmentsDirectoryName);
         }
 
+        public static string GetGoalsDirectory(string workspacePath)
+        {
+            return Path.Combine(GetAgentDirectory(workspacePath), GoalsDirectoryName);
+        }
+
+        /// <summary>
+        /// 会话目标状态文件的完整路径。和会话 JSONL 一样校验 ID，防止路径逃出
+        /// <c>.agent\goals</c>。
+        /// </summary>
+        public static string GetGoalFilePath(string workspacePath, string sessionId)
+        {
+            if (!IsValidSessionId(sessionId))
+            {
+                throw new ArgumentException(
+                    "会话 ID 只能包含字母、数字、下划线与连字符，且长度不超过 64。",
+                    nameof(sessionId));
+            }
+
+            return Path.Combine(GetGoalsDirectory(workspacePath), sessionId + ".json");
+        }
+
         public static string GetCacheDirectory(string workspacePath)
         {
             return Path.Combine(GetAgentDirectory(workspacePath), CacheDirectoryName);
@@ -111,6 +134,7 @@ namespace MiaoWu.Core.Conversations
                 agent,
                 Path.Combine(agent, SkillsDirectoryName),
                 Path.Combine(agent, SessionsDirectoryName),
+                Path.Combine(agent, GoalsDirectoryName),
                 Path.Combine(agent, AttachmentsDirectoryName),
                 Path.Combine(agent, CacheDirectoryName)
             };

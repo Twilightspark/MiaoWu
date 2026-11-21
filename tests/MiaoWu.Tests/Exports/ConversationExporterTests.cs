@@ -37,7 +37,7 @@ namespace MiaoWu.Tests.Exports
                 {
                     Type = "toolCall",
                     ToolCallId = "c1",
-                    ToolName = "read_file",
+                    ToolName = "read",
                     ArgumentsJson = "{\"path\":\"a.txt\"}"
                 });
                 assistant.Blocks.Add(new AgentContentBlock
@@ -54,7 +54,7 @@ namespace MiaoWu.Tests.Exports
                 transcript.Messages.Add(AgentMessage.CreateToolResult(
                     "m3",
                     "c1",
-                    "read_file",
+                    "read",
                     "文件内容",
                     false,
                     true,
@@ -70,7 +70,7 @@ namespace MiaoWu.Tests.Exports
                 string markdown = File.ReadAllText(Path.Combine(folder, "conversation.md"));
                 Assert.Contains("导出测试", markdown);
                 Assert.Contains("回答内容", markdown);
-                Assert.Contains("read_file", markdown);
+                Assert.Contains("read", markdown);
                 Assert.DoesNotContain("sk-abcdefgh12345678", markdown);
 
                 string json = File.ReadAllText(Path.Combine(folder, "conversation.json"));

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Infrastructure.Json;
 
@@ -84,6 +85,23 @@ namespace MiaoWu.Infrastructure.Tools
         public bool Has(string name)
         {
             return _root.ContainsKey(name);
+        }
+
+        /// <summary>读取可选数组参数；缺省返回 null，类型不对抛参数异常。</summary>
+        public IReadOnlyList<JsonValue> GetOptionalArray(string name)
+        {
+            JsonValue value = _root.Get(name);
+            if (value == null || value.IsNull)
+            {
+                return null;
+            }
+
+            if (value.Kind != JsonKind.Array)
+            {
+                throw new ToolArgumentException("invalid_arguments", "参数 " + name + " 必须是数组。");
+            }
+
+            return value.Items;
         }
 
         public string GetRequiredString(string name, int maxLength)
@@ -176,6 +194,52 @@ namespace MiaoWu.Infrastructure.Tools
             return text;
         }
 
+        /// <summary>
+        /// 读取必需的正长整数（例如目标的 revision）。同时接受数字与数字字符串，
+        /// 小于 1、非数字或超出 long 范围都抛参数异常。
+        /// </summary>
+        public long GetRequiredLong(string name)
+        {
+            JsonValue value = _root.Get(name);
+            if (value == null || value.IsNull)
+            {
+                throw new ToolArgumentException(
+                    "missing_argument",
+                    "缺少必需参数 " + name + "。");
+            }
+
+            long number;
+            if (value.Kind == JsonKind.Number)
+            {
+                // NaN / 无穷 / 超出 long 范围都会落到 long.MinValue，随后按非法值拒绝。
+                number = value.AsLong(long.MinValue);
+            }
+            else
+            {
+                string text = value.AsString(null);
+                if (text == null
+                    || !long.TryParse(
+                        text.Trim(),
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out number))
+                {
+                    throw new ToolArgumentException(
+                        "invalid_arguments",
+                        "参数 " + name + " 必须是正整数。");
+                }
+            }
+
+            if (number < 1)
+            {
+                throw new ToolArgumentException(
+                    "invalid_arguments",
+                    "参数 " + name + " 必须是正整数。");
+            }
+
+            return number;
+        }
+
         /// <summary>读取整数并夹到 [min, max]；缺省返回 fallback。</summary>
         public int GetOptionalInt(string name, int fallback, int min, int max)
         {
@@ -239,13 +303,10 @@ namespace MiaoWu.Infrastructure.Tools
     public static class ToolArgumentNames
     {
         public const string Path = "path";
-        public const string Query = "query";
+        public const string Pattern = "pattern";
         public const string Include = "include";
-        public const string Depth = "depth";
         public const string Limit = "limit";
-        public const string MaxResults = "maxResults";
-        public const string StartLine = "startLine";
-        public const string MaxLines = "maxLines";
+        public const string Offset = "offset";
         public const string CaseSensitive = "caseSensitive";
     }
 
@@ -253,12 +314,11 @@ namespace MiaoWu.Infrastructure.Tools
     public static class ToolArgumentDocs
     {
         public const string Path = "path：相对工作区根的路径；省略时为根目录。";
-        public const string Query = "query：要查找的文本，区分大小写由 caseSensitive 控制。";
+        public const string Pattern = "pattern：正则表达式（grep）或文件名模式（glob，支持 **、*、?）。";
         public const string Include = "include：文件名通配符，例如 *.cs；省略时为全部文件。";
-        public const string Limit = "limit：最多返回的条目数。";
-        public const string Depth = "depth：递归层数，1 只列当前目录。";
-        public const string StartLine = "startLine：起始行号，从 1 开始。";
-        public const string MaxLines = "maxLines：最多返回的行数。";
+        public const string Limit = "limit：最多返回的文件数，默认 200。";
+        public const string LimitLines = "limit：最多返回的行数，默认 2000，上限 2000。";
+        public const string Offset = "offset：起始行号，从 1 开始，默认 1。";
     }
 
     /// <summary>中文环境下的工具结果文案；集中在这里便于统一口径。</summary>

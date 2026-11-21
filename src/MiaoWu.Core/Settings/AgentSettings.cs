@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MiaoWu.Core.Agents.Tools;
 
 namespace MiaoWu.Core.Settings
 {
@@ -99,10 +100,12 @@ namespace MiaoWu.Core.Settings
             MaxTurnsPerRun = 24;
             MaxToolCallsPerTurn = 8;
             MaxParallelReadTools = 4;
+            ApprovalPolicy = ToolApprovalPolicy.Ask;
             ToolOutput = new ToolOutputSettings();
             SkillsEnabled = true;
             ContextFilesEnabled = true;
             AutoTitle = true;
+            GoalAutoContinue = false;
             ShowLogOnError = true;
             ProxyMode = "system";
             StartMinimized = false;
@@ -141,6 +144,12 @@ namespace MiaoWu.Core.Settings
 
         public int MaxParallelReadTools { get; set; }
 
+        /// <summary>
+        /// 会话级审批策略：Ask 每个需要审批的动作都询问；Never 从不询问（自动放行）。
+        /// 对齐 DSH 的 approval/policy，风险拦截不受它影响。
+        /// </summary>
+        public ToolApprovalPolicy ApprovalPolicy { get; set; }
+
         public ToolOutputSettings ToolOutput { get; set; }
 
         public bool SkillsEnabled { get; set; }
@@ -150,6 +159,12 @@ namespace MiaoWu.Core.Settings
         public bool ContextFilesEnabled { get; set; }
 
         public bool AutoTitle { get; set; }
+
+        /// <summary>
+        /// 目标自动续跑：为 true 时，一轮正常结束后若会话目标仍是进行中且还有轮次预算，
+        /// 宿主会自动接一轮 continuation。默认关闭——桌面进程不应在用户离开后自行消耗额度。
+        /// </summary>
+        public bool GoalAutoContinue { get; set; }
 
         public bool ShowLogOnError { get; set; }
 
@@ -186,6 +201,7 @@ namespace MiaoWu.Core.Settings
                 MaxTurnsPerRun = MaxTurnsPerRun,
                 MaxToolCallsPerTurn = MaxToolCallsPerTurn,
                 MaxParallelReadTools = MaxParallelReadTools,
+                ApprovalPolicy = ApprovalPolicy,
                 ToolOutput = ToolOutput == null
                     ? new ToolOutputSettings()
                     : new ToolOutputSettings
@@ -198,6 +214,7 @@ namespace MiaoWu.Core.Settings
                 SkillPaths = SkillPaths == null ? null : new List<string>(SkillPaths),
                 ContextFilesEnabled = ContextFilesEnabled,
                 AutoTitle = AutoTitle,
+                GoalAutoContinue = GoalAutoContinue,
                 ShowLogOnError = ShowLogOnError,
                 OnboardingCompleted = OnboardingCompleted,
                 ProxyMode = ProxyMode,
@@ -232,6 +249,10 @@ namespace MiaoWu.Core.Settings
             value.MaxTurnsPerRun = Clamp(value.MaxTurnsPerRun, 1, 60, 24);
             value.MaxToolCallsPerTurn = Clamp(value.MaxToolCallsPerTurn, 1, 16, 8);
             value.MaxParallelReadTools = Clamp(value.MaxParallelReadTools, 1, 8, 4);
+            if (!Enum.IsDefined(typeof(ToolApprovalPolicy), value.ApprovalPolicy))
+            {
+                value.ApprovalPolicy = ToolApprovalPolicy.Ask;
+            }
 
             if (value.ToolOutput == null)
             {

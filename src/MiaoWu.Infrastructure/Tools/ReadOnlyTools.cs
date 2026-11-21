@@ -13,318 +13,18 @@ using MiaoWu.Core.Text;
 namespace MiaoWu.Infrastructure.Tools
 {
     /// <summary>
-    /// list_dir：列出工作区目录。只读、自动放行；结果标记为不可信内容。
+    /// read：按行范围读取文本文件。参数 offset（1 基）与 limit（默认 2000，上限 2000）。
+    /// 拒绝二进制、超过 2 MB 的文件与工作区外路径。
     /// </summary>
-    public sealed class ListDirectoryTool : IAgentTool
+    public sealed class ReadTool : IAgentTool
     {
         private const int MaxPathLength = 400;
-        private const int MaxEntries = 1000;
+        private const int DefaultLineLimit = 2000;
+        private const int MaxLineLimit = 2000;
 
         public string Name
         {
-            get { return ToolNames.ListDirectory; }
-        }
-
-        public string Description
-        {
-            get
-            {
-                return "列出工作区内的目录。参数："
-                    + ToolArgumentDocs.Path
-                    + ToolArgumentDocs.Depth
-                    + ToolArgumentDocs.Limit
-                    + " 返回每行的类型（d 目录 / f 文件 / l 重解析点）、相对路径与大小。";
-            }
-        }
-
-        public ToolRisk Risk
-        {
-            get { return ToolRisk.Low; }
-        }
-
-        public bool RequiresApproval
-        {
-            get { return false; }
-        }
-
-        public ToolApprovalPreview Describe(ToolCall call, ToolContext context)
-        {
-            return null;
-        }
-
-        public async Task<ToolResult> ExecuteAsync(
-            ToolCall call,
-            ToolContext context,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                return await Task.Run(
-                    () => ExecuteCore(call, context, cancellationToken),
-                    CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return ToolResult.Failure(
-                    call,
-                    ToolResultStatus.Cancelled,
-                    "cancelled",
-                    "操作已取消。");
-            }
-        }
-
-        private static ToolResult ExecuteCore(
-            ToolCall call,
-            ToolContext context,
-            CancellationToken cancellationToken)
-        {
-            ToolArguments arguments;
-            try
-            {
-                arguments = ToolArguments.Parse(call.ArgumentsJson);
-            }
-            catch (ToolArgumentException exception)
-            {
-                return ToolResultFactory.InvalidArguments(call, exception);
-            }
-
-            string requestedPath;
-            int depth;
-            int limit;
-            try
-            {
-                requestedPath = arguments.GetOptionalString(
-                    ToolArgumentNames.Path,
-                    ".",
-                    MaxPathLength);
-                depth = arguments.GetOptionalInt(ToolArgumentNames.Depth, 1, 1, 3);
-                limit = arguments.GetOptionalInt(ToolArgumentNames.Limit, 200, 1, MaxEntries);
-            }
-            catch (ToolArgumentException exception)
-            {
-                return ToolResultFactory.InvalidArguments(call, exception);
-            }
-
-            PathSandboxResult resolved = context.Sandbox.Resolve(
-                requestedPath,
-                PathAccessKind.Directory);
-            if (!resolved.IsAllowed)
-            {
-                return ToolResultFactory.PathFailure(call, resolved);
-            }
-
-            var entries = new List<DirectoryEntry>();
-            bool truncated = false;
-            Collect(
-                resolved.NormalizedPath,
-                resolved.RelativePath,
-                depth,
-                limit,
-                entries,
-                ref truncated,
-                cancellationToken);
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var builder = new StringBuilder();
-            string display = ToolText.ToDisplayPath(resolved.RelativePath);
-            builder.Append("目录：").Append(display)
-                .Append("（递归 ").Append(depth.ToString(CultureInfo.InvariantCulture)).Append(" 层，")
-                .Append(entries.Count.ToString(CultureInfo.InvariantCulture)).Append(" 项")
-                .Append(truncated ? "，已截断" : string.Empty)
-                .Append("）\n");
-
-            if (entries.Count == 0)
-            {
-                builder.Append("（空目录）\n");
-            }
-            else
-            {
-                for (int i = 0; i < entries.Count; i++)
-                {
-                    DirectoryEntry entry = entries[i];
-                    switch (entry.Kind)
-                    {
-                        case 'd':
-                            builder.Append("d  ").Append(ToolText.ToDisplayPath(entry.RelativePath)).Append("/\n");
-                            break;
-                        case 'l':
-                            builder.Append("l  ").Append(ToolText.ToDisplayPath(entry.RelativePath))
-                                .Append("  -> 重解析点（不跟随）\n");
-                            break;
-                        default:
-                            builder.Append("f  ").Append(ToolText.ToDisplayPath(entry.RelativePath))
-                                .Append("  ").Append(FileSizeFormatter.Format(entry.Size))
-                                .Append('\n');
-                            break;
-                    }
-                }
-            }
-
-            if (truncated)
-            {
-                builder.Append("… 结果超过 limit，已截断。\n");
-            }
-
-            return ToolResult.Success(
-                call,
-                builder.ToString(),
-                display + " · " + entries.Count.ToString(CultureInfo.InvariantCulture) + " 项",
-                true,
-                truncated);
-        }
-
-        private static void Collect(
-            string fullDirectory,
-            string relativeDirectory,
-            int depth,
-            int limit,
-            List<DirectoryEntry> entries,
-            ref bool truncated,
-            CancellationToken cancellationToken)
-        {
-            if (entries.Count >= limit)
-            {
-                truncated = true;
-                return;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string[] children;
-            try
-            {
-                children = Directory.GetFileSystemEntries(fullDirectory);
-            }
-            catch (Exception exception) when (
-                exception is IOException
-                || exception is UnauthorizedAccessException
-                || exception is DirectoryNotFoundException)
-            {
-                return;
-            }
-
-            var batch = new List<DirectoryEntry>(children.Length);
-            for (int i = 0; i < children.Length; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                string child = children[i];
-                string name = Path.GetFileName(child);
-                FileAttributes attributes;
-                try
-                {
-                    attributes = File.GetAttributes(child);
-                }
-                catch (Exception exception) when (
-                    exception is IOException || exception is UnauthorizedAccessException)
-                {
-                    continue;
-                }
-
-                var entry = new DirectoryEntry
-                {
-                    FullPath = child,
-                    RelativePath = CombineRelative(relativeDirectory, name)
-                };
-
-                if ((attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
-                {
-                    entry.Kind = 'l';
-                }
-                else if ((attributes & FileAttributes.Directory) == FileAttributes.Directory)
-                {
-                    entry.Kind = 'd';
-                }
-                else
-                {
-                    entry.Kind = 'f';
-                    try
-                    {
-                        entry.Size = new FileInfo(child).Length;
-                    }
-                    catch (Exception exception) when (
-                        exception is IOException || exception is UnauthorizedAccessException)
-                    {
-                        entry.Size = 0;
-                    }
-                }
-
-                batch.Add(entry);
-            }
-
-            batch.Sort(CompareEntries);
-
-            for (int i = 0; i < batch.Count; i++)
-            {
-                if (entries.Count >= limit)
-                {
-                    truncated = true;
-                    return;
-                }
-
-                entries.Add(batch[i]);
-
-                if (batch[i].Kind == 'd' && depth > 1)
-                {
-                    Collect(
-                        batch[i].FullPath,
-                        batch[i].RelativePath,
-                        depth - 1,
-                        limit,
-                        entries,
-                        ref truncated,
-                        cancellationToken);
-                }
-            }
-        }
-
-        private static int CompareEntries(DirectoryEntry left, DirectoryEntry right)
-        {
-            bool leftDirectory = left.Kind == 'd';
-            bool rightDirectory = right.Kind == 'd';
-            if (leftDirectory != rightDirectory)
-            {
-                return leftDirectory ? -1 : 1;
-            }
-
-            return string.Compare(
-                left.RelativePath,
-                right.RelativePath,
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string CombineRelative(string parent, string name)
-        {
-            if (string.IsNullOrEmpty(parent))
-            {
-                return name;
-            }
-
-            return parent + "\\" + name;
-        }
-
-        private sealed class DirectoryEntry
-        {
-            public string FullPath;
-            public string RelativePath;
-            public char Kind;
-            public long Size;
-        }
-    }
-
-    /// <summary>
-    /// read_file：按行范围读取文本文件。拒绝二进制、超过 2 MB 的文件与工作区外路径。
-    /// </summary>
-    public sealed class ReadFileTool : IAgentTool
-    {
-        private const int MaxPathLength = 400;
-        private const int DefaultMaxLines = 200;
-        private const int HardMaxLines = 2000;
-
-        public string Name
-        {
-            get { return ToolNames.ReadFile; }
+            get { return ToolNames.Read; }
         }
 
         public string Description
@@ -333,8 +33,8 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 return "读取工作区内的文本文件。参数："
                     + ToolArgumentDocs.Path
-                    + ToolArgumentDocs.StartLine
-                    + ToolArgumentDocs.MaxLines
+                    + ToolArgumentDocs.Offset
+                    + ToolArgumentDocs.LimitLines
                     + " 输出带行号的文本；二进制与超过 2 MB 的文件会被拒绝。";
             }
         }
@@ -391,17 +91,17 @@ namespace MiaoWu.Infrastructure.Tools
             }
 
             string requestedPath;
-            int startLine;
-            int maxLines;
+            int offset;
+            int limit;
             try
             {
                 requestedPath = arguments.GetRequiredString(ToolArgumentNames.Path, MaxPathLength);
-                startLine = arguments.GetOptionalInt(ToolArgumentNames.StartLine, 1, 1, int.MaxValue);
-                maxLines = arguments.GetOptionalInt(
-                    ToolArgumentNames.MaxLines,
-                    DefaultMaxLines,
+                offset = arguments.GetOptionalInt(ToolArgumentNames.Offset, 1, 1, int.MaxValue);
+                limit = arguments.GetOptionalInt(
+                    ToolArgumentNames.Limit,
+                    DefaultLineLimit,
                     1,
-                    HardMaxLines);
+                    MaxLineLimit);
             }
             catch (ToolArgumentException exception)
             {
@@ -437,7 +137,7 @@ namespace MiaoWu.Infrastructure.Tools
                     call,
                     ToolResultStatus.Failed,
                     "file_too_large",
-                    "文件超过 2 MB，read_file 不读取大文件。请改用 search_files 或指定更小的目标。");
+                    "文件超过 2 MB，read 不读取大文件。请改用 grep 或指定更小的目标。");
             }
 
             byte[] bytes;
@@ -450,16 +150,16 @@ namespace MiaoWu.Infrastructure.Tools
                     FileShare.ReadWrite | FileShare.Delete))
                 {
                     bytes = new byte[(int)length];
-                    int offset = 0;
-                    while (offset < bytes.Length)
+                    int readOffset = 0;
+                    while (readOffset < bytes.Length)
                     {
-                        int read = stream.Read(bytes, offset, bytes.Length - offset);
+                        int read = stream.Read(bytes, readOffset, bytes.Length - readOffset);
                         if (read <= 0)
                         {
                             break;
                         }
 
-                        offset += read;
+                        readOffset += read;
                     }
                 }
             }
@@ -479,7 +179,7 @@ namespace MiaoWu.Infrastructure.Tools
                     call,
                     ToolResultStatus.Failed,
                     "binary_file",
-                    "文件包含二进制内容，read_file 只读取文本。");
+                    "文件包含二进制内容，read 只读取文本。");
             }
 
             TextEncodingDetection detection = TextEncodingDetector.Detect(bytes);
@@ -500,18 +200,18 @@ namespace MiaoWu.Infrastructure.Tools
                     false);
             }
 
-            if (startLine > lines.Count)
+            if (offset > lines.Count)
             {
                 return ToolResult.Success(
                     call,
                     "文件：" + display + " 只有 " + lines.Count.ToString(CultureInfo.InvariantCulture)
-                        + " 行，startLine=" + startLine.ToString(CultureInfo.InvariantCulture) + " 超出范围。\n",
+                        + " 行，offset=" + offset.ToString(CultureInfo.InvariantCulture) + " 超出范围。\n",
                     display + " · 行号超出范围",
                     true,
                     false);
             }
 
-            int endLine = startLine + maxLines - 1;
+            int endLine = offset + limit - 1;
             if (endLine > lines.Count)
             {
                 endLine = lines.Count;
@@ -520,11 +220,11 @@ namespace MiaoWu.Infrastructure.Tools
             var builder = new StringBuilder();
             builder.Append("文件：").Append(display)
                 .Append("（共 ").Append(lines.Count.ToString(CultureInfo.InvariantCulture)).Append(" 行，显示 ")
-                .Append(startLine.ToString(CultureInfo.InvariantCulture)).Append('-')
+                .Append(offset.ToString(CultureInfo.InvariantCulture)).Append('-')
                 .Append(endLine.ToString(CultureInfo.InvariantCulture)).Append(" 行，")
                 .Append(detection.DisplayName).Append("）\n");
 
-            for (int i = startLine - 1; i < endLine; i++)
+            for (int i = offset - 1; i < endLine; i++)
             {
                 builder.Append((i + 1).ToString(CultureInfo.InvariantCulture).PadLeft(5))
                     .Append(" | ")
@@ -537,13 +237,13 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 builder.Append("…（还有 ")
                     .Append((lines.Count - endLine).ToString(CultureInfo.InvariantCulture))
-                    .Append(" 行未显示，可用 startLine 继续）\n");
+                    .Append(" 行未显示，可用 offset 继续）\n");
             }
 
             return ToolResult.Success(
                 call,
                 builder.ToString(),
-                display + " · " + startLine.ToString(CultureInfo.InvariantCulture)
+                display + " · " + offset.ToString(CultureInfo.InvariantCulture)
                     + "-" + endLine.ToString(CultureInfo.InvariantCulture)
                     + "/" + lines.Count.ToString(CultureInfo.InvariantCulture) + " 行",
                 true,
@@ -552,17 +252,18 @@ namespace MiaoWu.Infrastructure.Tools
     }
 
     /// <summary>
-    /// search_files：在工作区内按子串搜索文本文件。跳过构建目录与二进制文件，
-    /// 有文件数、单文件大小与总耗时上限。
+    /// grep：在工作区内按正则搜索文本文件。跳过构建目录与二进制文件，
+    /// 有文件数、单文件大小与总耗时上限；非法正则按参数错误返回。
     /// </summary>
-    public sealed class SearchFilesTool : IAgentTool
+    public sealed class GrepTool : IAgentTool
     {
         private const int MaxPathLength = 400;
-        private const int MaxQueryLength = 200;
+        private const int MaxPatternLength = 400;
         private const int MaxFiles = 5000;
         private const int MaxFileBytes = 1024 * 1024;
         private const int MaxResultsLimit = 200;
         private const int ScanBudgetMilliseconds = 5000;
+        private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
 
         private static readonly HashSet<string> ExcludedDirectories =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -579,15 +280,15 @@ namespace MiaoWu.Infrastructure.Tools
 
         public string Name
         {
-            get { return ToolNames.SearchFiles; }
+            get { return ToolNames.Grep; }
         }
 
         public string Description
         {
             get
             {
-                return "在工作区内搜索文本。参数："
-                    + ToolArgumentDocs.Query
+                return "在工作区内按正则搜索文本。参数："
+                    + ToolArgumentDocs.Pattern
                     + ToolArgumentDocs.Path
                     + ToolArgumentDocs.Include
                     + "caseSensitive（可选，默认 false）。返回 文件:行号: 行内容，最多 200 条。";
@@ -645,18 +346,18 @@ namespace MiaoWu.Infrastructure.Tools
                 return ToolResultFactory.InvalidArguments(call, exception);
             }
 
-            string query;
+            string pattern;
             string requestedPath;
             string include;
-            int maxResults;
+            int limit;
             bool caseSensitive;
             try
             {
-                query = arguments.GetRequiredString(ToolArgumentNames.Query, MaxQueryLength);
+                pattern = arguments.GetRequiredString(ToolArgumentNames.Pattern, MaxPatternLength);
                 requestedPath = arguments.GetOptionalString(ToolArgumentNames.Path, ".", MaxPathLength);
                 include = arguments.GetOptionalString(ToolArgumentNames.Include, "*", 200);
-                maxResults = arguments.GetOptionalInt(
-                    ToolArgumentNames.MaxResults,
+                limit = arguments.GetOptionalInt(
+                    ToolArgumentNames.Limit,
                     50,
                     1,
                     MaxResultsLimit);
@@ -667,6 +368,25 @@ namespace MiaoWu.Infrastructure.Tools
                 return ToolResultFactory.InvalidArguments(call, exception);
             }
 
+            Regex regex;
+            try
+            {
+                RegexOptions options = RegexOptions.CultureInvariant;
+                if (!caseSensitive)
+                {
+                    options |= RegexOptions.IgnoreCase;
+                }
+
+                regex = new Regex(pattern, options, MatchTimeout);
+            }
+            catch (ArgumentException)
+            {
+                return ToolResultFactory.InvalidArguments(
+                    call,
+                    "invalid_pattern",
+                    "pattern 不是合法的正则表达式：" + ToolText.ShortenLine(pattern, 120));
+            }
+
             PathSandboxResult resolved = context.Sandbox.Resolve(
                 requestedPath,
                 PathAccessKind.Directory);
@@ -675,17 +395,14 @@ namespace MiaoWu.Infrastructure.Tools
                 return ToolResultFactory.PathFailure(call, resolved);
             }
 
-            StringComparison comparison = caseSensitive
-                ? StringComparison.Ordinal
-                : StringComparison.OrdinalIgnoreCase;
-
-            var results = new List<string>(maxResults);
+            var results = new List<string>(limit);
             var stopwatch = Stopwatch.StartNew();
             int scannedFiles = 0;
             int skippedBinary = 0;
             int unreadable = 0;
             bool truncated = false;
             bool budgetExceeded = false;
+            bool matchTimedOut = false;
 
             var pending = new Stack<string>();
             pending.Push(resolved.NormalizedPath);
@@ -722,7 +439,7 @@ namespace MiaoWu.Infrastructure.Tools
                         break;
                     }
 
-                    if (results.Count >= maxResults)
+                    if (results.Count >= limit)
                     {
                         truncated = true;
                         break;
@@ -821,13 +538,24 @@ namespace MiaoWu.Infrastructure.Tools
 
                     for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
                     {
-                        if (results.Count >= maxResults)
+                        if (results.Count >= limit)
                         {
                             truncated = true;
                             break;
                         }
 
-                        if (lines[lineIndex].IndexOf(query, comparison) >= 0)
+                        bool matched;
+                        try
+                        {
+                            matched = regex.IsMatch(lines[lineIndex]);
+                        }
+                        catch (RegexMatchTimeoutException)
+                        {
+                            matchTimedOut = true;
+                            break;
+                        }
+
+                        if (matched)
                         {
                             results.Add(display
                                 + ":" + (lineIndex + 1).ToString(CultureInfo.InvariantCulture)
@@ -835,13 +563,13 @@ namespace MiaoWu.Infrastructure.Tools
                         }
                     }
 
-                    if (truncated)
+                    if (truncated || matchTimedOut)
                     {
                         break;
                     }
                 }
 
-                if (truncated)
+                if (truncated || matchTimedOut)
                 {
                     break;
                 }
@@ -855,7 +583,7 @@ namespace MiaoWu.Infrastructure.Tools
             stopwatch.Stop();
 
             var builder = new StringBuilder();
-            builder.Append("搜索：\"").Append(query).Append("\" · ")
+            builder.Append("搜索：/").Append(pattern).Append("/ · ")
                 .Append(ToolText.ToDisplayPath(resolved.RelativePath))
                 .Append(" · ").Append(results.Count.ToString(CultureInfo.InvariantCulture))
                 .Append(" 处（扫描 ").Append(scannedFiles.ToString(CultureInfo.InvariantCulture))
@@ -875,12 +603,17 @@ namespace MiaoWu.Infrastructure.Tools
 
             if (truncated)
             {
-                builder.Append("… 结果已截断（达到 maxResults 或扫描上限）。\n");
+                builder.Append("… 结果已截断（达到 limit 或扫描上限）。\n");
             }
 
             if (budgetExceeded)
             {
                 builder.Append("… 搜索超过 5 秒预算，已返回部分结果。\n");
+            }
+
+            if (matchTimedOut)
+            {
+                builder.Append("… 正则匹配超过 2 秒，已停止；请简化 pattern。\n");
             }
 
             if (skippedBinary > 0)
@@ -895,11 +628,11 @@ namespace MiaoWu.Infrastructure.Tools
                     .Append(" 个文件无法读取）\n");
             }
 
-            bool wasTruncated = truncated || budgetExceeded;
+            bool wasTruncated = truncated || budgetExceeded || matchTimedOut;
             return ToolResult.Success(
                 call,
                 builder.ToString(),
-                "\"" + query + "\" · " + results.Count.ToString(CultureInfo.InvariantCulture) + " 处",
+                "/" + pattern + "/ · " + results.Count.ToString(CultureInfo.InvariantCulture) + " 处",
                 true,
                 wasTruncated);
         }
@@ -942,7 +675,7 @@ namespace MiaoWu.Infrastructure.Tools
                     continue;
                 }
 
-                if (GetPattern(pattern).IsMatch(fileName))
+                if (GetIncludeRegex(pattern).IsMatch(fileName))
                 {
                     return true;
                 }
@@ -951,7 +684,7 @@ namespace MiaoWu.Infrastructure.Tools
             return false;
         }
 
-        private static Regex GetPattern(string pattern)
+        private static Regex GetIncludeRegex(string pattern)
         {
             string escaped = Regex.Escape(pattern)
                 .Replace("\\*", ".*")
@@ -959,6 +692,354 @@ namespace MiaoWu.Infrastructure.Tools
             return new Regex(
                 "^" + escaped + "$",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+    }
+
+    /// <summary>
+    /// glob：按文件名模式查找工作区文件，支持 <c>**</c>、<c>*</c>、<c>?</c>。
+    /// 跳过 .git、bin、obj、node_modules、.agent；返回排序后的相对路径，limit 默认 200。
+    /// </summary>
+    public sealed class GlobTool : IAgentTool
+    {
+        private const int MaxPathLength = 400;
+        private const int MaxPatternLength = 400;
+        private const int DefaultLimit = 200;
+        private const int MaxLimit = 2000;
+        private const int MaxMatches = 20000;
+        private const int ScanBudgetMilliseconds = 5000;
+        private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);
+
+        private static readonly HashSet<string> ExcludedDirectories =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".git", "bin", "obj", "node_modules", ".agent"
+            };
+
+        public string Name
+        {
+            get { return ToolNames.Glob; }
+        }
+
+        public string Description
+        {
+            get
+            {
+                return "按文件名模式查找工作区文件。参数："
+                    + ToolArgumentDocs.Pattern
+                    + ToolArgumentDocs.Path
+                    + ToolArgumentDocs.Limit
+                    + " 支持 **（任意层目录）、*（段内任意字符）、?（单个字符）；"
+                    + "返回按路径排序的相对路径。";
+            }
+        }
+
+        public ToolRisk Risk
+        {
+            get { return ToolRisk.Low; }
+        }
+
+        public bool RequiresApproval
+        {
+            get { return false; }
+        }
+
+        public ToolApprovalPreview Describe(ToolCall call, ToolContext context)
+        {
+            return null;
+        }
+
+        public async Task<ToolResult> ExecuteAsync(
+            ToolCall call,
+            ToolContext context,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await Task.Run(
+                    () => ExecuteCore(call, context, cancellationToken),
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return ToolResult.Failure(
+                    call,
+                    ToolResultStatus.Cancelled,
+                    "cancelled",
+                    "操作已取消。");
+            }
+        }
+
+        private static ToolResult ExecuteCore(
+            ToolCall call,
+            ToolContext context,
+            CancellationToken cancellationToken)
+        {
+            ToolArguments arguments;
+            try
+            {
+                arguments = ToolArguments.Parse(call.ArgumentsJson);
+            }
+            catch (ToolArgumentException exception)
+            {
+                return ToolResultFactory.InvalidArguments(call, exception);
+            }
+
+            string pattern;
+            string requestedPath;
+            int limit;
+            try
+            {
+                pattern = arguments.GetRequiredString(ToolArgumentNames.Pattern, MaxPatternLength);
+                requestedPath = arguments.GetOptionalString(ToolArgumentNames.Path, ".", MaxPathLength);
+                limit = arguments.GetOptionalInt(
+                    ToolArgumentNames.Limit,
+                    DefaultLimit,
+                    1,
+                    MaxLimit);
+            }
+            catch (ToolArgumentException exception)
+            {
+                return ToolResultFactory.InvalidArguments(call, exception);
+            }
+
+            PathSandboxResult resolved = context.Sandbox.Resolve(
+                requestedPath,
+                PathAccessKind.Directory);
+            if (!resolved.IsAllowed)
+            {
+                return ToolResultFactory.PathFailure(call, resolved);
+            }
+
+            GlobPattern compiled;
+            try
+            {
+                compiled = GlobPattern.Compile(pattern);
+            }
+            catch (ArgumentException)
+            {
+                return ToolResultFactory.InvalidArguments(
+                    call,
+                    "invalid_pattern",
+                    "pattern 不合法：" + ToolText.ShortenLine(pattern, 120));
+            }
+
+            var matches = new List<string>();
+            var stopwatch = Stopwatch.StartNew();
+            bool budgetExceeded = false;
+            bool scanLimitReached = false;
+            int scannedFiles = 0;
+
+            var pending = new Stack<string>();
+            pending.Push(resolved.NormalizedPath);
+
+            while (pending.Count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (stopwatch.ElapsedMilliseconds > ScanBudgetMilliseconds)
+                {
+                    budgetExceeded = true;
+                    break;
+                }
+
+                string directory = pending.Pop();
+                string[] children;
+                try
+                {
+                    children = Directory.GetFileSystemEntries(directory);
+                }
+                catch (Exception exception) when (
+                    exception is IOException || exception is UnauthorizedAccessException)
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < children.Length; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    string child = children[i];
+                    string name = Path.GetFileName(child);
+
+                    FileAttributes attributes;
+                    try
+                    {
+                        attributes = File.GetAttributes(child);
+                    }
+                    catch (Exception exception) when (
+                        exception is IOException || exception is UnauthorizedAccessException)
+                    {
+                        continue;
+                    }
+
+                    if ((attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
+                    {
+                        continue;
+                    }
+
+                    if ((attributes & FileAttributes.Directory) == FileAttributes.Directory)
+                    {
+                        if (!ExcludedDirectories.Contains(name))
+                        {
+                            pending.Push(child);
+                        }
+
+                        continue;
+                    }
+
+                    scannedFiles++;
+                    if (scannedFiles > MaxMatches)
+                    {
+                        scanLimitReached = true;
+                        break;
+                    }
+
+                    string relative = context.Sandbox.ToRelativePath(child);
+                    if (relative == null)
+                    {
+                        continue;
+                    }
+
+                    if (compiled.IsMatch(relative, name))
+                    {
+                        matches.Add(ToolText.ToDisplayPath(relative));
+                        if (matches.Count >= MaxMatches)
+                        {
+                            scanLimitReached = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (scanLimitReached)
+                {
+                    break;
+                }
+            }
+
+            stopwatch.Stop();
+
+            matches.Sort(StringComparer.OrdinalIgnoreCase);
+            bool truncated = matches.Count > limit || scanLimitReached || budgetExceeded;
+            if (matches.Count > limit)
+            {
+                matches.RemoveRange(limit, matches.Count - limit);
+            }
+
+            var builder = new StringBuilder();
+            builder.Append("匹配：").Append(pattern)
+                .Append(" · ").Append(ToolText.ToDisplayPath(resolved.RelativePath))
+                .Append(" · ").Append(matches.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(" 个文件").Append(truncated ? "（已截断）" : string.Empty)
+                .Append('\n');
+
+            if (matches.Count == 0)
+            {
+                builder.Append("没有匹配的文件。\n");
+            }
+            else
+            {
+                for (int i = 0; i < matches.Count; i++)
+                {
+                    builder.Append(matches[i]).Append('\n');
+                }
+            }
+
+            if (budgetExceeded)
+            {
+                builder.Append("… 遍历超过 5 秒预算，已返回部分结果。\n");
+            }
+
+            return ToolResult.Success(
+                call,
+                builder.ToString(),
+                pattern + " · " + matches.Count.ToString(CultureInfo.InvariantCulture) + " 个文件",
+                true,
+                truncated);
+        }
+
+        /// <summary>
+        /// 编译后的 glob。不含路径分隔符的模式只匹配文件名；含分隔符的模式逐段匹配相对路径，
+        /// <c>**</c> 匹配零到多段。
+        /// </summary>
+        private sealed class GlobPattern
+        {
+            private readonly Regex[] _segments;
+            private readonly bool _fileNameOnly;
+
+            private GlobPattern(Regex[] segments, bool fileNameOnly)
+            {
+                _segments = segments;
+                _fileNameOnly = fileNameOnly;
+            }
+
+            public static GlobPattern Compile(string pattern)
+            {
+                string normalized = (pattern ?? string.Empty).Trim().Replace('\\', '/');
+                if (normalized.Length == 0)
+                {
+                    throw new ArgumentException("pattern 不能为空。");
+                }
+
+                bool fileNameOnly = normalized.IndexOf('/') < 0;
+                string[] parts = normalized.Split('/');
+                var segments = new Regex[parts.Length];
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    string part = parts[i];
+                    if (part == "**")
+                    {
+                        segments[i] = null;
+                        continue;
+                    }
+
+                    string expression = Regex.Escape(part)
+                        .Replace("\\*", "[^/]*")
+                        .Replace("\\?", "[^/]");
+                    segments[i] = new Regex(
+                        "^" + expression + "$",
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                        MatchTimeout);
+                }
+
+                return new GlobPattern(segments, fileNameOnly);
+            }
+
+            public bool IsMatch(string relativePath, string fileName)
+            {
+                if (_fileNameOnly)
+                {
+                    return _segments.Length == 1 && _segments[0] != null && _segments[0].IsMatch(fileName);
+                }
+
+                string[] pathParts = relativePath
+                    .Replace('\\', '/')
+                    .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                return Match(0, pathParts, 0);
+            }
+
+            private bool Match(int patternIndex, string[] pathParts, int pathIndex)
+            {
+                if (patternIndex == _segments.Length)
+                {
+                    return pathIndex == pathParts.Length;
+                }
+
+                Regex segment = _segments[patternIndex];
+                if (segment == null)
+                {
+                    if (Match(patternIndex + 1, pathParts, pathIndex))
+                    {
+                        return true;
+                    }
+
+                    return pathIndex < pathParts.Length && Match(patternIndex, pathParts, pathIndex + 1);
+                }
+
+                return pathIndex < pathParts.Length
+                    && segment.IsMatch(pathParts[pathIndex])
+                    && Match(patternIndex + 1, pathParts, pathIndex + 1);
+            }
         }
     }
 }

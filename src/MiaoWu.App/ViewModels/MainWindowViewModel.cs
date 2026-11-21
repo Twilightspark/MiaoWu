@@ -217,6 +217,7 @@ namespace MiaoWu.App.ViewModels
                 Left.NewSessionRequested += (sender, args) => RequestNewSession();
                 services.Runtime.SessionChanged += OnRuntimeSessionChanged;
                 services.Approvals.Changed += OnApprovalChanged;
+                services.Questions.Changed += OnQuestionChanged;
 
                 _refreshTimer = new DispatcherTimer(DispatcherPriority.Background)
                 {
@@ -724,6 +725,7 @@ namespace MiaoWu.App.ViewModels
             {
                 _services.Runtime.SessionChanged -= OnRuntimeSessionChanged;
                 _services.Approvals.Changed -= OnApprovalChanged;
+                _services.Questions.Changed -= OnQuestionChanged;
             }
 
             if (Conversation != null)
@@ -1242,6 +1244,78 @@ namespace MiaoWu.App.ViewModels
             HasPendingApproval = _services.Approvals.GetPendingCount() > 0;
         }
 
+        /// <summary>
+        /// 提问与审批共用右下角通知栈：提问是选择题，必须选一个选项或跳过；
+        /// 通知本身承担答复入口，消息流里只留工具结果。
+        /// </summary>
+        private void OnQuestionChanged(object sender, UserQuestionEventArgs args)
+        {
+            if (args == null || args.Request == null)
+            {
+                return;
+            }
+
+            if (!Application.Current.Dispatcher.CheckAccess())
+            {
+                Application.Current.Dispatcher.BeginInvoke(
+                    new Action(() => OnQuestionChanged(sender, args)));
+                return;
+            }
+
+            UserQuestionRequest request = args.Request;
+            if (args.Kind == UserQuestionChangeKind.Requested)
+            {
+                AddNotification(NotificationViewModel.CreateQuestion(
+                    request,
+                    RemoveNotification,
+                    AnswerQuestion,
+                    SkipQuestion,
+                    AnswerQuestionText));
+                return;
+            }
+
+            for (int i = Notifications.Count - 1; i >= 0; i--)
+            {
+                NotificationViewModel notification = Notifications[i];
+                if (notification.IsQuestion
+                    && string.Equals(notification.RequestId, request.RequestId, StringComparison.Ordinal))
+                {
+                    RemoveNotification(notification);
+                }
+            }
+        }
+
+        private void AnswerQuestion(string requestId, IReadOnlyList<string> optionIds)
+        {
+            if (_services == null)
+            {
+                return;
+            }
+
+            _services.Questions.TryAnswer(requestId, optionIds);
+        }
+
+        private void SkipQuestion(string requestId)
+        {
+            if (_services == null)
+            {
+                return;
+            }
+
+            _services.Questions.TryCancel(requestId);
+        }
+
+        /// <summary>自由文本回答；服务端会再次校验“是否允许自由文本”。</summary>
+        private void AnswerQuestionText(string requestId, string text)
+        {
+            if (_services == null)
+            {
+                return;
+            }
+
+            _services.Questions.TryAnswerText(requestId, text);
+        }
+
         /// <summary>审批标题带上风险级别：通知是审批的唯一入口，风险要和动作放在一起。</summary>
         private static string BuildApprovalTitle(ToolApprovalRequest request)
         {
@@ -1268,7 +1342,8 @@ namespace MiaoWu.App.ViewModels
                 NotificationViewModel oldest = null;
                 foreach (NotificationViewModel item in Notifications)
                 {
-                    if (!item.IsApproval)
+                    // 审批与提问都必须显式处理，不能因为栈满被挤掉；只淘汰会自动消失的普通通知。
+                    if (item.IsNotice)
                     {
                         oldest = item;
                         break;

@@ -47,67 +47,14 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void ListDirectoryListsDirectoriesBeforeFiles()
-        {
-            Directory.CreateDirectory(Path.Combine(_workspace, "src"));
-            File.WriteAllText(Path.Combine(_workspace, "README.md"), "hello");
-            File.WriteAllText(Path.Combine(_workspace, "a.txt"), "hello");
-
-            ToolResult result = Run(new ListDirectoryTool(), "{}");
-
-            Assert.True(result.IsSuccess, result.Content);
-            int dirIndex = result.Content.IndexOf("d  src/", StringComparison.Ordinal);
-            int fileIndex = result.Content.IndexOf("f  README.md", StringComparison.Ordinal);
-            Assert.True(dirIndex >= 0, result.Content);
-            Assert.True(fileIndex > dirIndex, result.Content);
-            Assert.True(result.IsUntrusted);
-        }
-
-        [Fact]
-        public void ListDirectoryHonorsDepth()
-        {
-            Directory.CreateDirectory(Path.Combine(_workspace, "src", "nested"));
-            File.WriteAllText(Path.Combine(_workspace, "src", "nested", "app.cs"), "class A {}");
-
-            ToolResult shallow = Run(new ListDirectoryTool(), "{\"depth\":1}");
-            Assert.DoesNotContain("nested/app.cs", shallow.Content);
-
-            ToolResult deep = Run(new ListDirectoryTool(), "{\"depth\":3}");
-            Assert.Contains("src/nested/app.cs", deep.Content);
-        }
-
-        [Fact]
-        public void ListDirectoryTruncatesAtLimit()
-        {
-            for (int i = 0; i < 10; i++)
-            {
-                File.WriteAllText(Path.Combine(_workspace, "file" + i + ".txt"), "x");
-            }
-
-            ToolResult result = Run(new ListDirectoryTool(), "{\"limit\":3}");
-
-            Assert.True(result.Truncated);
-            Assert.Contains("已截断", result.Content);
-        }
-
-        [Fact]
-        public void ListDirectoryRejectsPathOutsideWorkspace()
-        {
-            ToolResult result = Run(new ListDirectoryTool(), "{\"path\":\"..\\\\..\\\\Windows\"}");
-
-            Assert.Equal(ToolResultStatus.Failed, result.Status);
-            Assert.Equal("path_outside_workspace", result.ErrorCode);
-        }
-
-        [Fact]
-        public void ReadFileReturnsNumberedLines()
+        public void ReadReturnsNumberedLines()
         {
             File.WriteAllText(
                 Path.Combine(_workspace, "a.txt"),
                 "alpha\nbeta\ngamma\n",
                 new UTF8Encoding(false));
 
-            ToolResult result = Run(new ReadFileTool(), "{\"path\":\"a.txt\"}");
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"a.txt\"}");
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains("1 | alpha", result.Content);
@@ -117,7 +64,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void ReadFileHonorsLineRange()
+        public void ReadHonorsOffsetAndLimit()
         {
             File.WriteAllText(
                 Path.Combine(_workspace, "a.txt"),
@@ -125,8 +72,8 @@ namespace MiaoWu.Tests.Tools
                 new UTF8Encoding(false));
 
             ToolResult result = Run(
-                new ReadFileTool(),
-                "{\"path\":\"a.txt\",\"startLine\":2,\"maxLines\":2}");
+                new ReadTool(),
+                "{\"path\":\"a.txt\",\"offset\":2,\"limit\":2}");
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains("2 | two", result.Content);
@@ -137,27 +84,58 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void ReadFileRejectsMissingFile()
+        public void ReadClampsLimitTo2000Lines()
         {
-            ToolResult result = Run(new ReadFileTool(), "{\"path\":\"missing.txt\"}");
+            var builder = new StringBuilder();
+            for (int i = 0; i < 2100; i++)
+            {
+                builder.Append("line ").Append(i).Append('\n');
+            }
+
+            File.WriteAllText(Path.Combine(_workspace, "long.txt"), builder.ToString(), new UTF8Encoding(false));
+
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"long.txt\",\"limit\":5000}");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.True(result.Truncated);
+            Assert.Contains("1 | line 0", result.Content);
+            Assert.Contains("2000 | line 1999", result.Content);
+            Assert.DoesNotContain("2001 | line 2000", result.Content);
+        }
+
+        [Fact]
+        public void ReadReportsOffsetBeyondEnd()
+        {
+            File.WriteAllText(Path.Combine(_workspace, "a.txt"), "only\n", new UTF8Encoding(false));
+
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"a.txt\",\"offset\":10}");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.Contains("超出范围", result.Content);
+        }
+
+        [Fact]
+        public void ReadRejectsMissingFile()
+        {
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"missing.txt\"}");
 
             Assert.Equal(ToolResultStatus.Failed, result.Status);
             Assert.Equal("not_found", result.ErrorCode);
         }
 
         [Fact]
-        public void ReadFileRejectsBinary()
+        public void ReadRejectsBinary()
         {
             File.WriteAllBytes(Path.Combine(_workspace, "image.dat"), new byte[] { 0, 1, 2, 3, 4 });
 
-            ToolResult result = Run(new ReadFileTool(), "{\"path\":\"image.dat\"}");
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"image.dat\"}");
 
             Assert.Equal(ToolResultStatus.Failed, result.Status);
             Assert.Equal("binary_file", result.ErrorCode);
         }
 
         [Fact]
-        public void ReadFileRejectsOversizedFile()
+        public void ReadRejectsOversizedFile()
         {
             string path = Path.Combine(_workspace, "big.txt");
             using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
@@ -165,14 +143,14 @@ namespace MiaoWu.Tests.Tools
                 stream.SetLength(ToolText.MaxFileBytes + 1);
             }
 
-            ToolResult result = Run(new ReadFileTool(), "{\"path\":\"big.txt\"}");
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"big.txt\"}");
 
             Assert.Equal(ToolResultStatus.Failed, result.Status);
             Assert.Equal("file_too_large", result.ErrorCode);
         }
 
         [Fact]
-        public void ReadFileDecodesGbk()
+        public void ReadDecodesGbk()
         {
             Encoding gbk;
             try
@@ -188,7 +166,7 @@ namespace MiaoWu.Tests.Tools
                 Path.Combine(_workspace, "gbk.txt"),
                 gbk.GetBytes("中文内容\r\n第二行\r\n"));
 
-            ToolResult result = Run(new ReadFileTool(), "{\"path\":\"gbk.txt\"}");
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"gbk.txt\"}");
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains("中文内容", result.Content);
@@ -196,10 +174,10 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void ReadFileRejectsTraversal()
+        public void ReadRejectsTraversal()
         {
             ToolResult result = Run(
-                new ReadFileTool(),
+                new ReadTool(),
                 "{\"path\":\"..\\\\..\\\\Windows\\\\win.ini\"}");
 
             Assert.Equal(ToolResultStatus.Failed, result.Status);
@@ -209,7 +187,7 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void MissingArgumentsReturnInvalidArguments()
         {
-            ToolResult result = Run(new ReadFileTool(), "{}");
+            ToolResult result = Run(new ReadTool(), "{}");
 
             Assert.Equal(ToolResultStatus.InvalidArguments, result.Status);
             Assert.Equal("missing_argument", result.ErrorCode);
@@ -218,20 +196,20 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void MalformedArgumentsReturnInvalidArguments()
         {
-            ToolResult result = Run(new ReadFileTool(), "{\"path\": ");
+            ToolResult result = Run(new ReadTool(), "{\"path\": ");
 
             Assert.Equal(ToolResultStatus.InvalidArguments, result.Status);
             Assert.Equal("invalid_arguments", result.ErrorCode);
         }
 
         [Fact]
-        public void SearchFindsMatchesAcrossFiles()
+        public void GrepFindsMatchesAcrossFiles()
         {
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "TODO first\nnothing\n", new UTF8Encoding(false));
             Directory.CreateDirectory(Path.Combine(_workspace, "src"));
             File.WriteAllText(Path.Combine(_workspace, "src", "b.cs"), "class B { } // TODO second\n", new UTF8Encoding(false));
 
-            ToolResult result = Run(new SearchFilesTool(), "{\"query\":\"TODO\"}");
+            ToolResult result = Run(new GrepTool(), "{\"pattern\":\"TODO\"}");
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains("a.txt:1:", result.Content);
@@ -239,35 +217,60 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void SearchHonorsIncludePattern()
+        public void GrepTreatsPatternAsRegularExpression()
+        {
+            File.WriteAllText(
+                Path.Combine(_workspace, "a.txt"),
+                "TODO1\nTODO2\nTODONT\n",
+                new UTF8Encoding(false));
+
+            ToolResult result = Run(new GrepTool(), "{\"pattern\":\"TODO[0-9]$\"}");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.Contains("a.txt:1:", result.Content);
+            Assert.Contains("a.txt:2:", result.Content);
+            Assert.Equal(2, CountOccurrences(result.Content, "a.txt:"));
+        }
+
+        [Fact]
+        public void GrepRejectsInvalidRegularExpression()
+        {
+            ToolResult result = Run(new GrepTool(), "{\"pattern\":\"[unclosed\"}");
+
+            Assert.Equal(ToolResultStatus.InvalidArguments, result.Status);
+            Assert.Equal("invalid_pattern", result.ErrorCode);
+        }
+
+        [Fact]
+        public void GrepHonorsIncludePattern()
         {
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "needle", new UTF8Encoding(false));
             File.WriteAllText(Path.Combine(_workspace, "b.cs"), "needle", new UTF8Encoding(false));
 
             ToolResult onlyText = Run(
-                new SearchFilesTool(),
-                "{\"query\":\"needle\",\"include\":\"*.txt\"}");
+                new GrepTool(),
+                "{\"pattern\":\"needle\",\"include\":\"*.txt\"}");
 
             Assert.Contains("a.txt", onlyText.Content);
             Assert.DoesNotContain("b.cs", onlyText.Content);
         }
 
         [Fact]
-        public void SearchRespectsCaseSensitivity()
+        public void GrepRespectsCaseSensitivity()
         {
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "Needle\nneedle", new UTF8Encoding(false));
 
-            ToolResult insensitive = Run(new SearchFilesTool(), "{\"query\":\"needle\"}");
+            ToolResult insensitive = Run(new GrepTool(), "{\"pattern\":\"needle\"}");
             ToolResult sensitive = Run(
-                new SearchFilesTool(),
-                "{\"query\":\"needle\",\"caseSensitive\":true}");
+                new GrepTool(),
+                "{\"pattern\":\"needle\",\"caseSensitive\":true}");
 
             Assert.Equal(2, CountOccurrences(insensitive.Content, "a.txt:"));
             Assert.Equal(1, CountOccurrences(sensitive.Content, "a.txt:"));
         }
 
         [Fact]
-        public void SearchSkipsBuildDirectoriesAndAgentSessions()
+        public void GrepSkipsBuildDirectoriesAndAgentSessions()
         {
             Directory.CreateDirectory(Path.Combine(_workspace, "bin"));
             File.WriteAllText(Path.Combine(_workspace, "bin", "gen.cs"), "needle in bin");
@@ -275,7 +278,7 @@ namespace MiaoWu.Tests.Tools
             File.WriteAllText(Path.Combine(_workspace, ".agent", "sessions", "old.jsonl"), "needle in session");
             File.WriteAllText(Path.Combine(_workspace, "src.cs"), "needle in source");
 
-            ToolResult result = Run(new SearchFilesTool(), "{\"query\":\"needle\"}");
+            ToolResult result = Run(new GrepTool(), "{\"pattern\":\"needle\"}");
 
             Assert.Contains("src.cs", result.Content);
             Assert.DoesNotContain("gen.cs", result.Content);
@@ -283,7 +286,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void SearchTruncatesAtMaxResults()
+        public void GrepTruncatesAtLimit()
         {
             var builder = new StringBuilder();
             for (int i = 0; i < 20; i++)
@@ -294,22 +297,113 @@ namespace MiaoWu.Tests.Tools
             File.WriteAllText(Path.Combine(_workspace, "many.txt"), builder.ToString(), new UTF8Encoding(false));
 
             ToolResult result = Run(
-                new SearchFilesTool(),
-                "{\"query\":\"needle\",\"maxResults\":5}");
+                new GrepTool(),
+                "{\"pattern\":\"needle\",\"limit\":5}");
 
             Assert.Equal(5, CountOccurrences(result.Content, "many.txt:"));
             Assert.True(result.Truncated);
         }
 
         [Fact]
-        public void EmptySearchReturnsReadableMessage()
+        public void EmptyGrepReturnsReadableMessage()
         {
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "nothing here");
 
-            ToolResult result = Run(new SearchFilesTool(), "{\"query\":\"zzz\"}");
+            ToolResult result = Run(new GrepTool(), "{\"pattern\":\"zzz\"}");
 
             Assert.True(result.IsSuccess);
             Assert.Contains("没有找到", result.Content);
+        }
+
+        [Fact]
+        public void GlobMatchesNestedPattern()
+        {
+            Directory.CreateDirectory(Path.Combine(_workspace, "src", "nested"));
+            File.WriteAllText(Path.Combine(_workspace, "src", "nested", "app.cs"), "class A {}");
+            File.WriteAllText(Path.Combine(_workspace, "src", "top.cs"), "class T {}");
+            File.WriteAllText(Path.Combine(_workspace, "readme.md"), "docs");
+
+            ToolResult result = Run(new GlobTool(), "{\"pattern\":\"**/*.cs\"}");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.True(result.IsUntrusted);
+            Assert.Contains("src/top.cs", result.Content);
+            Assert.Contains("src/nested/app.cs", result.Content);
+            Assert.DoesNotContain("readme.md", result.Content);
+        }
+
+        [Fact]
+        public void GlobWithoutSeparatorMatchesFileName()
+        {
+            Directory.CreateDirectory(Path.Combine(_workspace, "src"));
+            File.WriteAllText(Path.Combine(_workspace, "root.txt"), "a");
+            File.WriteAllText(Path.Combine(_workspace, "src", "deep.txt"), "b");
+            File.WriteAllText(Path.Combine(_workspace, "src", "deep.cs"), "c");
+
+            ToolResult result = Run(new GlobTool(), "{\"pattern\":\"*.txt\"}");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.Contains("root.txt", result.Content);
+            Assert.Contains("src/deep.txt", result.Content);
+            Assert.DoesNotContain("deep.cs", result.Content);
+        }
+
+        [Fact]
+        public void GlobSkipsExcludedDirectories()
+        {
+            Directory.CreateDirectory(Path.Combine(_workspace, "bin"));
+            File.WriteAllText(Path.Combine(_workspace, "bin", "gen.cs"), "x");
+            Directory.CreateDirectory(Path.Combine(_workspace, "node_modules", "pkg"));
+            File.WriteAllText(Path.Combine(_workspace, "node_modules", "pkg", "index.js"), "x");
+            Directory.CreateDirectory(Path.Combine(_workspace, ".agent", "cache"));
+            File.WriteAllText(Path.Combine(_workspace, ".agent", "cache", "x.cs"), "x");
+            File.WriteAllText(Path.Combine(_workspace, "keep.cs"), "x");
+
+            ToolResult result = Run(new GlobTool(), "{\"pattern\":\"**/*.cs\"}");
+
+            Assert.Contains("keep.cs", result.Content);
+            Assert.DoesNotContain("gen.cs", result.Content);
+            Assert.DoesNotContain("index.js", result.Content);
+            Assert.DoesNotContain(".agent", result.Content);
+        }
+
+        [Fact]
+        public void GlobTruncatesAtLimit()
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                File.WriteAllText(Path.Combine(_workspace, "file" + i + ".txt"), "x");
+            }
+
+            ToolResult result = Run(new GlobTool(), "{\"pattern\":\"*.txt\",\"limit\":3}");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.True(result.Truncated);
+            Assert.Contains("file0.txt", result.Content);
+            Assert.Contains("file1.txt", result.Content);
+            Assert.Contains("file2.txt", result.Content);
+            Assert.DoesNotContain("file3.txt", result.Content);
+            Assert.Contains("已截断", result.Content);
+        }
+
+        [Fact]
+        public void GlobRejectsPathOutsideWorkspace()
+        {
+            ToolResult result = Run(new GlobTool(), "{\"pattern\":\"*.cs\",\"path\":\"..\\\\..\\\\Windows\"}");
+
+            Assert.Equal(ToolResultStatus.Failed, result.Status);
+            Assert.Equal("path_outside_workspace", result.ErrorCode);
+        }
+
+        [Fact]
+        public void GlobReturnsReadableMessageWhenNothingMatches()
+        {
+            File.WriteAllText(Path.Combine(_workspace, "a.txt"), "x");
+
+            ToolResult result = Run(new GlobTool(), "{\"pattern\":\"*.php\"}");
+
+            Assert.True(result.IsSuccess);
+            Assert.Contains("没有匹配的文件", result.Content);
         }
 
         [Fact]
@@ -318,7 +412,7 @@ namespace MiaoWu.Tests.Tools
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "hello");
             var cts = new CancellationTokenSource();
             cts.Cancel();
-            var tool = new ReadFileTool();
+            var tool = new ReadTool();
 
             ToolResult result = tool.ExecuteAsync(
                 new ToolCall { Id = "c1", Name = tool.Name, ArgumentsJson = "{\"path\":\"a.txt\"}" },

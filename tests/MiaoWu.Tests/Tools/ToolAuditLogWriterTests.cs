@@ -44,7 +44,7 @@ namespace MiaoWu.Tests.Tools
                 Timestamp = timestamp,
                 SessionId = "s1",
                 WorkspaceId = "w1",
-                ToolName = "write_file",
+                ToolName = "write",
                 Target = @"src\a.cs",
                 ArgumentsSummary = "path=src\\a.cs",
                 Risk = ToolRisk.High,
@@ -64,7 +64,7 @@ namespace MiaoWu.Tests.Tools
             Assert.Single(lines);
 
             JsonValue line = JsonParser.Parse(lines[0]);
-            Assert.Equal("write_file", line.Get("tool").AsString());
+            Assert.Equal("write", line.Get("tool").AsString());
             Assert.Equal("s1", line.Get("sessionId").AsString());
             Assert.Equal("w1", line.Get("workspaceId").AsString());
             Assert.Equal("high", line.Get("risk").AsString());
@@ -87,13 +87,13 @@ namespace MiaoWu.Tests.Tools
             var writer = new ToolAuditLogWriter(_directory);
             DateTimeOffset timestamp = new DateTimeOffset(2026, 11, 12, 11, 0, 0, TimeSpan.FromHours(8));
 
-            writer.Write(Entry(timestamp, "list_dir", ToolRisk.Low, "auto"));
-            writer.Write(Entry(timestamp, "read_file", ToolRisk.Low, "auto"));
+            writer.Write(Entry(timestamp, "read", ToolRisk.Low, "auto"));
+            writer.Write(Entry(timestamp, "read", ToolRisk.Low, "auto"));
 
             string[] lines = File.ReadAllLines(writer.GetFilePath(timestamp));
             Assert.Equal(2, lines.Length);
-            Assert.Equal("list_dir", JsonParser.Parse(lines[0]).Get("tool").AsString());
-            Assert.Equal("read_file", JsonParser.Parse(lines[1]).Get("tool").AsString());
+            Assert.Equal("read", JsonParser.Parse(lines[0]).Get("tool").AsString());
+            Assert.Equal("read", JsonParser.Parse(lines[1]).Get("tool").AsString());
         }
 
         [Fact]
@@ -103,8 +103,8 @@ namespace MiaoWu.Tests.Tools
             DateTimeOffset first = new DateTimeOffset(2026, 11, 12, 23, 59, 0, TimeSpan.FromHours(8));
             DateTimeOffset second = first.AddMinutes(2);
 
-            writer.Write(Entry(first, "list_dir", ToolRisk.Low, "auto"));
-            writer.Write(Entry(second, "list_dir", ToolRisk.Low, "auto"));
+            writer.Write(Entry(first, "read", ToolRisk.Low, "auto"));
+            writer.Write(Entry(second, "read", ToolRisk.Low, "auto"));
 
             if (first.ToLocalTime().Date == second.ToLocalTime().Date)
             {
@@ -126,7 +126,7 @@ namespace MiaoWu.Tests.Tools
 
             var writer = new ToolAuditLogWriter(file);
 
-            writer.Write(Entry(DateTimeOffset.UtcNow, "list_dir", ToolRisk.Low, "auto"));
+            writer.Write(Entry(DateTimeOffset.UtcNow, "read", ToolRisk.Low, "auto"));
         }
 
         [Fact]

@@ -11,10 +11,10 @@ using MiaoWu.Core.Text;
 namespace MiaoWu.Infrastructure.Tools
 {
     /// <summary>
-    /// write_file：整文件写入。审批前记录文件哈希与 mtime，执行时再次校验，
+    /// write：整文件写入。审批前记录文件哈希与 mtime，执行时再次校验，
     /// 外部修改过就拒绝覆盖；覆盖前备份，临时文件原子替换，写后哈希校验。
     /// </summary>
-    public sealed class WriteFileTool : IAgentTool, IToolAuditRedactor
+    public sealed class WriteTool : IAgentTool, IToolAuditRedactor
     {
         private const int MaxPathLength = 400;
         private const int MaxContentChars = 2 * 1024 * 1024;
@@ -23,7 +23,7 @@ namespace MiaoWu.Infrastructure.Tools
         private readonly FileBackupService _backups;
         private readonly IClock _clock;
 
-        public WriteFileTool(FileBackupService backups, IClock clock)
+        public WriteTool(FileBackupService backups, IClock clock)
         {
             _backups = backups ?? throw new ArgumentNullException(nameof(backups));
             _clock = clock ?? SystemClock.Instance;
@@ -31,7 +31,7 @@ namespace MiaoWu.Infrastructure.Tools
 
         public string Name
         {
-            get { return ToolNames.WriteFile; }
+            get { return ToolNames.Write; }
         }
 
         public string Description
@@ -271,7 +271,7 @@ namespace MiaoWu.Infrastructure.Tools
                 {
                     throw new ToolPreparationException(
                         "file_too_large",
-                        "目标文件超过 2 MB，write_file 不做整文件覆盖。");
+                        "目标文件超过 2 MB，write 不做整文件覆盖。");
                 }
 
                 try
@@ -288,7 +288,7 @@ namespace MiaoWu.Infrastructure.Tools
                 {
                     throw new ToolPreparationException(
                         "binary_file",
-                        "目标文件包含二进制内容，write_file 只写文本文件。");
+                        "目标文件包含二进制内容，write 只写文本文件。");
                 }
 
                 if (oldBytes.Length > 0)
@@ -326,7 +326,7 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 throw new ToolPreparationException(
                     "content_too_large",
-                    "新内容编码后超过 2 MB，write_file 拒绝写入。");
+                    "新内容编码后超过 2 MB，write 拒绝写入。");
             }
 
             string relative = context.Sandbox.ToRelativePath(resolved.NormalizedPath);
@@ -418,7 +418,7 @@ namespace MiaoWu.Infrastructure.Tools
             }
         }
 
-        private static byte[] ReadAllBytesShared(string path)
+        internal static byte[] ReadAllBytesShared(string path)
         {
             using (var stream = new FileStream(
                 path,

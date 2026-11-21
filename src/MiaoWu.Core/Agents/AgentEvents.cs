@@ -106,30 +106,73 @@ namespace MiaoWu.Core.Agents
         public int EstimatedContextTokens { get; set; }
     }
 
+    /// <summary>计划模式切换（UI 用它同步开关状态）。</summary>
+    public sealed class PlanModeChangedEvent : AgentEvent
+    {
+        public bool Active { get; set; }
+    }
+
     public sealed class SnapshotRequiredEvent : AgentEvent
     {
         public string Reason { get; set; }
     }
 
-    // ---- P3.5 / P4：工具轮次事件 ----
+    // ---- 步骤事件（对齐 DSH 的 step/*）----
+    //
+    // 术语：一次 run 是一条用户输入开启的「轮次」（turn），轮次内每次模型请求
+    // 是一个「步骤」（step）。DSH 的 turn/step 与本模型一一对应，只是 MiaoWu
+    // 继续用 Run 作为轮次的对外名字，避免改动既有 UI 与持久化。
 
-    public sealed class TurnStartedEvent : AgentEvent
+    /// <summary>一步结束的原因。与 DSH 的 turn-end 变体对齐，只保留桌面用得到的几种。</summary>
+    public enum StepEndReason
     {
-        public string RunId { get; set; }
+        /// <summary>模型没有再请求工具，本轮次收敛。</summary>
+        Completed = 0,
 
-        public int TurnIndex { get; set; }
+        /// <summary>模型请求了工具，执行后进入下一步。</summary>
+        ToolCalls = 1,
+
+        /// <summary>本步触顶 max tokens；轮次以粘性 max-tokens 结束。</summary>
+        MaxTokens = 2,
+
+        /// <summary>用户取消。</summary>
+        Aborted = 3,
+
+        /// <summary>结构化失败。</summary>
+        Error = 4
     }
 
-    public sealed class TurnCompletedEvent : AgentEvent
+    public sealed class StepStartedEvent : AgentEvent
     {
         public string RunId { get; set; }
 
-        public int TurnIndex { get; set; }
+        /// <summary>轮次内的步骤序号，从 1 开始。</summary>
+        public int StepIndex { get; set; }
+
+        public string AssistantMessageId { get; set; }
+
+        /// <summary>是否本轮次第一步（标题请求、过程组计时起点都依赖它）。</summary>
+        public bool IsFirstStep { get; set; }
+    }
+
+    public sealed class StepCompletedEvent : AgentEvent
+    {
+        public string RunId { get; set; }
+
+        public int StepIndex { get; set; }
+
+        public string AssistantMessageId { get; set; }
+
+        public StepEndReason Reason { get; set; }
 
         public StopReason StopReason { get; set; }
 
         public TokenUsage Usage { get; set; }
 
+        /// <summary>本步交给调度器的工具调用数（含被上限截断后补结果的调用）。</summary>
+        public int ToolCallCount { get; set; }
+
+        /// <summary>是否还会进入下一步。</summary>
         public bool WillContinue { get; set; }
     }
 

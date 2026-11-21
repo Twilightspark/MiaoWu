@@ -23,17 +23,60 @@ namespace MiaoWu.Core.Agents.Tools
         Blocked = 3
     }
 
-    /// <summary>V1 暴露给模型的内置工具名。名字是协议的一部分，不要随意改动。</summary>
+    /// <summary>
+    /// 暴露给模型的内置工具名。名字是协议的一部分，与 DSH 的工具词表一致；
+    /// 改名等于改协议，旧名不再保留别名。
+    /// </summary>
     public static class ToolNames
     {
-        public const string ListDirectory = "list_dir";
-        public const string ReadFile = "read_file";
-        public const string SearchFiles = "search_files";
-        public const string FindFiles = "find_files";
-        public const string EditFile = "edit_file";
-        public const string WriteFile = "write_file";
-        public const string RunCommand = "run_command";
-        public const string LoadSkill = "load_skill";
+        public const string Read = "read";
+        public const string Write = "write";
+        public const string Edit = "edit";
+        public const string Glob = "glob";
+        public const string Grep = "grep";
+        public const string Pwsh = "pwsh";
+        public const string Skill = "skill";
+        public const string WorkingDirectory = "working_directory";
+        public const string WebFetch = "web_fetch";
+        public const string WebSearch = "web_search";
+        public const string JobList = "job_list";
+        public const string JobOutput = "job_output";
+        public const string JobKill = "job_kill";
+        public const string Present = "present";
+        public const string CreateGoal = "create_goal";
+        public const string GetGoal = "get_goal";
+        public const string UpdateGoal = "update_goal";
+        public const string AskUserQuestion = "ask_user_question";
+        public const string ExitPlanMode = "exit_plan_mode";
+        public const string ScheduleCreate = "schedule_create";
+        public const string ScheduleEdit = "schedule_edit";
+        public const string ScheduleList = "schedule_list";
+        public const string ScheduleView = "schedule_view";
+    }
+
+    /// <summary>
+    /// 会话级工作目录。命令默认在它下面执行；文件类工具仍以工作区根为基准解析相对路径。
+    /// 由会话实现，工具只读当前值并通过 <see cref="TrySet"/> 请求切换。
+    /// </summary>
+    public interface ISessionWorkingDirectory
+    {
+        /// <summary>当前工作目录的绝对路径；默认是工作区根。</summary>
+        string Current { get; }
+
+        /// <summary>切换工作目录；路径越界或不存在时返回 false。</summary>
+        bool TrySet(string absolutePath);
+    }
+
+    /// <summary>
+    /// 会话级审批策略。对齐 DSH 的 approval/policy：
+    /// <see cref="Ask"/> 每个需要审批的动作都询问；<see cref="Never"/> 从不询问，
+    /// 需要审批的动作直接放行（风险拦截仍然生效）。
+    /// </summary>
+    public enum ToolApprovalPolicy
+    {
+        Ask = 0,
+
+        Never = 1
     }
 
     /// <summary>模型请求的一次工具调用。ArgumentsJson 保留模型原始参数，不在此处解析。</summary>
@@ -101,7 +144,7 @@ namespace MiaoWu.Core.Agents.Tools
         /// <summary>一行摘要（参数或结果），供工具卡与审计日志使用。</summary>
         public string Summary { get; set; }
 
-        /// <summary>写文件前的备份路径；仅 write_file 成功时填写，供撤销使用。</summary>
+        /// <summary>写文件前的备份路径；仅 write / edit 成功时填写，供撤销使用。</summary>
         public string BackupPath { get; set; }
 
         /// <summary>溢出正文的落盘路径；未溢出为 null。</summary>
@@ -204,6 +247,18 @@ namespace MiaoWu.Core.Agents.Tools
 
         /// <summary>该工作区的路径沙箱；工具必须用它解析所有路径。</summary>
         public WorkspacePathSandbox Sandbox { get; set; }
+
+        /// <summary>本会话的审批策略；默认 Ask。</summary>
+        public ToolApprovalPolicy ApprovalPolicy { get; set; }
+
+        /// <summary>会话级工作目录；为空时按工作区根处理。</summary>
+        public ISessionWorkingDirectory WorkingDirectory { get; set; }
+
+        /// <summary>会话级目标状态；为空时 goal 三件套返回不可用。</summary>
+        public MiaoWu.Core.Agents.Goals.ISessionGoalState Goals { get; set; }
+
+        /// <summary>会话级计划模式；为空时 `exit_plan_mode` 返回不可用。</summary>
+        public ISessionPlanMode Plan { get; set; }
 
         /// <summary>本次工具调用的 ID，与 <see cref="ToolCall.Id"/> 相同。</summary>
         public string CallId { get; set; }
@@ -466,6 +521,12 @@ namespace MiaoWu.Core.Agents.Tools
         public ToolAnnotations Annotations { get; set; }
 
         public ToolExecutionMode ExecutionMode { get; set; }
+
+        /// <summary>
+        /// 单次调用的超时（毫秒）。0 表示不设超时，由工具自己控制
+        /// （例如 pwsh 的 timeoutMs 参数）。对齐 DSH 的 tool.timeoutMs。
+        /// </summary>
+        public int TimeoutMs { get; set; }
     }
 
     /// <summary>持久化到 system 消息里的工具声明；不含提示词片段与渲染信息。</summary>

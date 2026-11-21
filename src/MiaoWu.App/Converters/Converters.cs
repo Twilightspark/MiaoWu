@@ -96,14 +96,22 @@ namespace MiaoWu.App.Converters
         private static readonly Dictionary<string, string> Icons =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                { "list_dir", "Ico.Browse" },
-                { "read_file", "Ico.Browse" },
-                { "search_files", "Ico.SearchStroke" },
-                { "find_files", "Ico.SearchStroke" },
-                { "edit_file", "Ico.EditStroke" },
-                { "write_file", "Ico.EditStroke" },
-                { "run_command", "Ico.Api" },
-                { "load_skill", "Ico.Sparkle" }
+                { "read", "Ico.Browse" },
+                { "grep", "Ico.SearchStroke" },
+                { "glob", "Ico.SearchStroke" },
+                { "edit", "Ico.EditStroke" },
+                { "write", "Ico.EditStroke" },
+                { "pwsh", "Ico.Api" },
+                { "skill", "Ico.Sparkle" },
+                { "web_fetch", "Ico.Browse" },
+                { "working_directory", "Ico.Browse" },
+                { "job_list", "Ico.Clock" },
+                { "job_output", "Ico.Clock" },
+                { "job_kill", "Ico.Clock" },
+                { "present", "Ico.Sparkle" },
+                { "create_goal", "Ico.Sparkle" },
+                { "get_goal", "Ico.Sparkle" },
+                { "update_goal", "Ico.Sparkle" }
             };
 
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

@@ -153,6 +153,19 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
         </Style>
 
+        <Style x:Key="Composer.PlanButton" TargetType="Button" BasedOn="{StaticResource Composer.ModelButton}">
+            <Setter Property="MaxWidth" Value="80" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPlanMode}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                    <Setter Property="Background" Value="{DynamicResource Brush.Sel}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="Composer.ModelRowButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
             <Setter Property="Height" Value="{StaticResource Metric.Menu.RowHeight}" />
             <Setter Property="Padding" Value="{StaticResource Pad.MenuItem}" />
@@ -940,6 +953,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <Button Grid.Column="0"
@@ -965,8 +979,21 @@
                                Style="{StaticResource Text.Time}"
                                TextTrimming="CharacterEllipsis" />
 
-                    <Button x:Name="ModelPickerButton"
+                    <Button x:Name="PlanModeButton"
                             Grid.Column="2"
+                            Margin="0,0,6,0"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource Composer.PlanButton}"
+                            Command="{Binding TogglePlanModeCommand}"
+                            ToolTip="{Binding PlanModeToolTip}"
+                            AutomationProperties.Name="计划模式">
+                        <TextBlock VerticalAlignment="Center"
+                                   Text="{Binding PlanModeLabel}"
+                                   Style="{StaticResource Text.Chip}" />
+                    </Button>
+
+                    <Button x:Name="ModelPickerButton"
+                            Grid.Column="3"
                             VerticalAlignment="Center"
                             Style="{StaticResource Composer.ModelButton}"
                             Click="OnModelPickerClick"
@@ -987,7 +1014,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Grid.Column="3"
+                    <Button Grid.Column="4"
                             Margin="8,0,0,0"
                             Style="{StaticResource Composer.SendButton}"
                             Command="{Binding SendCommand}"
@@ -1002,7 +1029,7 @@
                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     </Button>
 
-                    <Button Grid.Column="3"
+                    <Button Grid.Column="4"
                             Margin="8,0,0,0"
                             Style="{StaticResource Composer.StopButton}"
                             Command="{Binding StopCommand}"

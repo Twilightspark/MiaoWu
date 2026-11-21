@@ -20,6 +20,7 @@ namespace MiaoWu.Tests.Tools
         private readonly AppPaths _paths;
         private readonly ToolApprovalService _approvals = new ToolApprovalService();
         private readonly CapturingAuditLog _audit = new CapturingAuditLog();
+        private readonly UserQuestionService _questions = new UserQuestionService();
         private readonly MutableClock _clock;
         private readonly ToolRegistry _registry;
         private readonly AgentToolDispatcher _dispatcher;
@@ -37,7 +38,7 @@ namespace MiaoWu.Tests.Tools
             _paths.EnsureCreated();
             _clock = new MutableClock(new DateTimeOffset(2026, 11, 12, 9, 0, 0, TimeSpan.Zero));
 
-            _registry = BuiltInToolset.CreateRegistry(_paths, _clock);
+            _registry = BuiltInToolset.CreateRegistry(_paths, _clock, null, _questions);
             _dispatcher = new AgentToolDispatcher(_registry, _approvals, _audit, _clock);
             _context = new ToolContext
             {
@@ -65,7 +66,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void RegistryContainsAllBuiltInTools()
+        public void RegistryContainsExactlyTheDshTools()
         {
             IReadOnlyList<IAgentTool> tools = _registry.GetAll();
             var names = new List<string>();
@@ -74,33 +75,103 @@ namespace MiaoWu.Tests.Tools
                 names.Add(tools[i].Name);
             }
 
-            Assert.Contains(ToolNames.ListDirectory, names);
-            Assert.Contains(ToolNames.ReadFile, names);
-            Assert.Contains(ToolNames.SearchFiles, names);
-            Assert.Contains(ToolNames.WriteFile, names);
-            Assert.Contains(ToolNames.RunCommand, names);
+            Assert.Equal(19, names.Count);
+            Assert.Contains(ToolNames.Read, names);
+            Assert.Contains(ToolNames.Write, names);
+            Assert.Contains(ToolNames.Edit, names);
+            Assert.Contains(ToolNames.Glob, names);
+            Assert.Contains(ToolNames.Grep, names);
+            Assert.Contains(ToolNames.Pwsh, names);
+            Assert.Contains(ToolNames.Skill, names);
+            Assert.Contains(ToolNames.WorkingDirectory, names);
+            Assert.Contains(ToolNames.WebFetch, names);
+            Assert.Contains(ToolNames.WebSearch, names);
+            Assert.Contains(ToolNames.ExitPlanMode, names);
+            Assert.Contains(ToolNames.JobList, names);
+            Assert.Contains(ToolNames.JobOutput, names);
+            Assert.Contains(ToolNames.JobKill, names);
+            Assert.Contains(ToolNames.Present, names);
+            Assert.Contains(ToolNames.CreateGoal, names);
+            Assert.Contains(ToolNames.GetGoal, names);
+            Assert.Contains(ToolNames.UpdateGoal, names);
+            Assert.Contains(ToolNames.AskUserQuestion, names);
         }
 
         [Fact]
-        public void ListDirectoryRunsWithoutApproval()
+        public void NoLegacyToolNameIsRegistered()
+        {
+            IReadOnlyList<IAgentTool> tools = _registry.GetAll();
+            var names = new List<string>();
+            for (int i = 0; i < tools.Count; i++)
+            {
+                names.Add(tools[i].Name);
+            }
+
+            Assert.DoesNotContain("list_dir", names);
+            Assert.DoesNotContain("read_file", names);
+            Assert.DoesNotContain("search_files", names);
+            Assert.DoesNotContain("find_files", names);
+            Assert.DoesNotContain("edit_file", names);
+            Assert.DoesNotContain("write_file", names);
+            Assert.DoesNotContain("run_command", names);
+            Assert.DoesNotContain("load_skill", names);
+        }
+
+        [Fact]
+        public void DefinitionsUseNewNamesAndSchemas()
+        {
+            var provider = new BuiltInToolDefinitionProvider(_registry);
+            IReadOnlyList<ToolDefinition> definitions = provider.GetDefinitions();
+
+            Assert.Equal(19, definitions.Count);
+            for (int i = 0; i < definitions.Count; i++)
+            {
+                ToolDefinition definition = definitions[i];
+                // DSH 的宿主面/网络/目标/提问工具名带下划线，其余模型工具名不带。
+                if (definition.Name != ToolNames.WorkingDirectory
+                    && definition.Name != ToolNames.WebFetch
+                    && definition.Name != ToolNames.WebSearch
+                    && definition.Name != ToolNames.ExitPlanMode
+                    && definition.Name != ToolNames.CreateGoal
+                    && definition.Name != ToolNames.GetGoal
+                    && definition.Name != ToolNames.UpdateGoal
+                    && definition.Name != ToolNames.AskUserQuestion
+                    && !definition.Name.StartsWith("job_", StringComparison.Ordinal))
+                {
+                    Assert.DoesNotContain("_", definition.Name);
+                }
+                Assert.DoesNotContain("list_dir", definition.ParametersJson, StringComparison.Ordinal);
+                Assert.DoesNotContain("startLine", definition.ParametersJson, StringComparison.Ordinal);
+            }
+
+            Assert.Contains(definitions, d => d.Name == ToolNames.Read && d.ParametersJson.Contains("\"offset\""));
+            Assert.Contains(definitions, d => d.Name == ToolNames.Grep && d.ParametersJson.Contains("\"pattern\""));
+            Assert.Contains(definitions, d => d.Name == ToolNames.Glob && d.ParametersJson.Contains("\"limit\""));
+            Assert.Contains(definitions, d => d.Name == ToolNames.Edit && d.ParametersJson.Contains("\"old_string\""));
+            Assert.Contains(definitions, d => d.Name == ToolNames.Pwsh && d.ParametersJson.Contains("\"timeoutMs\""));
+            Assert.Contains(definitions, d => d.Name == ToolNames.Skill && d.ParametersJson.Contains("\"name\""));
+        }
+
+        [Fact]
+        public void GlobRunsWithoutApproval()
         {
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "hello");
 
-            ToolExecution execution = Execute("list_dir", "{}");
+            ToolExecution execution = Execute("glob", Args(("pattern", "*.txt")));
 
             Assert.Equal(ToolExecutionDecision.Auto, execution.Decision);
-            Assert.True(execution.Result.IsSuccess);
+            Assert.True(execution.Result.IsSuccess, execution.Result.Content);
             Assert.Contains("a.txt", execution.Result.Content);
             Assert.Equal(0, _approvals.GetPendingCount());
             Assert.Equal("auto", _audit.Entries[0].Decision);
         }
 
         [Fact]
-        public void ReadFileRunsWithoutApproval()
+        public void ReadRunsWithoutApproval()
         {
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "line1\nline2\n");
 
-            ToolExecution execution = Execute("read_file", Args(("path", "a.txt")));
+            ToolExecution execution = Execute("read", Args(("path", "a.txt")));
 
             Assert.Equal(ToolExecutionDecision.Auto, execution.Decision);
             Assert.Contains("line1", execution.Result.Content);
@@ -108,7 +179,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void WriteFileRequiresApprovalThenWritesAndBacksUp()
+        public void WriteRequiresApprovalThenWritesAndBacksUp()
         {
             Task<ToolExecution> first = _dispatcher.ExecuteAsync(
                 WriteCall("a.txt", "v1"),
@@ -141,7 +212,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void WriteFileSessionGrantSkipsSecondApproval()
+        public void WriteSessionGrantSkipsSecondApproval()
         {
             Task<ToolExecution> first = _dispatcher.ExecuteAsync(
                 WriteCall("a.txt", "v1"),
@@ -151,12 +222,35 @@ namespace MiaoWu.Tests.Tools
             _approvals.TryResolve(pending.Request.RequestId, ToolApprovalOutcome.ApproveForSession, null);
             first.GetAwaiter().GetResult();
 
-            ToolExecution second = Execute("write_file", WriteArgs("a.txt", "v2"), "call-2");
+            ToolExecution second = Execute("write", WriteArgs("a.txt", "v2"), "call-2");
 
             Assert.Equal(ToolExecutionDecision.ApprovedForSession, second.Decision);
             Assert.True(second.Result.IsSuccess, second.Result.Content);
             Assert.Equal("v2", File.ReadAllText(Path.Combine(_workspace, "a.txt")));
             Assert.Equal(0, _approvals.GetPendingCount());
+        }
+
+        [Fact]
+        public void EditRunsAfterApproval()
+        {
+            File.WriteAllText(Path.Combine(_workspace, "a.txt"), "before\n");
+
+            Task<ToolExecution> task = _dispatcher.ExecuteAsync(
+                EditCall("a.txt", "before", "after"),
+                _context,
+                CancellationToken.None);
+
+            Assert.Equal(1, _approvals.GetPendingCount());
+            ToolApprovalTicket pending = _approvals.GetPending()[0];
+            Assert.Equal("编辑文件", pending.Request.Title);
+            Assert.True(pending.Request.CanShowDiff);
+            _approvals.TryResolve(pending.Request.RequestId, ToolApprovalOutcome.ApproveOnce, null);
+
+            ToolExecution execution = task.GetAwaiter().GetResult();
+            Assert.Equal(ToolExecutionDecision.ApprovedOnce, execution.Decision);
+            Assert.True(execution.Result.IsSuccess, execution.Result.Content);
+            Assert.Equal("after\n", File.ReadAllText(Path.Combine(_workspace, "a.txt")));
+            Assert.Contains("替换：1 处", execution.Result.Content);
         }
 
         [Fact]
@@ -178,7 +272,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void RunCommandRunsAfterApproval()
+        public void PwshRunsAfterApproval()
         {
             Task<ToolExecution> task = _dispatcher.ExecuteAsync(
                 CommandCall("Write-Output 'hi'"),
@@ -202,7 +296,7 @@ namespace MiaoWu.Tests.Tools
         public void BlockedCommandIsRejectedWithoutApproval()
         {
             ToolExecution execution = Execute(
-                "run_command",
+                "pwsh",
                 Args(("command", "format C:")),
                 "call-1");
 
@@ -212,7 +306,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void WriteFileAuditDoesNotContainFileContent()
+        public void WriteAuditDoesNotContainFileContent()
         {
             const string Secret = "TOP-SECRET-CONTENT";
 
@@ -231,7 +325,29 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void RunCommandAuditStoresCommandButNotOutput()
+        public void EditAuditDoesNotContainReplacedText()
+        {
+            const string Secret = "TOP-SECRET-OLD";
+
+            File.WriteAllText(Path.Combine(_workspace, "secret.txt"), Secret);
+
+            Task<ToolExecution> task = _dispatcher.ExecuteAsync(
+                EditCall("secret.txt", Secret, "replacement"),
+                _context,
+                CancellationToken.None);
+            ToolApprovalTicket pending = _approvals.GetPending()[0];
+            _approvals.TryResolve(pending.Request.RequestId, ToolApprovalOutcome.ApproveOnce, null);
+            task.GetAwaiter().GetResult();
+
+            ToolAuditEntry entry = _audit.Entries[0];
+            Assert.Contains("path=secret.txt", entry.ArgumentsSummary);
+            Assert.Contains(Secret.Length.ToString() + " 字符", entry.ArgumentsSummary);
+            Assert.DoesNotContain(Secret, entry.ArgumentsSummary);
+            Assert.DoesNotContain("replacement", entry.ArgumentsSummary);
+        }
+
+        [Fact]
+        public void PwshAuditStoresCommandButNotOutput()
         {
             Task<ToolExecution> task = _dispatcher.ExecuteAsync(
                 CommandCall("Write-Output 'hi'"),
@@ -254,7 +370,7 @@ namespace MiaoWu.Tests.Tools
 
             File.WriteAllText(Path.Combine(_workspace, "a.txt"), "hello");
             ToolExecution execution = dispatcher.ExecuteAsync(
-                Call("list_dir", "{}"),
+                Call("glob", Args(("pattern", "*.txt"))),
                 _context,
                 CancellationToken.None).GetAwaiter().GetResult();
 
@@ -266,7 +382,7 @@ namespace MiaoWu.Tests.Tools
             Assert.Single(lines);
 
             JsonValue entry = JsonParser.Parse(lines[0]);
-            Assert.Equal("list_dir", entry.Get("tool").AsString());
+            Assert.Equal("glob", entry.Get("tool").AsString());
             Assert.Equal("auto", entry.Get("decision").AsString());
             Assert.Equal("succeeded", entry.Get("status").AsString());
         }
@@ -294,7 +410,7 @@ namespace MiaoWu.Tests.Tools
 
         private static ToolCall WriteCall(string path, string content, string callId = "call-1")
         {
-            return Call("write_file", WriteArgs(path, content), callId);
+            return Call("write", WriteArgs(path, content), callId);
         }
 
         private static string WriteArgs(string path, string content)
@@ -302,9 +418,19 @@ namespace MiaoWu.Tests.Tools
             return Args(("path", path), ("content", content));
         }
 
+        private static ToolCall EditCall(string path, string oldString, string newString)
+        {
+            return Call(
+                "edit",
+                Args(
+                    ("path", path),
+                    ("old_string", oldString),
+                    ("new_string", newString)));
+        }
+
         private static ToolCall CommandCall(string command, string callId = "call-1")
         {
-            return Call("run_command", Args(("command", command)), callId);
+            return Call("pwsh", Args(("command", command)), callId);
         }
 
         private static string Args(params (string Key, string Value)[] pairs)

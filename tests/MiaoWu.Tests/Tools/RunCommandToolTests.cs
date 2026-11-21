@@ -11,13 +11,13 @@ using Xunit;
 
 namespace MiaoWu.Tests.Tools
 {
-    public sealed class RunCommandToolTests : IDisposable
+    public sealed class PwshToolTests : IDisposable
     {
         private readonly string _workspace;
-        private readonly RunCommandTool _tool = new RunCommandTool();
+        private readonly PwshTool _tool = new PwshTool();
         private readonly ToolContext _context;
 
-        public RunCommandToolTests()
+        public PwshToolTests()
         {
             _workspace = Path.Combine(
                 Path.GetTempPath(),
@@ -61,23 +61,25 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void CmdWritesToStdout()
+        public void CommandWithDoubleQuotesRuns()
         {
-            ToolResult result = Run("echo hello", "cmd");
+            ToolResult result = Run("Write-Output \"hello world\"");
 
             Assert.True(result.IsSuccess, result.Content);
-            Assert.Contains("hello", result.Content);
+            Assert.Contains("hello world", result.Content);
         }
 
         [Fact]
-        public void NonZeroExitCodeIsReported()
+        public void NonZeroExitCodeIsReportedWithMarker()
         {
             ToolResult result = Run("exit 3");
 
             Assert.Equal(ToolResultStatus.Failed, result.Status);
             Assert.Equal("nonzero_exit", result.ErrorCode);
             Assert.Contains("退出码：3", result.Content);
-            Assert.True(result.Truncated == false);
+            Assert.Contains("[exit code: 3]", result.Content);
+            Assert.EndsWith("[exit code: 3]\n", result.Content.Replace("\r\n", "\n"));
+            Assert.False(result.Truncated);
         }
 
         [Fact]
@@ -96,7 +98,7 @@ namespace MiaoWu.Tests.Tools
             string sub = Path.Combine(_workspace, "sub");
             Directory.CreateDirectory(sub);
 
-            ToolResult result = Run("Write-Output (Get-Location).Path", "powershell", "sub");
+            ToolResult result = Run("Write-Output (Get-Location).Path", "sub");
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains(sub, result.Content);
@@ -105,26 +107,17 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void WorkingDirectoryOutsideWorkspaceIsRejected()
         {
-            ToolResult result = Run("Write-Output 1", "powershell", @"..\..\Windows");
+            ToolResult result = Run("Write-Output 1", @"..\..\Windows");
 
             Assert.Equal(ToolResultStatus.Failed, result.Status);
             Assert.Equal("path_outside_workspace", result.ErrorCode);
         }
 
         [Fact]
-        public void InvalidShellIsRejected()
-        {
-            ToolResult result = Run("echo", "bash");
-
-            Assert.Equal(ToolResultStatus.InvalidArguments, result.Status);
-            Assert.Equal("invalid_shell", result.ErrorCode);
-        }
-
-        [Fact]
         public void MissingCommandIsRejected()
         {
             ToolResult result = _tool.ExecuteAsync(
-                new ToolCall { Id = "c1", Name = "run_command", ArgumentsJson = "{}" },
+                new ToolCall { Id = "c1", Name = "pwsh", ArgumentsJson = "{}" },
                 _context,
                 CancellationToken.None).GetAwaiter().GetResult();
 
@@ -133,10 +126,23 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
+        public void DescriptionIsShownInPreview()
+        {
+            ToolCall call = Call("Write-Output 1", ".", 120000, "验证描述进入审批");
+            ToolApprovalPreview preview = _tool.Describe(call, _context);
+
+            Assert.NotNull(preview);
+            Assert.Equal("执行命令", preview.Title);
+            Assert.Contains("验证描述进入审批", preview.Summary);
+            Assert.Contains("PowerShell", preview.Summary);
+            Assert.False(preview.CanApproveForSession);
+        }
+
+        [Fact]
         public void BlockedCommandIsClassified()
         {
             ToolRiskAssessment assessment = _tool.AssessRisk(
-                Call("format C:", "powershell"),
+                Call("format C:"),
                 _context);
 
             Assert.Equal(ToolRisk.Blocked, assessment.Risk);
@@ -146,7 +152,7 @@ namespace MiaoWu.Tests.Tools
         public void TimeoutKillsProcess()
         {
             var stopwatch = Stopwatch.StartNew();
-            ToolResult result = Run("Start-Sleep -Seconds 10", "powershell", ".", 1);
+            ToolResult result = Run("Start-Sleep -Seconds 10", ".", 1000);
             stopwatch.Stop();
 
             Assert.Equal(ToolResultStatus.Failed, result.Status);
@@ -161,7 +167,7 @@ namespace MiaoWu.Tests.Tools
             var cts = new CancellationTokenSource();
             cts.CancelAfter(300);
 
-            ToolCall call = Call("Start-Sleep -Seconds 10", "powershell");
+            ToolCall call = Call("Start-Sleep -Seconds 10");
             _context.ApprovalPreview = _tool.Describe(call, _context);
 
             ToolResult result = _tool.ExecuteAsync(
@@ -176,7 +182,7 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void OutputIsTruncatedAtOneMegabyte()
         {
-            ToolResult result = Run("[Console]::Write(('x' * 1200000))", "powershell", ".", 30);
+            ToolResult result = Run("[Console]::Write(('x' * 1200000))", ".", 30000);
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.True(result.Truncated);
@@ -209,7 +215,7 @@ namespace MiaoWu.Tests.Tools
                 return;
             }
 
-            ToolResult result = Run("echo 中文", "cmd");
+            ToolResult result = Run("Write-Output '中文'");
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains("中文", result.Content);
@@ -243,11 +249,11 @@ namespace MiaoWu.Tests.Tools
 
         private ToolResult Run(
             string command,
-            string shell = "powershell",
-            string cwd = ".",
-            int timeoutSeconds = 60)
+            string workdir = ".",
+            int timeoutMs = 120000,
+            string description = null)
         {
-            ToolCall call = Call(command, shell, cwd, timeoutSeconds);
+            ToolCall call = Call(command, workdir, timeoutMs, description);
             try
             {
                 _context.ApprovalPreview = _tool.Describe(call, _context);
@@ -265,20 +271,23 @@ namespace MiaoWu.Tests.Tools
 
         private static ToolCall Call(
             string command,
-            string shell,
-            string cwd = ".",
-            int timeoutSeconds = 60)
+            string workdir = ".",
+            int timeoutMs = 120000,
+            string description = null)
         {
             var args = JsonValue.NewObject();
             args.Add("command", JsonValue.From(command));
-            args.Add("shell", JsonValue.From(shell));
-            args.Add("cwd", JsonValue.From(cwd));
-            args.Add("timeoutSeconds", JsonValue.From((double)timeoutSeconds));
+            args.Add("workdir", JsonValue.From(workdir));
+            args.Add("timeoutMs", JsonValue.From((double)timeoutMs));
+            if (description != null)
+            {
+                args.Add("description", JsonValue.From(description));
+            }
 
             return new ToolCall
             {
                 Id = "call-1",
-                Name = "run_command",
+                Name = "pwsh",
                 ArgumentsJson = JsonWriter.Write(args)
             };
         }

@@ -49,7 +49,7 @@ namespace MiaoWu.Tests.Providers
             LlmStreamEvent[] events = Map(
                 mapper,
                 "{\"choices\":[{\"delta\":{\"reasoning_content\":\"想\"}}]}",
-                "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\"}}]}}]}",
+                "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"path\\\":\"}}]}}]}",
                 "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"a.txt\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}");
 
             Assert.Single(events.OfType<LlmThinkingDelta>());
@@ -61,7 +61,7 @@ namespace MiaoWu.Tests.Providers
             Assert.Equal(2, completed.Response.Content.Count);
             Assert.Equal("thinking", completed.Response.Content[0].Type);
             Assert.Equal("toolCall", completed.Response.Content[1].Type);
-            Assert.Equal("read_file", completed.Response.Content[1].ToolName);
+            Assert.Equal("read", completed.Response.Content[1].ToolName);
             Assert.Equal("{\"path\":\"a.txt\"}", completed.Response.Content[1].ArgumentsJson);
         }
 
@@ -93,7 +93,7 @@ namespace MiaoWu.Tests.Providers
             var mapper = new AnthropicStreamMapper();
             Map(
                 mapper,
-                "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"list_dir\"}}",
+                "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"read\"}}",
                 "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\"}}",
                 "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\".\\\"}\"}}",
                 "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":5}}");
@@ -102,7 +102,7 @@ namespace MiaoWu.Tests.Providers
             Assert.NotNull(completed);
             Assert.Equal(StopReason.ToolUse, completed.Response.StopReason);
             Assert.Single(completed.Response.Content);
-            Assert.Equal("list_dir", completed.Response.Content[0].ToolName);
+            Assert.Equal("read", completed.Response.Content[0].ToolName);
             Assert.Equal("{\"path\":\".\"}", completed.Response.Content[0].ArgumentsJson);
         }
 

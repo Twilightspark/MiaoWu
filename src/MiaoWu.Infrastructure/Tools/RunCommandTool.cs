@@ -10,29 +10,39 @@ using MiaoWu.Core.Agents.Tools;
 namespace MiaoWu.Infrastructure.Tools
 {
     /// <summary>
-    /// run_command：在工作区内执行 PowerShell / cmd 命令。命令始终需要审批，
-    /// 默认 60 秒超时（上限 10 分钟），取消/超时会杀掉整个进程树。
+    /// pwsh：在工作区内执行 Windows PowerShell 命令（不加载 profile、不提权）。
+    /// 命令始终需要审批，默认 120 秒超时（上限 10 分钟），取消/超时会杀掉整个进程树。
     /// </summary>
-    public sealed class RunCommandTool : IAgentTool, IToolRiskEvaluator, IToolAuditRedactor
+    public sealed class PwshTool : IAgentTool, IToolRiskEvaluator, IToolAuditRedactor
     {
         private const int MaxCommandLength = 4000;
+        private const int MaxDescriptionLength = 400;
         private const int MaxPathLength = 400;
-        private const int DefaultTimeoutSeconds = 60;
-        private const int MaxTimeoutSeconds = 600;
+        private const int DefaultTimeoutMs = 120000;
+        private const int MaxTimeoutMs = 600000;
         private const int MaxOutputBytes = 1024 * 1024;
+
+        private readonly BackgroundJobRegistry _jobs;
+
+        public PwshTool(BackgroundJobRegistry jobs = null)
+        {
+            _jobs = jobs;
+        }
 
         public string Name
         {
-            get { return ToolNames.RunCommand; }
+            get { return ToolNames.Pwsh; }
         }
 
         public string Description
         {
             get
             {
-                return "在工作区内执行命令。参数：command（必填）、shell（powershell 或 cmd，默认 powershell）、"
-                    + "cwd（相对工作区根的目录，默认根目录）、timeoutSeconds（默认 60，最大 600）。"
-                    + "输出上限 1 MB；命令始终需要审批，取消或超时会终止整个进程树。";
+                return "在工作区内执行 PowerShell 命令（Windows PowerShell，无 profile）。参数：command（必填）、"
+                    + "description（可选，一句话说明这条命令做什么）、timeoutMs（默认 120000，最大 600000）、"
+                    + "workdir（相对工作区根或会话工作目录）、run_in_background（后台执行，返回 job id）。"
+                    + "输出上限 1 MB；命令始终需要审批，取消或超时会终止整个进程树；"
+                    + "非零退出码会以 [exit code: N] 结尾。";
             }
         }
 
@@ -64,8 +74,11 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 ToolArguments arguments = ToolArguments.Parse(call.ArgumentsJson);
                 string command = arguments.GetRequiredString("command", MaxCommandLength);
-                string shell = arguments.GetOptionalString("shell", "powershell", 40);
-                return "command=" + command + "; shell=" + shell;
+                string description = arguments.GetOptionalString("description", string.Empty, MaxDescriptionLength);
+                string workdir = arguments.GetOptionalString("workdir", ".", MaxPathLength);
+                return "command=" + command
+                    + "; description=" + description
+                    + "; workdir=" + workdir;
             }
             catch (ToolArgumentException)
             {
@@ -77,16 +90,16 @@ namespace MiaoWu.Infrastructure.Tools
         {
             CommandPlan plan = Prepare(call, context);
 
+            string summary = string.IsNullOrWhiteSpace(plan.DescriptionText)
+                ? "PowerShell · 目录：" + plan.WorkingDirectoryDisplay
+                : plan.DescriptionText + " · PowerShell · 目录：" + plan.WorkingDirectoryDisplay;
+
             return new ToolApprovalPreview
             {
                 Title = "执行命令",
                 Target = plan.Command,
-                Summary = "Shell："
-                    + ShellDisplayName(plan.Shell)
-                    + " · 目录："
-                    + plan.WorkingDirectoryDisplay
-                    + " · 超时："
-                    + plan.TimeoutSeconds.ToString(CultureInfo.InvariantCulture)
+                Summary = summary
+                    + " · 超时：" + (plan.TimeoutMs / 1000).ToString(CultureInfo.InvariantCulture)
                     + " 秒 · 输出上限 1 MB · 命令不可撤销",
                 CanApproveForSession = false,
                 CanShowDiff = false,
@@ -125,12 +138,45 @@ namespace MiaoWu.Infrastructure.Tools
                     "命令必须经过审批后才能执行。");
             }
 
-            string scriptPath = null;
-            Process process = null;
+            if (plan.Background)
+            {
+                if (_jobs == null)
+                {
+                    return ToolResult.Failure(
+                        call,
+                        ToolResultStatus.Failed,
+                        "background_jobs_unavailable",
+                        "当前组合没有后台任务注册表，不能后台执行。");
+                }
+
+                try
+                {
+                    BackgroundJobRegistry.BackgroundJob job = _jobs.Start(
+                        context.SessionId,
+                        plan.Command,
+                        plan.WorkingDirectory,
+                        plan.DescriptionText);
+                    return ToolResult.Success(
+                        call,
+                        "started background job " + job.Id,
+                        "后台任务 " + job.Id,
+                        true,
+                        false);
+                }
+                catch (Exception exception)
+                {
+                    return ToolResult.Failure(
+                        call,
+                        ToolResultStatus.Failed,
+                        "launch_failed",
+                        "无法启动后台任务：" + Shorten(exception.Message, 160));
+                }
+            }
+
+            Process process;
             try
             {
-                scriptPath = CreateScriptFile(plan);
-                process = StartProcess(plan, scriptPath);
+                process = StartProcess(plan);
             }
             catch (Exception exception) when (
                 exception is IOException
@@ -138,7 +184,6 @@ namespace MiaoWu.Infrastructure.Tools
                 || exception is InvalidOperationException
                 || exception is System.ComponentModel.Win32Exception)
             {
-                DeleteQuietly(scriptPath);
                 return ToolResult.Failure(
                     call,
                     ToolResultStatus.Failed,
@@ -156,7 +201,7 @@ namespace MiaoWu.Infrastructure.Tools
 
             ExitWaitResult wait = await WaitForExitAsync(
                 process,
-                plan.TimeoutSeconds,
+                plan.TimeoutMs,
                 cancellationToken).ConfigureAwait(false);
 
             if (wait == ExitWaitResult.TimedOut || wait == ExitWaitResult.Cancelled)
@@ -169,8 +214,6 @@ namespace MiaoWu.Infrastructure.Tools
 
             stopwatch.Stop();
             int exitCode = TryGetExitCode(process);
-            DeleteQuietly(scriptPath);
-            scriptPath = null;
             DisposeQuietly(process);
             process = null;
 
@@ -192,8 +235,8 @@ namespace MiaoWu.Infrastructure.Tools
                         call,
                         ToolResultStatus.Failed,
                         "command_timeout",
-                        "命令超过 " + plan.TimeoutSeconds.ToString(CultureInfo.InvariantCulture)
-                            + " 秒，进程树已终止。",
+                        "命令超过 " + plan.TimeoutMs.ToString(CultureInfo.InvariantCulture)
+                            + " 毫秒，进程树已终止。",
                         output,
                         truncated);
 
@@ -229,13 +272,12 @@ namespace MiaoWu.Infrastructure.Tools
                 return failed;
             }
 
-            var result = ToolResult.Success(
+            return ToolResult.Success(
                 call,
                 output,
                 BuildSummary(plan, exitCode),
                 true,
                 truncated);
-            return result;
         }
 
         private static ToolResult FailureWithOutput(
@@ -259,24 +301,38 @@ namespace MiaoWu.Infrastructure.Tools
             };
         }
 
+        /// <summary>没有显式 workdir 时用会话工作目录；没有会话上下文时退回工作区根（"."）。</summary>
+        private static string DefaultWorkdir(ToolContext context)
+        {
+            string current = context == null || context.WorkingDirectory == null
+                ? null
+                : context.WorkingDirectory.Current;
+            return string.IsNullOrWhiteSpace(current) ? "." : current;
+        }
+
         private static CommandPlan Prepare(ToolCall call, ToolContext context)
         {
             ToolArguments arguments;
             string command;
-            string shell;
-            string cwd;
-            int timeoutSeconds;
+            string description;
+            string workdir;
+            int timeoutMs;
+            bool background;
             try
             {
                 arguments = ToolArguments.Parse(call.ArgumentsJson);
                 command = arguments.GetRequiredString("command", MaxCommandLength);
-                shell = arguments.GetOptionalString("shell", "powershell", 40);
-                cwd = arguments.GetOptionalString("cwd", ".", MaxPathLength);
-                timeoutSeconds = arguments.GetOptionalInt(
-                    "timeoutSeconds",
-                    DefaultTimeoutSeconds,
+                description = arguments.GetOptionalString(
+                    "description",
+                    string.Empty,
+                    MaxDescriptionLength);
+                workdir = arguments.GetOptionalString("workdir", DefaultWorkdir(context), MaxPathLength);
+                timeoutMs = arguments.GetOptionalInt(
+                    "timeoutMs",
+                    DefaultTimeoutMs,
                     1,
-                    MaxTimeoutSeconds);
+                    MaxTimeoutMs);
+                background = arguments.GetOptionalBool("run_in_background", false);
             }
             catch (ToolArgumentException exception)
             {
@@ -286,22 +342,8 @@ namespace MiaoWu.Infrastructure.Tools
                     ToolResultStatus.InvalidArguments);
             }
 
-            string normalizedShell = (shell ?? string.Empty).Trim().ToLowerInvariant();
-            if (normalizedShell == "pwsh")
-            {
-                normalizedShell = "powershell";
-            }
-
-            if (normalizedShell != "powershell" && normalizedShell != "cmd")
-            {
-                throw new ToolPreparationException(
-                    "invalid_shell",
-                    "shell 只支持 powershell 或 cmd。",
-                    ToolResultStatus.InvalidArguments);
-            }
-
             PathSandboxResult resolved = context.Sandbox.Resolve(
-                cwd,
+                workdir,
                 PathAccessKind.Directory);
             if (!resolved.IsAllowed)
             {
@@ -314,42 +356,22 @@ namespace MiaoWu.Infrastructure.Tools
             return new CommandPlan
             {
                 Command = command,
-                Shell = normalizedShell,
+                DescriptionText = description == null ? string.Empty : description.Trim(),
                 WorkingDirectory = resolved.NormalizedPath,
                 WorkingDirectoryDisplay = ToolText.ToDisplayPath(relative),
-                TimeoutSeconds = timeoutSeconds
+                TimeoutMs = timeoutMs,
+                Background = background
             };
         }
 
-        private static string CreateScriptFile(CommandPlan plan)
-        {
-            string extension = plan.Shell == "powershell" ? ".ps1" : ".cmd";
-            string path = Path.Combine(
-                Path.GetTempPath(),
-                "miaowu-command-" + Guid.NewGuid().ToString("N") + extension);
-
-            if (plan.Shell == "powershell")
-            {
-                // Windows PowerShell 5.1 只有看到 UTF-8 BOM 才按 UTF-8 解析脚本。
-                File.WriteAllText(path, plan.Command, new UTF8Encoding(true));
-            }
-            else
-            {
-                Encoding encoding = GetOemEncoding();
-                File.WriteAllBytes(path, encoding.GetBytes(plan.Command + "\r\n"));
-            }
-
-            return path;
-        }
-
-        private static Process StartProcess(CommandPlan plan, string scriptPath)
+        private static Process StartProcess(CommandPlan plan)
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = plan.Shell == "powershell" ? "powershell.exe" : "cmd.exe",
-                Arguments = plan.Shell == "powershell"
-                    ? "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + scriptPath + "\""
-                    : "/d /s /c \"\"" + scriptPath + "\"\"",
+                // 固定 Windows PowerShell：工具名沿用 DSH 的 pwsh，但不做 shell 方言切换。
+                FileName = "powershell.exe",
+                Arguments = "-NoLogo -NoProfile -NonInteractive -Command "
+                    + QuoteCommandLineArgument(plan.Command),
                 WorkingDirectory = plan.WorkingDirectory,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -366,7 +388,7 @@ namespace MiaoWu.Infrastructure.Tools
 
             try
             {
-                // 脚本文件不需要输入；关掉 stdin，避免命令等待输入导致挂起。
+                // 命令不等待输入；关掉 stdin，避免命令等待输入导致挂起。
                 process.StandardInput.Close();
             }
             catch (Exception exception) when (
@@ -379,9 +401,54 @@ namespace MiaoWu.Infrastructure.Tools
             return process;
         }
 
+        /// <summary>
+        /// 把命令文本包成一个 CreateProcess 参数：引号与反斜杠按 CommandLineToArgvW 的规则转义，
+        /// 让 powershell.exe 收到的 -Command 值就是原文。
+        /// </summary>
+        private static string QuoteCommandLineArgument(string argument)
+        {
+            var builder = new StringBuilder(argument.Length + 8);
+            builder.Append('"');
+
+            int backslashes = 0;
+            for (int i = 0; i < argument.Length; i++)
+            {
+                char current = argument[i];
+                if (current == '\\')
+                {
+                    backslashes++;
+                    continue;
+                }
+
+                if (current == '"')
+                {
+                    builder.Append('\\', backslashes * 2 + 1);
+                    builder.Append('"');
+                    backslashes = 0;
+                    continue;
+                }
+
+                if (backslashes > 0)
+                {
+                    builder.Append('\\', backslashes);
+                    backslashes = 0;
+                }
+
+                builder.Append(current);
+            }
+
+            if (backslashes > 0)
+            {
+                builder.Append('\\', backslashes * 2);
+            }
+
+            builder.Append('"');
+            return builder.ToString();
+        }
+
         private static async Task<ExitWaitResult> WaitForExitAsync(
             Process process,
-            int timeoutSeconds,
+            int timeoutMs,
             CancellationToken cancellationToken)
         {
             var exitSource = new TaskCompletionSource<bool>(
@@ -395,7 +462,7 @@ namespace MiaoWu.Infrastructure.Tools
                     exitSource.TrySetResult(true);
                 }
 
-                Task timeoutTask = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds));
+                Task timeoutTask = Task.Delay(timeoutMs);
                 Task cancelTask = cancellationToken.CanBeCanceled
                     ? Task.Delay(Timeout.Infinite, cancellationToken)
                     : new TaskCompletionSource<bool>().Task;
@@ -489,8 +556,7 @@ namespace MiaoWu.Infrastructure.Tools
 
             var builder = new StringBuilder();
             builder.Append("命令：").Append(plan.Command).Append('\n');
-            builder.Append("Shell：").Append(ShellDisplayName(plan.Shell))
-                .Append(" · 目录：").Append(plan.WorkingDirectoryDisplay)
+            builder.Append("PowerShell · 目录：").Append(plan.WorkingDirectoryDisplay)
                 .Append(" · 耗时：")
                 .Append((elapsedMilliseconds / 1000.0).ToString("F1", CultureInfo.InvariantCulture))
                 .Append("s · 退出码：");
@@ -538,19 +604,20 @@ namespace MiaoWu.Infrastructure.Tools
                 builder.Append("（输出超过 1 MB，已截断）\n");
             }
 
+            if (wait == ExitWaitResult.Exited && exitCode != 0)
+            {
+                builder.Append("[exit code: ")
+                    .Append(exitCode.ToString(CultureInfo.InvariantCulture))
+                    .Append("]\n");
+            }
+
             return builder.ToString();
         }
 
         private static string BuildSummary(CommandPlan plan, int exitCode)
         {
-            return ShellDisplayName(plan.Shell)
-                + " · " + plan.WorkingDirectoryDisplay
+            return "PowerShell · " + plan.WorkingDirectoryDisplay
                 + " · 退出码 " + exitCode.ToString(CultureInfo.InvariantCulture);
-        }
-
-        private static string ShellDisplayName(string shell)
-        {
-            return shell == "cmd" ? "cmd" : "PowerShell";
         }
 
         private static int GetOemCodePage()
@@ -562,18 +629,6 @@ namespace MiaoWu.Infrastructure.Tools
             catch (Exception)
             {
                 return 936;
-            }
-        }
-
-        private static Encoding GetOemEncoding()
-        {
-            try
-            {
-                return Encoding.GetEncoding(GetOemCodePage());
-            }
-            catch (ArgumentException)
-            {
-                return Encoding.Default;
             }
         }
 
@@ -594,28 +649,6 @@ namespace MiaoWu.Infrastructure.Tools
             catch (ToolArgumentException)
             {
                 return false;
-            }
-        }
-
-        private static void DeleteQuietly(string path)
-        {
-            if (string.IsNullOrEmpty(path))
-            {
-                return;
-            }
-
-            try
-            {
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
             }
         }
 
@@ -656,10 +689,11 @@ namespace MiaoWu.Infrastructure.Tools
         private sealed class CommandPlan
         {
             public string Command;
-            public string Shell;
+            public string DescriptionText;
             public string WorkingDirectory;
             public string WorkingDirectoryDisplay;
-            public int TimeoutSeconds;
+            public int TimeoutMs;
+            public bool Background;
         }
 
         /// <summary>stdout + stderr 共享一个字节预算；超出后继续读但丢弃，避免管道阻塞。</summary>

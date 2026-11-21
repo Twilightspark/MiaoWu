@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Documents;
 using MiaoWu.Core.Settings;
 using MiaoWu.Infrastructure.Json;
@@ -222,6 +223,63 @@ namespace MiaoWu.Tests.Storage
             settings.Agent.CloseAction = CloseWindowAction.Exit;
             store.Save(settings);
             Assert.Equal(CloseWindowAction.Exit, new SettingsStore(_path).Load().Agent.CloseAction);
+        }
+
+        [Fact]
+        public void ApprovalPolicyDefaultsToAsk()
+        {
+            AppSettings settings = new SettingsStore(_path).Load();
+
+            Assert.Equal(ToolApprovalPolicy.Ask, settings.Agent.ApprovalPolicy);
+        }
+
+        [Fact]
+        public void ApprovalPolicyRoundTripsThroughConfig()
+        {
+            var store = new SettingsStore(_path);
+            AppSettings settings = store.Load();
+            settings.Agent.ApprovalPolicy = ToolApprovalPolicy.Never;
+            store.Save(settings);
+
+            JsonValue root = JsonParser.Parse(File.ReadAllText(_path));
+            Assert.Equal("never", root.Get("agent").Get("approvalPolicy").AsString());
+            Assert.Equal(
+                ToolApprovalPolicy.Never,
+                new SettingsStore(_path).Load().Agent.ApprovalPolicy);
+
+            settings.Agent.ApprovalPolicy = ToolApprovalPolicy.Ask;
+            store.Save(settings);
+            Assert.Equal(ToolApprovalPolicy.Ask, new SettingsStore(_path).Load().Agent.ApprovalPolicy);
+        }
+
+        [Fact]
+        public void UnknownApprovalPolicyFallsBackToAsk()
+        {
+            File.WriteAllText(
+                _path,
+                "{\"schemaVersion\":1,\"agent\":{\"approvalPolicy\":\"sometimes\"}}");
+
+            Assert.Equal(
+                ToolApprovalPolicy.Ask,
+                new SettingsStore(_path).Load().Agent.ApprovalPolicy);
+        }
+
+        [Fact]
+        public void GoalAutoContinueDefaultsToOffAndRoundTrips()
+        {
+            var store = new SettingsStore(_path);
+            AppSettings settings = store.Load();
+            Assert.False(settings.Agent.GoalAutoContinue);
+
+            settings.Agent.GoalAutoContinue = true;
+            store.Save(settings);
+
+            JsonValue root = JsonParser.Parse(File.ReadAllText(_path));
+            Assert.True(root.Get("agent").Get("goalAutoContinue").AsBoolean(false));
+            Assert.True(new SettingsStore(_path).Load().Agent.GoalAutoContinue);
+
+            File.WriteAllText(_path, "{\"schemaVersion\":1,\"agent\":{}}");
+            Assert.False(new SettingsStore(_path).Load().Agent.GoalAutoContinue);
         }
 
         [Fact]

@@ -42,6 +42,12 @@ namespace MiaoWu.Tests.Conversations
                 Path.Combine(agent, "attachments"),
                 AgentWorkspaceLayout.GetAttachmentsDirectory(_workspace));
             Assert.Equal(
+                Path.Combine(agent, "goals"),
+                AgentWorkspaceLayout.GetGoalsDirectory(_workspace));
+            Assert.Equal(
+                Path.Combine(agent, "goals", "s_01.json"),
+                AgentWorkspaceLayout.GetGoalFilePath(_workspace, "s_01"));
+            Assert.Equal(
                 Path.Combine(agent, "cache"),
                 AgentWorkspaceLayout.GetCacheDirectory(_workspace));
             Assert.Equal(
@@ -97,6 +103,8 @@ namespace MiaoWu.Tests.Conversations
                 () => AgentWorkspaceLayout.GetSessionFilePath(_workspace, "..\\..\\outside"));
             Assert.Throws<ArgumentException>(
                 () => AgentWorkspaceLayout.GetSessionFilePath(_workspace, "C:\\Windows\\system.ini"));
+            Assert.Throws<ArgumentException>(
+                () => AgentWorkspaceLayout.GetGoalFilePath(_workspace, "..\\..\\outside"));
         }
 
         [Fact]
@@ -137,6 +145,7 @@ namespace MiaoWu.Tests.Conversations
 
             Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "skills")));
             Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "sessions")));
+            Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "goals")));
             Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "attachments")));
             Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "cache")));
 

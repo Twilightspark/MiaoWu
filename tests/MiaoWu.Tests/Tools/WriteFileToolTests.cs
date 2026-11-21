@@ -10,16 +10,16 @@ using Xunit;
 
 namespace MiaoWu.Tests.Tools
 {
-    public sealed class WriteFileToolTests : IDisposable
+    public sealed class WriteToolTests : IDisposable
     {
         private readonly string _workspace;
         private readonly string _backups;
         private readonly FileBackupService _backupService;
-        private readonly WriteFileTool _tool;
+        private readonly WriteTool _tool;
         private readonly ToolContext _context;
         private readonly MutableClock _clock;
 
-        public WriteFileToolTests()
+        public WriteToolTests()
         {
             string root = Path.Combine(
                 Path.GetTempPath(),
@@ -30,7 +30,7 @@ namespace MiaoWu.Tests.Tools
 
             _clock = new MutableClock(new DateTimeOffset(2026, 11, 12, 8, 0, 0, TimeSpan.Zero));
             _backupService = new FileBackupService(_backups);
-            _tool = new WriteFileTool(_backupService, _clock);
+            _tool = new WriteTool(_backupService, _clock);
 
             _context = new ToolContext
             {
@@ -164,7 +164,7 @@ namespace MiaoWu.Tests.Tools
             args.Add("path", JsonValue.From("a.txt"));
 
             ToolResult result = _tool.ExecuteAsync(
-                new ToolCall { Id = "c1", Name = "write_file", ArgumentsJson = JsonWriter.Write(args) },
+                new ToolCall { Id = "c1", Name = "write", ArgumentsJson = JsonWriter.Write(args) },
                 _context,
                 CancellationToken.None).GetAwaiter().GetResult();
 
@@ -358,7 +358,7 @@ namespace MiaoWu.Tests.Tools
             return new ToolCall
             {
                 Id = "call-1",
-                Name = "write_file",
+                Name = "write",
                 ArgumentsJson = JsonWriter.Write(args)
             };
         }

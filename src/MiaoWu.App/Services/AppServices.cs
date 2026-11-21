@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Agents;
+using MiaoWu.Core.Agents.Goals;
+using MiaoWu.Core.Agents.Schedules;
 using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Models;
@@ -34,6 +36,8 @@ namespace MiaoWu.App.Services
         private readonly object _gate = new object();
         private readonly object _catalogWriteGate = new object();
         private readonly SemaphoreSlim _modelRefreshGate = new SemaphoreSlim(1, 1);
+        private readonly Dictionary<string, SessionGoalState> _goals =
+            new Dictionary<string, SessionGoalState>(StringComparer.Ordinal);
         private readonly ModelCatalogClient _modelCatalog;
         private bool _disposed;
 
@@ -95,7 +99,20 @@ namespace MiaoWu.App.Services
             DefaultModelSelection = new ModelSelection();
             ApplyDefaultModelFromSettings();
 
-            Tools = BuiltInToolset.CreateRegistry(paths, SystemClock.Instance);
+            BackgroundJobs = new BackgroundJobRegistry();
+            Questions = new UserQuestionService();
+            Schedules = new ScheduleService(
+                new ScheduleFileStore(System.IO.Path.Combine(paths.RootDirectory, "schedules.json")),
+                SystemClock.Instance,
+                DeliverScheduleAsync,
+                message => Logger.Warn("schedule.deliver", message));
+            Tools = BuiltInToolset.CreateRegistry(
+                paths,
+                SystemClock.Instance,
+                BackgroundJobs,
+                Questions,
+                null,
+                Schedules);
             Approvals = new ToolApprovalService();
             AuditWriter = new ToolAuditLogWriter(paths.LogsDirectory);
             AuditLogs = new ToolAuditLogService(paths.LogsDirectory, paths.ExportsDirectory);
@@ -128,11 +145,17 @@ namespace MiaoWu.App.Services
             Logs = new LogFileService(paths.LogsDirectory, paths.ExportsDirectory, BuildDiagnostics);
             Exporter = new ConversationExporter(paths.ExportsDirectory);
 
+            // 定时器随进程启动；关闭应用即停止投递（不注册系统计划任务）。
+            Schedules.Start();
+
             Logger.Info("app.start", "服务初始化完成，Provider " + Models.Providers.Count
                 + "，模型 " + Models.Models.Count + "。");
         }
 
         public IAppPaths Paths { get; }
+
+        /// <summary>定时任务：进程内到达时间后把 prompt 作为用户消息投递回会话。</summary>
+        public ScheduleService Schedules { get; }
 
         public AppSettings Settings { get; private set; }
 
@@ -164,7 +187,13 @@ namespace MiaoWu.App.Services
 
         public ToolRegistry Tools { get; }
 
+        /// <summary>后台任务注册表：pwsh 的 run_in_background 与 job_* 工具共用；退出时统一终止。</summary>
+        public BackgroundJobRegistry BackgroundJobs { get; }
+
         public ToolApprovalService Approvals { get; }
+
+        /// <summary>提问通道：ask_user_question 挂起选择题，UI 通过 Changed 增删通知。</summary>
+        public UserQuestionService Questions { get; }
 
         public ToolAuditLogWriter AuditWriter { get; }
 
@@ -436,6 +465,41 @@ namespace MiaoWu.App.Services
             return SessionCatalog.GetStore(workspace);
         }
 
+        /// <summary>
+        /// 会话目标状态：按会话 ID 缓存，首次访问时从 <c>.agent\goals\{sessionId}.json</c> 载入。
+        /// 工作区路径非法或会话 ID 不合法时退回纯内存状态，不影响会话本身。
+        /// </summary>
+        public SessionGoalState GetGoalState(Workspace workspace, string sessionId)
+        {
+            if (workspace == null || string.IsNullOrWhiteSpace(sessionId))
+            {
+                return null;
+            }
+
+            lock (_gate)
+            {
+                SessionGoalState state;
+                if (_goals.TryGetValue(sessionId, out state))
+                {
+                    return state;
+                }
+
+                try
+                {
+                    string path = AgentWorkspaceLayout.GetGoalFilePath(workspace.Path, sessionId);
+                    state = new SessionGoalState(new GoalFileStore(path));
+                }
+                catch (Exception exception)
+                {
+                    Logger.Warn("goal.store", "目标状态文件不可用，退回内存状态：" + exception.Message);
+                    state = new SessionGoalState();
+                }
+
+                _goals[sessionId] = state;
+                return state;
+            }
+        }
+
         public AgentSessionOptions CreateSessionOptions(
             Workspace workspace,
             string sessionId,
@@ -456,6 +520,12 @@ namespace MiaoWu.App.Services
                 HistoryLimit = Settings.Agent.HistoryLimit,
                 MaxTurnsPerRun = Settings.Agent.MaxTurnsPerRun,
                 MaxToolCallsPerTurn = Settings.Agent.MaxToolCallsPerTurn,
+                MaxParallelToolCalls = Settings.Agent.MaxParallelReadTools,
+                ApprovalPolicy = Settings.Agent.ApprovalPolicy,
+                ApprovalPolicyProvider = () => Settings.Agent.ApprovalPolicy,
+                Goals = GetGoalState(workspace, sessionId),
+                GoalContinuation = Settings.Agent.GoalAutoContinue,
+                GoalContinuationProvider = () => Settings.Agent.GoalAutoContinue,
                 AutoTitle = Settings.Agent.AutoTitle
             };
         }
@@ -556,6 +626,109 @@ namespace MiaoWu.App.Services
             }
         }
 
+        /// <summary>
+        /// 日程投递：把 prompt 作为用户消息排进目标会话。只支持“当前会话”目标；
+        /// 会话不在内存时按 workspaceId 重新装载，工作区已删除则只记日志。
+        /// </summary>
+        private async Task DeliverScheduleAsync(ScheduleDefinition definition)
+        {
+            if (definition == null || string.IsNullOrWhiteSpace(definition.Prompt))
+            {
+                return;
+            }
+
+            try
+            {
+                IAgentSession session;
+                if (definition.Target == ScheduleTarget.ThisSession)
+                {
+                    session = string.IsNullOrWhiteSpace(definition.SessionId)
+                        ? null
+                        : Runtime.Find(definition.SessionId);
+
+                    if (session == null)
+                    {
+                        Workspace workspace = FindWorkspace(definition.WorkspaceId);
+                        if (workspace == null || string.IsNullOrWhiteSpace(definition.SessionId))
+                        {
+                            Logger.Warn("schedule.deliver", "找不到定时任务的会话或工作区：" + definition.Id);
+                            return;
+                        }
+
+                        session = await Runtime.GetOrCreateAsync(
+                            CreateSessionOptions(workspace, definition.SessionId, null, null),
+                            CancellationToken.None);
+                    }
+                }
+                else
+                {
+                    Workspace workspace = FindWorkspace(definition.WorkspaceId);
+                    if (workspace == null)
+                    {
+                        Logger.Warn("schedule.deliver", "找不到定时任务的工作区：" + definition.Id);
+                        return;
+                    }
+
+                    // new_once 复用首次创建的会话；new 每次都开一个新会话。
+                    bool reuse = definition.Target == ScheduleTarget.NewOnce
+                        && !string.IsNullOrWhiteSpace(definition.SessionId);
+                    string sessionId = reuse
+                        ? definition.SessionId
+                        : "s_" + Guid.NewGuid().ToString("N").Substring(0, 12);
+
+                    if (!reuse)
+                    {
+                        Schedules.UpdateSession(definition.Id, sessionId);
+                    }
+
+                    session = await Runtime.GetOrCreateAsync(
+                        CreateSessionOptions(workspace, sessionId, null, null),
+                        CancellationToken.None);
+                }
+
+                var input = new AgentInput
+                {
+                    ClientMessageId = "m_" + Guid.NewGuid().ToString("N").Substring(0, 10),
+                    Blocks = new List<AgentContentBlock>
+                    {
+                        new AgentContentBlock { Type = "text", Text = definition.Prompt }
+                    }
+                };
+
+                await session.SendAsync(input, AgentSendMode.Queue, CancellationToken.None);
+                Logger.Info("schedule.deliver", "已投递定时任务 " + definition.Id + "。");
+            }
+            catch (Exception exception)
+            {
+                Logger.Warn("schedule.deliver", "投递定时任务失败：" + exception.Message);
+            }
+        }
+
+        private Workspace FindWorkspace(string workspaceId)
+        {
+            if (string.IsNullOrWhiteSpace(workspaceId))
+            {
+                return null;
+            }
+
+            WorkspaceCollection collection = WorkspaceStore.Load();
+            if (collection == null || collection.Workspaces == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < collection.Workspaces.Count; i++)
+            {
+                Workspace workspace = collection.Workspaces[i];
+                if (workspace != null && string.Equals(workspace.Id, workspaceId, StringComparison.Ordinal))
+                {
+                    return workspace;
+                }
+            }
+
+            return null;
+        }
+
         public void Dispose()
         {
             lock (_gate)
@@ -579,6 +752,22 @@ namespace MiaoWu.App.Services
             try
             {
                 Runtime.Dispose();
+            }
+            catch (Exception)
+            {
+            }
+
+            try
+            {
+                BackgroundJobs.Dispose();
+            }
+            catch (Exception)
+            {
+            }
+
+            try
+            {
+                Schedules.Dispose();
             }
             catch (Exception)
             {

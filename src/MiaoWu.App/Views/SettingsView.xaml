@@ -57,6 +57,21 @@
             <Setter Property="Margin" Value="0,14,0,6" />
         </Style>
 
+        <!-- 通用页分组标题（基础 / 运行）：11px tertiary，放在灰底圆角卡片上方。 -->
+        <Style x:Key="SettingsGroupLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Meta}">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+            <Setter Property="Margin" Value="2,0,0,6" />
+        </Style>
+
+        <!-- 通用页选项行：标题与选项控件同一行，标题贴左、标题列固定 76，选项靠内容区右边缘右对齐。
+             选项标题只用来标识，不加粗；粗体只留给页标题和表单标题。 -->
+        <Style x:Key="SettingsRowLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.H3}">
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
         <!-- 表单输入：与协议下拉同高（Metric.Field.Height），不要一个 36 一个 29。 -->
         <!-- TextBox 模板与 TextBoxView 各应用一次 Padding，所以用 4,4：
              文字左缩进与下拉的 10+1 对齐，垂直方向也留得住 18px 行高。 -->
@@ -442,6 +457,98 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- 通用页的行内下拉：不画边框与底色，只显示当前值 + 右侧小箭头（参照系统设置的行内下拉），
+             弹出层仍用菜单卡片，键盘焦点用焦点环而不是描边盒。 -->
+        <Style x:Key="SettingsRowComboBox" TargetType="ComboBox">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+            <Setter Property="FontSize" Value="{StaticResource Font.Body.Size}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource SettingsComboBoxItem}" />
+            <Setter Property="ItemTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Title}"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBoxItem}}" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter Margin="0,0,4,0"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              IsHitTestVisible="False"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                            <Path x:Name="Chevron"
+                                  Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Style="{StaticResource Icon}"
+                                  Data="{StaticResource Ico.ChevronDown}"
+                                  Fill="{DynamicResource Brush.Text3}" />
+                            <ToggleButton x:Name="ToggleButton"
+                                          Focusable="False"
+                                          IsTabStop="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                                   PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}"
+                                   StaysOpen="False">
+                                <Border Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.MenuHairline}"
+                                        BorderThickness="{StaticResource Thickness.MenuHairline}"
+                                        CornerRadius="{StaticResource Radius.MenuHairline}"
+                                        SnapsToDevicePixels="False"
+                                        UseLayoutRounding="False">
+                                    <Border Style="{StaticResource Menu.Surface}">
+                                        <ScrollViewer MaxHeight="240"
+                                                      Focusable="False"
+                                                      HorizontalScrollBarVisibility="Disabled"
+                                                      VerticalScrollBarVisibility="Auto">
+                                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chevron" Property="Fill" Value="{DynamicResource Brush.Text2}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Chevron" Property="Fill" Value="{DynamicResource Brush.Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="{StaticResource Opacity.Disabled}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -509,66 +616,113 @@
                         <Grid>
                             <!-- 通用 -->
                             <StackPanel Visibility="{Binding IsGeneralPage, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="通用" Style="{StaticResource Text.Section}" Margin="0,14,0,4" />
+                                <TextBlock Text="通用" Style="{StaticResource Text.Section}" Margin="0,14,0,10" />
 
-                                <TextBlock Text="外观" Style="{StaticResource SettingsSection}" />
-                                <Border HorizontalAlignment="Left"
-                                        Padding="1"
+                                <TextBlock Text="基础" Style="{StaticResource SettingsGroupLabel}" />
+                                <Border Margin="0,0,0,18"
+                                        Padding="14,0"
                                         Background="{DynamicResource Brush.Sel}"
-                                        CornerRadius="{StaticResource Radius.Segment}">
-                                    <ListBox Style="{StaticResource SettingsSegmentList}"
-                                             ItemsSource="{Binding ThemeOptions}"
-                                             SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
-                                             AutomationProperties.Name="外观">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Title}"
-                                                           FontSize="{StaticResource Font.Segment.Size}"
-                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
-                                                           VerticalAlignment="Center" />
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                        CornerRadius="{StaticResource Radius.Card}">
+                                    <StackPanel>
+                                        <Border Padding="0,9"
+                                                BorderBrush="{DynamicResource Brush.Line3}"
+                                                BorderThickness="0,0,0,1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="76" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="外观颜色" Style="{StaticResource SettingsRowLabel}" />
+                                                <ComboBox Grid.Column="1"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          Style="{StaticResource SettingsRowComboBox}"
+                                                          ItemsSource="{Binding ThemeOptions}"
+                                                          SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
+                                                          AutomationProperties.Name="外观颜色" />
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Padding="0,9"
+                                                BorderBrush="{DynamicResource Brush.Line3}"
+                                                BorderThickness="0,0,0,1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="76" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="系统语言" Style="{StaticResource SettingsRowLabel}" />
+                                                <ComboBox Grid.Column="1"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          Style="{StaticResource SettingsRowComboBox}"
+                                                          ItemsSource="{Binding LanguageOptions}"
+                                                          SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
+                                                          AutomationProperties.Name="系统语言" />
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Padding="0,9">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="76" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="系统关闭" Style="{StaticResource SettingsRowLabel}" />
+                                                <ComboBox Grid.Column="1"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          Style="{StaticResource SettingsRowComboBox}"
+                                                          ItemsSource="{Binding CloseActionOptions}"
+                                                          SelectedItem="{Binding SelectedCloseAction, Mode=TwoWay}"
+                                                          AutomationProperties.Name="系统关闭" />
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
                                 </Border>
 
-                                <TextBlock Text="语言" Style="{StaticResource SettingsSection}" />
-                                <Border HorizontalAlignment="Left"
-                                        Padding="1"
+                                <TextBlock Text="智能体" Style="{StaticResource SettingsGroupLabel}" />
+                                <Border Margin="0,0,0,16"
+                                        Padding="14,0"
                                         Background="{DynamicResource Brush.Sel}"
-                                        CornerRadius="{StaticResource Radius.Segment}">
-                                    <ListBox Style="{StaticResource SettingsSegmentList}"
-                                             ItemsSource="{Binding LanguageOptions}"
-                                             SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
-                                             AutomationProperties.Name="语言">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Title}"
-                                                           FontSize="{StaticResource Font.Segment.Size}"
-                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
-                                                           VerticalAlignment="Center" />
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
-                                </Border>
+                                        CornerRadius="{StaticResource Radius.Card}">
+                                    <StackPanel>
+                                        <Border Padding="0,9"
+                                                BorderBrush="{DynamicResource Brush.Line3}"
+                                                BorderThickness="0,0,0,1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="76" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="流程审批" Style="{StaticResource SettingsRowLabel}" />
+                                                <ComboBox Grid.Column="1"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          Style="{StaticResource SettingsRowComboBox}"
+                                                          ItemsSource="{Binding ApprovalPolicyOptions}"
+                                                          SelectedItem="{Binding SelectedApprovalPolicy, Mode=TwoWay}"
+                                                          AutomationProperties.Name="流程审批" />
+                                            </Grid>
+                                        </Border>
 
-                                <TextBlock Text="关闭" Style="{StaticResource SettingsSection}" />
-                                <Border HorizontalAlignment="Left"
-                                        Padding="1"
-                                        Background="{DynamicResource Brush.Sel}"
-                                        CornerRadius="{StaticResource Radius.Segment}">
-                                    <ListBox Style="{StaticResource SettingsSegmentList}"
-                                             ItemsSource="{Binding CloseActionOptions}"
-                                             SelectedItem="{Binding SelectedCloseAction, Mode=TwoWay}"
-                                             AutomationProperties.Name="关闭窗口时的行为">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Title}"
-                                                           FontSize="{StaticResource Font.Segment.Size}"
-                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
-                                                           VerticalAlignment="Center" />
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                        <Border Padding="0,9">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="76" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="任务目标" Style="{StaticResource SettingsRowLabel}" />
+                                                <ComboBox Grid.Column="1"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          Style="{StaticResource SettingsRowComboBox}"
+                                                          ItemsSource="{Binding GoalContinuationOptions}"
+                                                          SelectedItem="{Binding SelectedGoalContinuation, Mode=TwoWay}"
+                                                          AutomationProperties.Name="任务目标" />
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
                                 </Border>
 
                                 <TextBlock Margin="0,12,0,0"

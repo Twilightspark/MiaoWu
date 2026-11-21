@@ -117,6 +117,63 @@
                                             Command="{Binding DenyCommand}" />
                                 </StackPanel>
 
+                                <!-- 提问：选项即动作；多选时先切换选中，再点“确认”。 -->
+                                <StackPanel Grid.Row="2"
+                                            Margin="22,6,0,0"
+                                            Visibility="{Binding ShowQuestionActions, Converter={StaticResource BoolToVisibility}}">
+                                    <ItemsControl ItemsSource="{Binding Options}" Focusable="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Margin="0,2,0,0"
+                                                        Padding="4,6"
+                                                        HorizontalContentAlignment="Left"
+                                                        Style="{StaticResource Button.Ghost}"
+                                                        Command="{Binding ChooseCommand}"
+                                                        AutomationProperties.Name="{Binding Label}">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Label}"
+                                                                   Style="{StaticResource Text.Body}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,2,0,0"
+                                                                   Text="{Binding Description}"
+                                                                   Style="{StaticResource Text.Meta}"
+                                                                   Foreground="{DynamicResource Brush.Text3}"
+                                                                   TextWrapping="Wrap"
+                                                                   Visibility="{Binding HasDescription, Converter={StaticResource BoolToVisibility}}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Grid Margin="0,6,0,0"
+                                          Visibility="{Binding AllowFreeText, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Height="30"
+                                                 VerticalContentAlignment="Center"
+                                                 Padding="{StaticResource Pad.Field}"
+                                                 Text="{Binding FreeText, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.Name="自由回答" />
+                                        <Button Grid.Column="1"
+                                                Margin="6,0,0,0"
+                                                Content="提交"
+                                                Style="{StaticResource Button.Primary}"
+                                                Command="{Binding SubmitFreeTextCommand}" />
+                                    </Grid>
+                                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                                        <Button Content="确认"
+                                                Style="{StaticResource Button.Primary}"
+                                                Command="{Binding SubmitAnswerCommand}"
+                                                Visibility="{Binding QuestionMultiSelect, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button Margin="6,0,0,0"
+                                                Content="跳过"
+                                                Style="{StaticResource Button.Ghost}"
+                                                Command="{Binding SkipQuestionCommand}" />
+                                    </StackPanel>
+                                </StackPanel>
+
                                 <!-- 改动预览留在通知里：审批不再进消息流，diff 只能在这里看。 -->
                                 <Border Grid.Row="3"
                                         Margin="22,8,0,0"
@@ -151,6 +208,10 @@
                             <DataTrigger Binding="{Binding IsApproval}" Value="True">
                                 <Setter TargetName="NoticeIcon" Property="Data" Value="{StaticResource Ico.Warning}" />
                                 <Setter TargetName="NoticeIcon" Property="Fill" Value="{DynamicResource Brush.Warning}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsQuestion}" Value="True">
+                                <Setter TargetName="NoticeIcon" Property="Data" Value="{StaticResource Ico.Sparkle}" />
+                                <Setter TargetName="NoticeIcon" Property="Fill" Value="{DynamicResource Brush.Info}" />
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>

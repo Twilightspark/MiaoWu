@@ -21,11 +21,11 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void ReadOnlyToolRunsWithoutApproval()
         {
-            var tool = new FakeTool("list_dir", ToolRisk.Low, false);
+            var tool = new FakeTool("read", ToolRisk.Low, false);
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
-            ToolExecution execution = Execute(dispatcher, "list_dir");
+            ToolExecution execution = Execute(dispatcher, "read");
 
             Assert.Equal(ToolExecutionDecision.Auto, execution.Decision);
             Assert.True(execution.Result.IsSuccess);
@@ -39,12 +39,12 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void HighRiskToolRequiresApprovalEvenIfToolOptsOut()
         {
-            var tool = new FakeTool("write_file", ToolRisk.High, false);
+            var tool = new FakeTool("write", ToolRisk.High, false);
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
             Task<ToolExecution> task = dispatcher.ExecuteAsync(
-                Call("write_file", "{\"path\":\"a.txt\"}"),
+                Call("write", "{\"path\":\"a.txt\"}"),
                 Context("s1"),
                 CancellationToken.None);
 
@@ -58,14 +58,36 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
+        public void NeverPolicyRunsApprovalWithoutAsking()
+        {
+            var tool = new FakeTool("write", ToolRisk.High, true);
+            _registry.Register(tool);
+            AgentToolDispatcher dispatcher = CreateDispatcher();
+
+            ToolContext context = Context("s1");
+            context.ApprovalPolicy = ToolApprovalPolicy.Never;
+
+            ToolExecution execution = dispatcher.ExecuteAsync(
+                Call("write", "{\"path\":\"a.txt\"}"),
+                context,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.Equal(ToolExecutionDecision.Auto, execution.Decision);
+            Assert.True(execution.Result.IsSuccess);
+            Assert.Equal(1, tool.ExecuteCount);
+            Assert.Equal(0, _approvals.GetPendingCount());
+            Assert.Contains("never", execution.RiskReason);
+        }
+
+        [Fact]
         public void DeniedApprovalDoesNotExecuteTool()
         {
-            var tool = new FakeTool("write_file", ToolRisk.High, true);
+            var tool = new FakeTool("write", ToolRisk.High, true);
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
             Task<ToolExecution> task = dispatcher.ExecuteAsync(
-                Call("write_file", "{\"path\":\"a.txt\"}"),
+                Call("write", "{\"path\":\"a.txt\"}"),
                 Context("s1"),
                 CancellationToken.None);
 
@@ -83,7 +105,7 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void SessionGrantSkipsSecondApproval()
         {
-            var tool = new FakeTool("write_file", ToolRisk.High, true)
+            var tool = new FakeTool("write", ToolRisk.High, true)
             {
                 Preview = new ToolApprovalPreview
                 {
@@ -98,14 +120,14 @@ namespace MiaoWu.Tests.Tools
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
             Task<ToolExecution> first = dispatcher.ExecuteAsync(
-                Call("write_file", "{\"path\":\"a.txt\"}"),
+                Call("write", "{\"path\":\"a.txt\"}"),
                 Context("s1"),
                 CancellationToken.None);
             _approvals.TryResolve("call-1", ToolApprovalOutcome.ApproveForSession, null);
 
             Assert.Equal(ToolExecutionDecision.ApprovedForSession, first.GetAwaiter().GetResult().Decision);
 
-            ToolExecution second = Execute(dispatcher, "write_file", "call-2");
+            ToolExecution second = Execute(dispatcher, "write", "call-2");
 
             Assert.Equal(ToolExecutionDecision.ApprovedForSession, second.Decision);
             Assert.Equal(2, tool.ExecuteCount);
@@ -115,11 +137,11 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void BlockedRiskEvaluatorPreventsExecutionAndApproval()
         {
-            var tool = new BlockingTool("run_command");
+            var tool = new BlockingTool("pwsh");
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
-            ToolExecution execution = Execute(dispatcher, "run_command", "call-1", "{\"command\":\"format C:\"}");
+            ToolExecution execution = Execute(dispatcher, "pwsh", "call-1", "{\"command\":\"format C:\"}");
 
             Assert.Equal(ToolExecutionDecision.Blocked, execution.Decision);
             Assert.Equal(ToolResultStatus.Blocked, execution.Result.Status);
@@ -145,11 +167,11 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void ToolExceptionBecomesStructuredFailure()
         {
-            var tool = new FakeTool("list_dir", ToolRisk.Low, false) { Throw = true };
+            var tool = new FakeTool("read", ToolRisk.Low, false) { Throw = true };
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
-            ToolExecution execution = Execute(dispatcher, "list_dir");
+            ToolExecution execution = Execute(dispatcher, "read");
 
             Assert.Equal(ToolResultStatus.Failed, execution.Result.Status);
             Assert.Equal("tool_exception", execution.Result.ErrorCode);
@@ -159,13 +181,13 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void CancellingWhilePendingCancelsExecution()
         {
-            var tool = new FakeTool("write_file", ToolRisk.High, true);
+            var tool = new FakeTool("write", ToolRisk.High, true);
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
             var cts = new CancellationTokenSource();
 
             Task<ToolExecution> task = dispatcher.ExecuteAsync(
-                Call("write_file", "{}"),
+                Call("write", "{}"),
                 Context("s1"),
                 cts.Token);
 
@@ -180,13 +202,13 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void MissingSessionFailsApprovalTools()
         {
-            var tool = new FakeTool("write_file", ToolRisk.High, true);
+            var tool = new FakeTool("write", ToolRisk.High, true);
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
             ToolExecution execution = Execute(
                 dispatcher,
-                "write_file",
+                "write",
                 "call-1",
                 "{}",
                 Context(string.Empty));
@@ -199,13 +221,13 @@ namespace MiaoWu.Tests.Tools
         [Fact]
         public void AuditEntryRedactsSecrets()
         {
-            var tool = new FakeTool("read_file", ToolRisk.Low, false);
+            var tool = new FakeTool("read", ToolRisk.Low, false);
             _registry.Register(tool);
             AgentToolDispatcher dispatcher = CreateDispatcher();
 
             Execute(
                 dispatcher,
-                "read_file",
+                "read",
                 "call-9",
                 "{\"api_key\":\"sk-abcdefghijklmnop\",\"path\":\"a.txt\"}");
 
@@ -213,7 +235,7 @@ namespace MiaoWu.Tests.Tools
             Assert.DoesNotContain("sk-abcdefghijklmnop", entry.ArgumentsSummary);
             Assert.Equal("s1", entry.SessionId);
             Assert.Equal("w1", entry.WorkspaceId);
-            Assert.Equal("read_file", entry.ToolName);
+            Assert.Equal("read", entry.ToolName);
             Assert.True(entry.DurationMilliseconds >= 0);
             Assert.Equal(_clock.UtcNow, entry.Timestamp);
         }

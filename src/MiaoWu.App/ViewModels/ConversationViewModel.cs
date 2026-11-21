@@ -121,6 +121,7 @@ namespace MiaoWu.App.ViewModels
         private Workspace _workspace;
         private string _sessionId;
         private string _title;
+        private bool _pendingPlanMode;
         private string _draft;
         private string _statusText;
         private string _usageText;
@@ -161,6 +162,7 @@ namespace MiaoWu.App.ViewModels
 
             SendCommand = new RelayCommand(() => FireAndForget(SendAsync()), () => CanSend);
             StopCommand = new RelayCommand(() => FireAndForget(StopAsync()), () => IsRunning);
+            TogglePlanModeCommand = new RelayCommand(TogglePlanMode, () => HasWorkspace);
             NewSessionCommand = new RelayCommand(() => FireAndForget(NewSessionAsync()), () => _workspace != null);
             RetryCommand = new RelayCommand(() => FireAndForget(RetryLastAsync()), () => HasRetryTarget);
             RenameCommand = new RelayCommand(BeginRename, () => HasSession);
@@ -213,6 +215,8 @@ namespace MiaoWu.App.ViewModels
         public ObservableCollection<ModelGroup> ModelGroups { get; }
 
         public RelayCommand SendCommand { get; }
+
+        public RelayCommand TogglePlanModeCommand { get; }
 
         public RelayCommand StopCommand { get; }
 
@@ -501,6 +505,31 @@ namespace MiaoWu.App.ViewModels
             get { return !string.IsNullOrEmpty(_sessionId); }
         }
 
+        /// <summary>计划模式：开启后只暴露只读工具与 exit_plan_mode，批准后恢复完整工具集。</summary>
+        public bool IsPlanMode
+        {
+            get
+            {
+                IAgentSession session = CurrentSession;
+                return session == null ? _pendingPlanMode : session.PlanMode;
+            }
+        }
+
+        public string PlanModeLabel
+        {
+            get { return IsPlanMode ? "计划中" : "计划"; }
+        }
+
+        public string PlanModeToolTip
+        {
+            get
+            {
+                return IsPlanMode
+                    ? "计划模式：只允许只读工具；让模型先给计划，批准后再改文件"
+                    : "进入计划模式：先调研并提交计划，批准后再改文件";
+            }
+        }
+
         public bool HasWorkspace
         {
             get { return _workspace != null; }
@@ -573,6 +602,28 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// 切换计划模式：已挂载的会话直接改运行时状态；还没发过消息的新会话先记住，
+        /// 等首次发送创建会话时再应用。
+        /// </summary>
+        private void TogglePlanMode()
+        {
+            IAgentSession session = CurrentSession;
+            if (session == null)
+            {
+                _pendingPlanMode = !_pendingPlanMode;
+            }
+            else
+            {
+                session.SetPlanMode(!session.PlanMode);
+            }
+
+            OnPropertyChanged(nameof(IsPlanMode));
+            OnPropertyChanged(nameof(PlanModeLabel));
+            OnPropertyChanged(nameof(PlanModeToolTip));
+            CommandManager.InvalidateRequerySuggested();
+        }
+
         public void SetWorkspace(Workspace workspace)
         {
             bool sameWorkspace = ReferenceEquals(_workspace, workspace)
@@ -641,6 +692,14 @@ namespace MiaoWu.App.ViewModels
                 _pump.Start();
                 _isAttached = true;
 
+                // 新会话在“首次发送”前就打开了计划模式：会话创建后补上。
+                if (_pendingPlanMode && !session.PlanMode)
+                {
+                    session.SetPlanMode(true);
+                }
+
+                _pendingPlanMode = false;
+
                 AgentSessionSnapshot snapshot = session.Snapshot();
                 ApplySnapshot(snapshot);
                 SyncModelSelection(snapshot);
@@ -690,6 +749,7 @@ namespace MiaoWu.App.ViewModels
         public void Detach()
         {
             _attachVersion++;
+            _pendingPlanMode = false;
             DetachCore();
         }
 
@@ -719,6 +779,9 @@ namespace MiaoWu.App.ViewModels
             ApplySessionFlags(false, false);
             OnPropertyChanged(nameof(SessionId));
             OnPropertyChanged(nameof(HasSession));
+            OnPropertyChanged(nameof(IsPlanMode));
+            OnPropertyChanged(nameof(PlanModeLabel));
+            OnPropertyChanged(nameof(PlanModeToolTip));
             OnPropertyChanged(nameof(Title));
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(CanSend));
@@ -1299,6 +1362,18 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
+            // 计划模式可能被 exit_plan_mode 在轮次中改掉：事件到达时同步按钮状态。
+            var planModeChanged = evt as PlanModeChangedEvent;
+            if (planModeChanged != null)
+            {
+                _pendingPlanMode = false;
+                OnPropertyChanged(nameof(IsPlanMode));
+                OnPropertyChanged(nameof(PlanModeLabel));
+                OnPropertyChanged(nameof(PlanModeToolTip));
+                CommandManager.InvalidateRequerySuggested();
+                return;
+            }
+
             var messageStarted = evt as MessageStartedEvent;
             if (messageStarted != null)
             {
@@ -1451,10 +1526,10 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            var turnStarted = evt as TurnStartedEvent;
-            if (turnStarted != null && turnStarted.TurnIndex > 1)
+            var stepStarted = evt as StepStartedEvent;
+            if (stepStarted != null && !stepStarted.IsFirstStep)
             {
-                StatusText = "第 " + turnStarted.TurnIndex + " 轮…";
+                StatusText = "第 " + stepStarted.StepIndex + " 步…";
             }
         }
 

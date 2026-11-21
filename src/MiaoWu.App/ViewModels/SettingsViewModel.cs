@@ -7,6 +7,7 @@ using System.Windows;
 using MiaoWu.App.Mvvm;
 using MiaoWu.App.Services;
 using MiaoWu.Core;
+using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Models;
 using MiaoWu.Core.Settings;
@@ -44,6 +45,40 @@ namespace MiaoWu.App.ViewModels
         }
 
         public CloseWindowAction Action { get; }
+
+        public string Title { get; }
+    }
+
+    /// <summary>
+    /// 设置页“工具审批”的选项。Ask 为默认（有风险就弹通知等确认）；Never 只对已判定为
+    /// 需要审批的动作自动放行，Blocked 级风险仍然直接拒绝。
+    /// </summary>
+    public sealed class ApprovalPolicyChoice
+    {
+        public ApprovalPolicyChoice(ToolApprovalPolicy policy, string title)
+        {
+            Policy = policy;
+            Title = title;
+        }
+
+        public ToolApprovalPolicy Policy { get; }
+
+        public string Title { get; }
+    }
+
+    /// <summary>
+    /// 设置页“目标续跑”的选项。开启后，一轮正常结束且会话目标仍在进行中时，
+    /// 自动接一轮 continuation，直到目标完成或达到轮次预算。
+    /// </summary>
+    public sealed class GoalContinuationChoice
+    {
+        public GoalContinuationChoice(bool enabled, string title)
+        {
+            Enabled = enabled;
+            Title = title;
+        }
+
+        public bool Enabled { get; }
 
         public string Title { get; }
     }
@@ -169,12 +204,22 @@ namespace MiaoWu.App.ViewModels
                 new LanguageChoice("zh-CN", "中文"),
                 new LanguageChoice("en-US", "英文")
             };
-            // 三个出口并列：询问（默认）/ 直接退出 / 最小化到托盘。
+            // 三个出口并列：询问（默认）/ 退出应用 / 后台运行。
             CloseActionOptions = new[]
             {
                 new CloseActionChoice(CloseWindowAction.Ask, "每次询问"),
-                new CloseActionChoice(CloseWindowAction.Exit, "直接退出"),
-                new CloseActionChoice(CloseWindowAction.MinimizeToTray, "最小化到托盘")
+                new CloseActionChoice(CloseWindowAction.Exit, "退出应用"),
+                new CloseActionChoice(CloseWindowAction.MinimizeToTray, "后台运行")
+            };
+            ApprovalPolicyOptions = new[]
+            {
+                new ApprovalPolicyChoice(ToolApprovalPolicy.Ask, "每次询问"),
+                new ApprovalPolicyChoice(ToolApprovalPolicy.Never, "从不询问")
+            };
+            GoalContinuationOptions = new[]
+            {
+                new GoalContinuationChoice(false, "关闭"),
+                new GoalContinuationChoice(true, "自动续跑")
             };
             ProviderFormModeOptions = new[]
             {
@@ -216,6 +261,10 @@ namespace MiaoWu.App.ViewModels
         public IReadOnlyList<LanguageChoice> LanguageOptions { get; }
 
         public IReadOnlyList<CloseActionChoice> CloseActionOptions { get; }
+
+        public IReadOnlyList<ApprovalPolicyChoice> ApprovalPolicyOptions { get; }
+
+        public IReadOnlyList<GoalContinuationChoice> GoalContinuationOptions { get; }
 
         public IReadOnlyList<ProviderFormModeChoice> ProviderFormModeOptions { get; }
 
@@ -373,6 +422,70 @@ namespace MiaoWu.App.ViewModels
                 }
 
                 _app.Settings.Agent.CloseAction = value.Action;
+                OnPropertyChanged();
+                SaveSettings();
+            }
+        }
+
+        /// <summary>
+        /// 工具审批策略的选中项。保存即生效：会话每次构造工具上下文都会重读该值，
+        /// 运行中的一轮也会在下一次工具调用时用上新策略。
+        /// </summary>
+        public ApprovalPolicyChoice SelectedApprovalPolicy
+        {
+            get
+            {
+                ToolApprovalPolicy current = _app.Settings.Agent.ApprovalPolicy;
+                foreach (ApprovalPolicyChoice choice in ApprovalPolicyOptions)
+                {
+                    if (choice.Policy == current)
+                    {
+                        return choice;
+                    }
+                }
+
+                return null;
+            }
+            set
+            {
+                if (value == null || _app.Settings.Agent.ApprovalPolicy == value.Policy)
+                {
+                    return;
+                }
+
+                _app.Settings.Agent.ApprovalPolicy = value.Policy;
+                OnPropertyChanged();
+                SaveSettings();
+            }
+        }
+
+        /// <summary>
+        /// 目标自动续跑的选中项。保存即生效：每轮结束判断续跑时都会重读该值，
+        /// 关掉它不会打断正在跑的一轮，只是不再自动接下一轮。
+        /// </summary>
+        public GoalContinuationChoice SelectedGoalContinuation
+        {
+            get
+            {
+                bool current = _app.Settings.Agent.GoalAutoContinue;
+                foreach (GoalContinuationChoice choice in GoalContinuationOptions)
+                {
+                    if (choice.Enabled == current)
+                    {
+                        return choice;
+                    }
+                }
+
+                return null;
+            }
+            set
+            {
+                if (value == null || _app.Settings.Agent.GoalAutoContinue == value.Enabled)
+                {
+                    return;
+                }
+
+                _app.Settings.Agent.GoalAutoContinue = value.Enabled;
                 OnPropertyChanged();
                 SaveSettings();
             }
