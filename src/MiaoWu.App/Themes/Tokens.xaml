@@ -140,6 +140,10 @@
     <sys:Double x:Key="Font.H2.Line">22</sys:Double>
     <sys:Double x:Key="Font.H3.Line">22</sys:Double>
     <sys:Double x:Key="Font.Body.Line">22</sys:Double>
+    <!-- 输入框正文行高：RichTextBox 的光标高度就是行高，沿用正文的 22 会让光标比 13px 汉字
+         高出一大截（观感上“光标没和文字对齐”）。18 = 13 × 1.38，与浏览器 textarea 的
+         光标比例一致；占位提示必须用同一行高，否则两者基线错开。 -->
+    <sys:Double x:Key="Font.Composer.Line">18</sys:Double>
     <sys:Double x:Key="Font.List.Line">20</sys:Double>
     <sys:Double x:Key="Font.Group.Line">16</sys:Double>
     <sys:Double x:Key="Font.Meta.Line">16</sys:Double>

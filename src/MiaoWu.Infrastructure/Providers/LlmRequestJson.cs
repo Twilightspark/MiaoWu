@@ -28,6 +28,12 @@ namespace MiaoWu.Infrastructure.Providers
                 body["temperature"] = JsonValue.From(request.Temperature.Value);
             }
 
+            // 推理等级只在模型带思考通道时才发；默认档是 null，不写这个字段。
+            if (!string.IsNullOrWhiteSpace(request.ReasoningEffort) && model.SupportsReasoning)
+            {
+                body["reasoning_effort"] = JsonValue.From(request.ReasoningEffort);
+            }
+
             int? maxTokens = request.MaxOutputTokens ?? model.MaxOutputTokens;
             if (maxTokens.HasValue && maxTokens.Value > 0)
             {

@@ -1447,6 +1447,15 @@ namespace MiaoWu.Core.Agents
                 SystemPrompt = systemPrompt
             };
 
+            // 推理等级只在该模型带思考通道时写进请求：默认档留空，让 Provider 用自己的预算。
+            string reasoning = _options.ReasoningEffortProvider != null
+                ? _options.ReasoningEffortProvider()
+                : _options.ReasoningEffort;
+            if (!string.IsNullOrWhiteSpace(reasoning) && model.SupportsReasoning)
+            {
+                request.ReasoningEffort = reasoning;
+            }
+
             if (ToolsEnabled && definitions != null && definitions.Count > 0)
             {
                 request.Tools = new List<ToolDeclaration>();

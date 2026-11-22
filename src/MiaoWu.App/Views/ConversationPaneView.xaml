@@ -177,25 +177,12 @@
             </Setter>
         </Style>
 
-        <!-- 模型入口：只做当前模型 + 展开箭头；真正的菜单在下方 Popup 里按提供商分区。 -->
+        <!-- 模型入口：只做当前模型 + 推理等级 + 展开箭头；真正的菜单在下方 Popup 里分两级。 -->
         <Style x:Key="Composer.ModelButton" TargetType="Button" BasedOn="{StaticResource Button.Base}">
             <Setter Property="Height" Value="26" />
-            <Setter Property="MaxWidth" Value="196" />
+            <Setter Property="MaxWidth" Value="240" />
             <Setter Property="Padding" Value="8,0,6,0" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
-        </Style>
-
-        <Style x:Key="Composer.PlanButton" TargetType="Button" BasedOn="{StaticResource Composer.ModelButton}">
-            <Setter Property="MaxWidth" Value="80" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsPlanMode}" Value="True">
-                    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                    <Setter Property="Background" Value="{DynamicResource Brush.Sel}" />
-                </DataTrigger>
-            </Style.Triggers>
         </Style>
 
         <!-- 输入卡下方读数：三个只读 pill，共用 12/20 与 tertiary 静止态。 -->
@@ -1246,6 +1233,7 @@
                     <TextBlock x:Name="PlaceholderText"
                                Margin="2,0,0,0"
                                VerticalAlignment="Top"
+                               LineHeight="{StaticResource Font.Composer.Line}"
                                IsHitTestVisible="False"
                                Text="{Binding ComposerPlaceholder, FallbackValue=发送问题或任务，/调用指令，@引用文件}"
                                Style="{StaticResource Text.Body}"
@@ -1253,12 +1241,11 @@
                                Visibility="{Binding Draft, Converter={StaticResource EmptyStringToVisibility}}" />
                 </Grid>
 
-                <!-- 工具行：预留附件、状态、当前模型、发送。 -->
+                <!-- 工具行：附件、状态、模型 / 推理等级、发送。计划模式改由 `/plan`、`/work` 命令切换。 -->
                 <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -1286,32 +1273,25 @@
                                Style="{StaticResource Text.Time}"
                                TextTrimming="CharacterEllipsis" />
 
-                    <Button x:Name="PlanModeButton"
-                            Grid.Column="2"
-                            Margin="0,0,6,0"
-                            VerticalAlignment="Center"
-                            Style="{StaticResource Composer.PlanButton}"
-                            Command="{Binding TogglePlanModeCommand}"
-                            ToolTip="{Binding PlanModeToolTip}"
-                            AutomationProperties.Name="计划模式">
-                        <TextBlock VerticalAlignment="Center"
-                                   Text="{Binding PlanModeLabel}"
-                                   Style="{StaticResource Text.Chip}" />
-                    </Button>
-
                     <Button x:Name="ModelPickerButton"
-                            Grid.Column="3"
+                            Grid.Column="2"
                             VerticalAlignment="Center"
                             Style="{StaticResource Composer.ModelButton}"
                             Click="OnModelPickerClick"
                             ToolTip="{Binding ModelToolTip}"
-                            AutomationProperties.Name="选择模型">
+                            AutomationProperties.Name="选择模型与推理等级">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock VerticalAlignment="Center"
-                                       MaxWidth="148"
+                                       MaxWidth="150"
                                        Text="{Binding SelectedModelName, FallbackValue=选择模型}"
                                        Style="{StaticResource Text.Chip}"
                                        TextTrimming="CharacterEllipsis" />
+                            <!-- 推理等级跟在模型名后面，静止态用 tertiary，不抢模型名 -->
+                            <TextBlock Margin="5,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding SelectedReasoningName}"
+                                       Style="{StaticResource Text.Chip}"
+                                       Foreground="{DynamicResource Brush.Text3}" />
                             <Path Width="12"
                                   Height="12"
                                   Margin="4,0,0,0"
@@ -1321,7 +1301,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="3"
                             Margin="8,0,0,0"
                             Style="{StaticResource Composer.SendButton}"
                             Command="{Binding SendCommand}"
@@ -1336,7 +1316,7 @@
                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     </Button>
 
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="3"
                             Margin="8,0,0,0"
                             Style="{StaticResource Composer.StopButton}"
                             Command="{Binding StopCommand}"
@@ -1351,7 +1331,8 @@
                     </Button>
                 </Grid>
 
-                <!-- 模型菜单：向上展开，按提供商分区；行点击直接选中并关闭。 -->
+                <!-- 模型菜单：向上展开，两级。第一级只有「模型」「推理等级」两行，
+                     第二级分别是按提供商分区的模型列表和推理等级列表；第二级顶部是返回行。-->
                 <Popup x:Name="ModelPopup"
                        Grid.RowSpan="2"
                        Placement="Custom"
@@ -1374,41 +1355,161 @@
                                           HorizontalScrollBarVisibility="Disabled"
                                           VerticalScrollBarVisibility="Auto">
                                 <StackPanel>
-                                    <ItemsControl ItemsSource="{Binding ModelGroups}" Focusable="False">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel>
-                                                    <TextBlock Margin="{StaticResource Margin.ModelSection}"
-                                                               Text="{Binding ProviderName}"
-                                                               Style="{StaticResource Text.Group}" />
-                                                    <ItemsControl ItemsSource="{Binding Models}" Focusable="False">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Button Style="{StaticResource Composer.ModelRowButton}"
-                                                                        Content="{Binding}"
-                                                                        ContentTemplate="{StaticResource Composer.ModelRow}"
-                                                                        Tag="{Binding}"
-                                                                        Click="OnModelRowClick"
-                                                                        ToolTip="{Binding Detail}"
-                                                                        AutomationProperties.Name="{Binding DisplayName}" />
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
+                                    <!-- 第一级：两个入口行，右侧是当前值 -->
+                                    <StackPanel Visibility="{Binding IsModelMenuRoot, Converter={StaticResource BoolToVisibility}}">
+                                        <Button Style="{StaticResource Composer.MenuRow}"
+                                                Click="OnShowModelListClick"
+                                                ToolTip="选择模型"
+                                                AutomationProperties.Name="模型">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Text="模型"
+                                                           Style="{StaticResource Text.Body}" />
+                                                <StackPanel Grid.Column="1"
+                                                            Orientation="Horizontal"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock VerticalAlignment="Center"
+                                                               MaxWidth="150"
+                                                               Text="{Binding SelectedModelName}"
+                                                               Style="{StaticResource Text.Chip}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <Path Width="12"
+                                                          Height="12"
+                                                          Margin="6,0,0,0"
+                                                          Style="{StaticResource Icon}"
+                                                          Data="{StaticResource Ico.ChevronRight}"
+                                                          Fill="{DynamicResource Brush.Text3}" />
                                                 </StackPanel>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
+                                            </Grid>
+                                        </Button>
 
-                                    <StackPanel Visibility="{Binding HasModelGroups, Converter={StaticResource InverseBoolToVisibility}}">
+                                        <Button Style="{StaticResource Composer.MenuRow}"
+                                                Click="OnShowReasoningListClick"
+                                                ToolTip="选择推理等级：越高的等级思考越久"
+                                                AutomationProperties.Name="推理等级">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Text="推理等级"
+                                                           Style="{StaticResource Text.Body}" />
+                                                <StackPanel Grid.Column="1"
+                                                            Orientation="Horizontal"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock VerticalAlignment="Center"
+                                                               Text="{Binding SelectedReasoningName}"
+                                                               Style="{StaticResource Text.Chip}" />
+                                                    <Path Width="12"
+                                                          Height="12"
+                                                          Margin="6,0,0,0"
+                                                          Style="{StaticResource Icon}"
+                                                          Data="{StaticResource Ico.ChevronRight}"
+                                                          Fill="{DynamicResource Brush.Text3}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- 第二级：模型列表 -->
+                                    <StackPanel Visibility="{Binding IsModelMenuModels, Converter={StaticResource BoolToVisibility}}">
+                                        <Button Style="{StaticResource Composer.MenuRow}"
+                                                Click="OnModelMenuBackClick"
+                                                ToolTip="返回"
+                                                AutomationProperties.Name="返回模型菜单">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Width="12"
+                                                      Height="12"
+                                                      Margin="0,0,4,0"
+                                                      Style="{StaticResource Icon}"
+                                                      Data="{StaticResource Ico.ChevronLeft}"
+                                                      Fill="{DynamicResource Brush.Text3}" />
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Text="{Binding ModelMenuTitle}"
+                                                           Style="{StaticResource Text.Body}" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <ItemsControl ItemsSource="{Binding ModelGroups}" Focusable="False">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel>
+                                                        <TextBlock Margin="{StaticResource Margin.ModelSection}"
+                                                                   Text="{Binding ProviderName}"
+                                                                   Style="{StaticResource Text.Group}" />
+                                                        <ItemsControl ItemsSource="{Binding Models}" Focusable="False">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Button Style="{StaticResource Composer.ModelRowButton}"
+                                                                            Content="{Binding}"
+                                                                            ContentTemplate="{StaticResource Composer.ModelRow}"
+                                                                            Tag="{Binding}"
+                                                                            Click="OnModelRowClick"
+                                                                            ToolTip="{Binding Detail}"
+                                                                            AutomationProperties.Name="{Binding DisplayName}" />
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <StackPanel Visibility="{Binding HasModelGroups, Converter={StaticResource InverseBoolToVisibility}}">
+                                            <TextBlock Margin="{StaticResource Margin.ModelSection}"
+                                                       Text="{Binding ModelEmptyText}"
+                                                       Style="{StaticResource Text.Meta}"
+                                                       TextWrapping="Wrap" />
+                                            <Button Margin="8,2,8,4"
+                                                    HorizontalAlignment="Left"
+                                                    Content="打开模型设置"
+                                                    Style="{StaticResource Button.Ghost}"
+                                                    Click="OnOpenModelSettingsClick" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- 第二级：推理等级 -->
+                                    <StackPanel Visibility="{Binding IsModelMenuReasoning, Converter={StaticResource BoolToVisibility}}">
+                                        <Button Style="{StaticResource Composer.MenuRow}"
+                                                Click="OnModelMenuBackClick"
+                                                ToolTip="返回"
+                                                AutomationProperties.Name="返回模型菜单">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Width="12"
+                                                      Height="12"
+                                                      Margin="0,0,4,0"
+                                                      Style="{StaticResource Icon}"
+                                                      Data="{StaticResource Ico.ChevronLeft}"
+                                                      Fill="{DynamicResource Brush.Text3}" />
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Text="{Binding ModelMenuTitle}"
+                                                           Style="{StaticResource Text.Body}" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <ItemsControl ItemsSource="{Binding ReasoningLevels}" Focusable="False">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource Composer.ModelRowButton}"
+                                                            Content="{Binding}"
+                                                            ContentTemplate="{StaticResource Composer.ModelRow}"
+                                                            Tag="{Binding}"
+                                                            Click="OnReasoningRowClick"
+                                                            ToolTip="{Binding Description}"
+                                                            AutomationProperties.Name="{Binding DisplayName}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
                                         <TextBlock Margin="{StaticResource Margin.ModelSection}"
-                                                   Text="{Binding ModelEmptyText}"
+                                                   Text="只对支持思考的模型生效；Default 不发送。"
                                                    Style="{StaticResource Text.Meta}"
                                                    TextWrapping="Wrap" />
-                                        <Button Margin="8,2,8,4"
-                                                HorizontalAlignment="Left"
-                                                Content="打开模型设置"
-                                                Style="{StaticResource Button.Ghost}"
-                                                Click="OnOpenModelSettingsClick" />
                                     </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>

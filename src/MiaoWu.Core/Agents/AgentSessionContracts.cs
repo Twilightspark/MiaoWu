@@ -60,6 +60,18 @@ namespace MiaoWu.Core.Agents
 
         public int? MaxOutputTokens { get; set; }
 
+        /// <summary>
+        /// 推理等级：<c>null</c>（默认）/ <c>low</c> / <c>medium</c> / <c>high</c>。
+        /// 只有模型声明了思考通道（<c>SupportsReasoning</c>）时才会写进请求。
+        /// </summary>
+        public string ReasoningEffort { get; set; }
+
+        /// <summary>
+        /// 每次构造请求时读取的推理等级（优先于 <see cref="ReasoningEffort"/>）。
+        /// 宿主用它把输入框里的选择接成实时生效，而不是等会话重建。
+        /// </summary>
+        public Func<string> ReasoningEffortProvider { get; set; }
+
         public int HistoryLimit { get; set; }
 
         public int MaxTurnsPerRun { get; set; }

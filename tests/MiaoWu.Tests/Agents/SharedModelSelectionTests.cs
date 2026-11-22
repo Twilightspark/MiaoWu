@@ -125,6 +125,26 @@ namespace MiaoWu.Tests.Agents
             Assert.Equal("n", snapshot.ModelId);
         }
 
+        [Fact]
+        public async Task ReasoningEffortFromProviderReachesTheRequest()
+        {
+            _api.EnqueueText("答");
+
+            AgentSessionOptions options = Options("s_reasoning", "p", "m");
+            options.ReasoningEffortProvider = () => "medium";
+            IAgentSession session = await _runtime.GetOrCreateAsync(options, CancellationToken.None);
+
+            AgentRun run = await session.SendAsync(
+                TextInput("想深一点"),
+                AgentSendMode.Queue,
+                CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            // 宿主把输入框里的等级接成实时读取的委托，请求装配时按它带 reasoning_effort。
+            Assert.Equal("medium", _api.LastRequest.ReasoningEffort);
+        }
+
         private static AgentSessionOptions Options(string id, string providerId, string modelId)
         {
             return new AgentSessionOptions
@@ -189,7 +209,8 @@ namespace MiaoWu.Tests.Agents
                 Id = "m",
                 Name = "脚本一",
                 ContextWindow = 8192,
-                MaxOutputTokens = 1024
+                MaxOutputTokens = 1024,
+                SupportsReasoning = true
             });
             catalog.Providers.Add(new ProviderDefinition
             {

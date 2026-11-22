@@ -755,7 +755,8 @@ namespace MiaoWu.App.Views
 
         private void OnModelPickerClick(object sender, RoutedEventArgs e)
         {
-            if (!(DataContext is ConversationViewModel))
+            var viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null)
             {
                 return;
             }
@@ -766,10 +767,60 @@ namespace MiaoWu.App.Views
                 return;
             }
 
+            // 每次点开都回到第一级（模型 / 推理等级），不记住上次翻到的那一层。
+            viewModel.ResetModelMenu();
+
             // 点击本身会完成一次鼠标捕获；立即打开会被 StaysOpen=False 当成外部点击关掉。
             Dispatcher.BeginInvoke(
                 new Action(() => ModelPopup.IsOpen = true),
                 System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+        /// <summary>推理等级行点击：记下选择并收起菜单（和模型行同一套点击语义）。</summary>
+        private void OnReasoningRowClick(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            var level = button == null ? null : button.Tag as ReasoningLevel;
+            var viewModel = DataContext as ConversationViewModel;
+            if (level != null && viewModel != null)
+            {
+                viewModel.SelectReasoning(level);
+            }
+
+            ModelPopup.IsOpen = false;
+        }
+
+        private void OnShowModelListClick(object sender, RoutedEventArgs e)
+        {
+            var viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null)
+            {
+                return;
+            }
+
+            viewModel.ShowModelList();
+        }
+
+        private void OnShowReasoningListClick(object sender, RoutedEventArgs e)
+        {
+            var viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null)
+            {
+                return;
+            }
+
+            viewModel.ShowReasoningList();
+        }
+
+        private void OnModelMenuBackClick(object sender, RoutedEventArgs e)
+        {
+            var viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null)
+            {
+                return;
+            }
+
+            viewModel.BackToModelRoot();
         }
 
         private void OnModelRowClick(object sender, RoutedEventArgs e)

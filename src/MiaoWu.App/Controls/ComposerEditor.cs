@@ -50,7 +50,7 @@ namespace MiaoWu.App.Controls
             Background = Brushes.Transparent;
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            Document.LineHeight = 22;
+            Document.LineHeight = 18;
 
             TextChanged += OnDocumentTextChanged;
             SelectionChanged += OnSelectionChanged;
@@ -75,8 +75,9 @@ namespace MiaoWu.App.Controls
         {
             base.OnInitialized(e);
 
-            // 文档排版参数统一取 Tokens.xaml 里的正文行高与字体，避免和消息流两套字号。
-            Document.LineHeight = FindDouble("Font.Body.Line", 22);
+            // 文档排版参数统一取 Tokens.xaml 里的输入框行高与字体，避免和消息流两套字号。
+            // 行高就是光标高度：用 22（正文段落行高）时光标比汉字高出约 8px，看起来没对齐。
+            Document.LineHeight = FindDouble("Font.Composer.Line", 18);
             if (TryFindResource("Font.Family") is FontFamily family)
             {
                 Document.FontFamily = family;

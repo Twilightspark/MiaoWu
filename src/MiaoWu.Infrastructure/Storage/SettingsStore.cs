@@ -140,6 +140,7 @@ namespace MiaoWu.Infrastructure.Storage
             value.SystemPrompt = GetString(node, "systemPrompt") ?? value.SystemPrompt;
             value.DefaultProviderId = GetString(node, "defaultProviderId");
             value.DefaultModelId = GetString(node, "defaultModelId");
+            value.ReasoningEffort = GetString(node, "reasoningEffort");
             value.Temperature = GetDouble(node, "temperature", value.Temperature);
             value.HistoryLimit = GetInt(node, "historyLimit", value.HistoryLimit);
             value.MaxConcurrentRequests = GetInt(node, "maxConcurrentRequests", value.MaxConcurrentRequests);
@@ -300,6 +301,7 @@ namespace MiaoWu.Infrastructure.Storage
             agent["systemPrompt"] = JsonValue.From(agentValue.SystemPrompt ?? string.Empty);
             agent["defaultProviderId"] = StringValue(agentValue.DefaultProviderId);
             agent["defaultModelId"] = StringValue(agentValue.DefaultModelId);
+            agent["reasoningEffort"] = StringValue(agentValue.ReasoningEffort);
             agent["temperature"] = JsonValue.From(agentValue.Temperature);
             agent["maxOutputTokens"] = agentValue.MaxOutputTokens.HasValue
                 ? JsonValue.From(agentValue.MaxOutputTokens.Value)

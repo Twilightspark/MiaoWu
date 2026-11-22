@@ -119,6 +119,12 @@ namespace MiaoWu.Core.Settings
 
         public string DefaultModelId { get; set; }
 
+        /// <summary>
+        /// 推理等级：<c>null</c>（默认）/ <c>low</c> / <c>medium</c> / <c>high</c>。
+        /// 与模型一样是全局配置；只有模型声明了思考通道时才会发给 Provider。
+        /// </summary>
+        public string ReasoningEffort { get; set; }
+
         public double Temperature { get; set; }
 
         public int? MaxOutputTokens { get; set; }
@@ -189,6 +195,7 @@ namespace MiaoWu.Core.Settings
                 SystemPrompt = SystemPrompt,
                 DefaultProviderId = DefaultProviderId,
                 DefaultModelId = DefaultModelId,
+                ReasoningEffort = ReasoningEffort,
                 Temperature = Temperature,
                 MaxOutputTokens = MaxOutputTokens,
                 HistoryLimit = HistoryLimit,
@@ -236,6 +243,7 @@ namespace MiaoWu.Core.Settings
             }
 
             value.Temperature = Clamp(value.Temperature, 0, 2, 0.7);
+            value.ReasoningEffort = NormalizeReasoningEffort(value.ReasoningEffort);
             value.HistoryLimit = Clamp(value.HistoryLimit, 10, 5000, 200);
             value.MaxConcurrentRequests = Clamp(value.MaxConcurrentRequests, 1, 8, 4);
             value.MaxHotSessions = Clamp(value.MaxHotSessions, 1, 32, 8);
@@ -278,6 +286,22 @@ namespace MiaoWu.Core.Settings
             }
 
             return value;
+        }
+
+        /// <summary>空串与未知值都归一成 null（默认档），避免把非法字符串发给 Provider。</summary>
+        public static string NormalizeReasoningEffort(string effort)
+        {
+            if (string.IsNullOrWhiteSpace(effort))
+            {
+                return null;
+            }
+
+            string value = effort.Trim().ToLowerInvariant();
+            return string.Equals(value, "low", StringComparison.Ordinal)
+                || string.Equals(value, "medium", StringComparison.Ordinal)
+                || string.Equals(value, "high", StringComparison.Ordinal)
+                ? value
+                : null;
         }
 
         private static int Clamp(int value, int min, int max, int fallback)

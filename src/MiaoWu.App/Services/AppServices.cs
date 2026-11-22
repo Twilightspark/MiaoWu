@@ -365,6 +365,28 @@ namespace MiaoWu.App.Services
             return Models.Resolve(selection.ProviderId, selection.ModelId) ?? Models.GetDefault();
         }
 
+        /// <summary>
+        /// 设置全局推理等级（<c>null</c> / <c>low</c> / <c>medium</c> / <c>high</c>）并立即落盘。
+        /// 和模型一样是所有会话共用的配置：改完之后下一次请求就按新等级发送。
+        /// </summary>
+        public void SetReasoningEffort(string effort)
+        {
+            string normalized = NormalizeReasoningEffort(effort);
+            if (string.Equals(Settings.Agent.ReasoningEffort, normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            Settings.Agent.ReasoningEffort = normalized;
+            SaveSettings();
+        }
+
+        /// <summary>空串与未知值都归一成 <c>null</c>（默认档，不发 reasoning_effort）。</summary>
+        public static string NormalizeReasoningEffort(string effort)
+        {
+            return AgentSettings.NormalizeReasoningEffort(effort);
+        }
+
         /// <summary>保存 Provider 配置并热切换注册表。校验失败返回错误列表，不写盘。</summary>
         public IReadOnlyList<string> SaveProviders(ProviderCatalog catalog)
         {
@@ -517,6 +539,8 @@ namespace MiaoWu.App.Services
                 ModelId = modelId ?? DefaultModelSelection.ModelId ?? Settings.Agent.DefaultModelId,
                 Temperature = Settings.Agent.Temperature,
                 MaxOutputTokens = Settings.Agent.MaxOutputTokens,
+                ReasoningEffort = NormalizeReasoningEffort(Settings.Agent.ReasoningEffort),
+                ReasoningEffortProvider = () => NormalizeReasoningEffort(Settings.Agent.ReasoningEffort),
                 HistoryLimit = Settings.Agent.HistoryLimit,
                 MaxTurnsPerRun = Settings.Agent.MaxTurnsPerRun,
                 MaxToolCallsPerTurn = Settings.Agent.MaxToolCallsPerTurn,

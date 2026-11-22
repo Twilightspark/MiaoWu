@@ -25,7 +25,7 @@ using MiaoWu.Infrastructure.Workspaces;
 
 namespace MiaoWu.App.ViewModels
 {
-    /// <summary>输入框右下角的模型下拉项。</summary>
+    /// <summary>输入框右下角的模型入口：菜单第一级只显示模型名，第二级才是候选列表。</summary>
     public sealed class ModelOption
     {
         public ModelOption(
@@ -33,13 +33,15 @@ namespace MiaoWu.App.ViewModels
             string modelId,
             string displayName,
             string providerName,
-            bool isDefault)
+            bool isDefault,
+            bool supportsReasoning = false)
         {
             ProviderId = providerId;
             ModelId = modelId;
             DisplayName = displayName;
             ProviderName = providerName;
             IsDefault = isDefault;
+            SupportsReasoning = supportsReasoning;
         }
 
         public string ProviderId { get; }
@@ -56,6 +58,9 @@ namespace MiaoWu.App.ViewModels
         public string ProviderName { get; }
 
         public bool IsDefault { get; }
+
+        /// <summary>模型带思考通道时才把推理等级发给 Provider。</summary>
+        public bool SupportsReasoning { get; }
 
         /// <summary>下拉行右侧只标「默认」；供应商与模型 ID 放进行的 tooltip。</summary>
         public string Badge
@@ -92,11 +97,76 @@ namespace MiaoWu.App.ViewModels
     }
 
     /// <summary>
+    /// 模型菜单第二级的推理等级。Id 为空表示“不指定”，请求里不带 reasoning_effort，
+    /// 由 Provider 用模型自己的默认思考预算。等级值对齐 OpenAI 的 reasoning_effort。
+    /// </summary>
+    public sealed class ReasoningLevel : ObservableObject
+    {
+        private bool _isSelected;
+
+        public ReasoningLevel(string id, string displayName, string description)
+        {
+            Id = id;
+            DisplayName = displayName;
+            Description = description;
+        }
+
+        /// <summary>"low" | "medium" | "high"；默认档为 null。</summary>
+        public string Id { get; }
+
+        public string DisplayName { get; }
+
+        public string Description { get; }
+
+        public bool IsDefault
+        {
+            get { return string.IsNullOrEmpty(Id); }
+        }
+
+        public bool IsSelected
+        {
+            get { return _isSelected; }
+            set { SetProperty(ref _isSelected, value); }
+        }
+
+        public string Badge
+        {
+            get { return _isSelected ? "当前" : string.Empty; }
+        }
+
+        internal void SetSelected(bool selected)
+        {
+            if (_isSelected == selected)
+            {
+                return;
+            }
+
+            _isSelected = selected;
+            OnPropertyChanged(nameof(IsSelected));
+            OnPropertyChanged(nameof(Badge));
+        }
+
+        public override string ToString()
+        {
+            return DisplayName;
+        }
+    }
+
+    /// <summary>
     /// 右栏会话：订阅一个 AgentSession、渲染消息/工具卡/审批卡、承载输入框。
     /// 切换会话只换订阅，不打断后台正在生成的会话。
     /// </summary>
     public sealed class ConversationViewModel : ObservableObject, IDisposable
     {
+        /// <summary>模型菜单第一级：模型 / 推理等级两行。</summary>
+        public const string ModelMenuRoot = "root";
+
+        /// <summary>模型菜单第二级：模型列表。</summary>
+        public const string ModelMenuModels = "models";
+
+        /// <summary>模型菜单第二级：推理等级列表。</summary>
+        public const string ModelMenuReasoning = "reasoning";
+
         private readonly AppServices _app;
         private readonly IDialogService _dialogs;
         private readonly IClipboardService _clipboard;
@@ -129,6 +199,8 @@ namespace MiaoWu.App.ViewModels
         private string _draft;
         private string _statusText;
         private ModelOption _selectedModel;
+        private ReasoningLevel _reasoningLevel;
+        private string _modelMenuLevel = ModelMenuRoot;
         private bool _isRunning;
         private bool _isRenaming;
         private string _renameDraft;
@@ -175,6 +247,19 @@ namespace MiaoWu.App.ViewModels
                 () => _workspace == null ? null : _workspace.Path);
 
             ComposerDock = new ComposerDockViewModel();
+
+            ReasoningLevels = new ObservableCollection<ReasoningLevel>
+            {
+                new ReasoningLevel(null, "Default", "跟随模型默认的思考预算"),
+                new ReasoningLevel("low", "Low", "少想一点，响应更快"),
+                new ReasoningLevel("medium", "Medium", "思考深度与速度折中"),
+                new ReasoningLevel("high", "High", "想得更久，适合复杂任务")
+            };
+            _reasoningLevel = FindReasoningLevel(_app.Settings.Agent.ReasoningEffort);
+            foreach (ReasoningLevel level in ReasoningLevels)
+            {
+                level.SetSelected(ReferenceEquals(level, _reasoningLevel));
+            }
 
             SendCommand = new RelayCommand(() => FireAndForget(SendAsync()), () => CanSend);
             StopCommand = new RelayCommand(() => FireAndForget(StopAsync()), () => IsRunning);
@@ -232,6 +317,9 @@ namespace MiaoWu.App.ViewModels
 
         /// <summary>模型下拉的数据源：按提供商分区，区内按模型目录顺序。</summary>
         public ObservableCollection<ModelGroup> ModelGroups { get; }
+
+        /// <summary>模型菜单第二级的推理等级（Default / Low / Medium / High）。</summary>
+        public ObservableCollection<ReasoningLevel> ReasoningLevels { get; }
 
         public RelayCommand SendCommand { get; }
 
@@ -402,6 +490,47 @@ namespace MiaoWu.App.ViewModels
             get { return _selectedModel == null ? "选择模型" : _selectedModel.DisplayName; }
         }
 
+        /// <summary>输入框模型 pill 的第二段：当前推理等级；默认档也显示，宽度不跳。</summary>
+        public string SelectedReasoningName
+        {
+            get { return _reasoningLevel == null ? "Default" : _reasoningLevel.DisplayName; }
+        }
+
+        public ReasoningLevel SelectedReasoning
+        {
+            get { return _reasoningLevel; }
+        }
+
+        /// <summary>菜单第一级（模型 / 推理等级两行）。</summary>
+        public bool IsModelMenuRoot
+        {
+            get { return string.Equals(_modelMenuLevel, ModelMenuRoot, StringComparison.Ordinal); }
+        }
+
+        public bool IsModelMenuModels
+        {
+            get { return string.Equals(_modelMenuLevel, ModelMenuModels, StringComparison.Ordinal); }
+        }
+
+        public bool IsModelMenuReasoning
+        {
+            get { return string.Equals(_modelMenuLevel, ModelMenuReasoning, StringComparison.Ordinal); }
+        }
+
+        /// <summary>第二级菜单的返回行文字：告出当前在哪一级。</summary>
+        public string ModelMenuTitle
+        {
+            get
+            {
+                if (IsModelMenuModels)
+                {
+                    return "模型";
+                }
+
+                return IsModelMenuReasoning ? "推理等级" : string.Empty;
+            }
+        }
+
         public string ModelEmptyText
         {
             get { return "还没有配置模型。打开“功能设置 > 模型”添加供应商和模型。"; }
@@ -412,7 +541,7 @@ namespace MiaoWu.App.ViewModels
             get
             {
                 return HasModelGroups
-                    ? "选择模型（所有会话共用，按提供商分组）"
+                    ? "选择模型与推理等级（所有会话共用）"
                     : "还没有配置模型，点击查看设置";
             }
         }
@@ -476,6 +605,93 @@ namespace MiaoWu.App.ViewModels
             // “默认”角标跟着换到新选中的模型；等弹出菜单关掉再重建列表，
             // 避免在菜单行的 Click 里搬运它自己的 ItemsSource。
             _dispatcher.BeginInvoke(new Action(RefreshModelOptions), DispatcherPriority.Background);
+        }
+
+        /// <summary>每次点开模型菜单都从第一级开始，不要停在上次翻到的那一层。</summary>
+        public void ResetModelMenu()
+        {
+            SetModelMenuLevel(ModelMenuRoot);
+        }
+
+        /// <summary>第一级「模型」行：进入按提供商分区的模型列表。</summary>
+        public void ShowModelList()
+        {
+            SetModelMenuLevel(ModelMenuModels);
+        }
+
+        /// <summary>第一级「推理等级」行：进入 Default / Low / Medium / High 列表。</summary>
+        public void ShowReasoningList()
+        {
+            SetModelMenuLevel(ModelMenuReasoning);
+        }
+
+        /// <summary>第二级顶部的返回行：回到第一级。</summary>
+        public void BackToModelRoot()
+        {
+            SetModelMenuLevel(ModelMenuRoot);
+        }
+
+        private void SetModelMenuLevel(string level)
+        {
+            string next = level ?? ModelMenuRoot;
+            if (string.Equals(_modelMenuLevel, next, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _modelMenuLevel = next;
+            OnPropertyChanged(nameof(IsModelMenuRoot));
+            OnPropertyChanged(nameof(IsModelMenuModels));
+            OnPropertyChanged(nameof(IsModelMenuReasoning));
+            OnPropertyChanged(nameof(ModelMenuTitle));
+        }
+
+        /// <summary>
+        /// 推理等级行点击后调用。等级是全局配置（写回 config.json），
+        /// 下一轮请求按它带 <c>reasoning_effort</c>；模型不支持思考时不会发出去。
+        /// </summary>
+        public void SelectReasoning(ReasoningLevel level)
+        {
+            if (level == null || ReferenceEquals(level, _reasoningLevel))
+            {
+                return;
+            }
+
+            _reasoningLevel = level;
+            foreach (ReasoningLevel item in ReasoningLevels)
+            {
+                item.SetSelected(ReferenceEquals(item, level));
+            }
+
+            OnPropertyChanged(nameof(SelectedReasoning));
+            OnPropertyChanged(nameof(SelectedReasoningName));
+
+            try
+            {
+                _app.SetReasoningEffort(level.Id);
+            }
+            catch (Exception exception)
+            {
+                _app.Logger.Warn("conversation.reasoning", "保存推理等级失败：" + exception.Message);
+            }
+        }
+
+        private ReasoningLevel FindReasoningLevel(string effort)
+        {
+            if (string.IsNullOrWhiteSpace(effort))
+            {
+                return ReasoningLevels[0];
+            }
+
+            foreach (ReasoningLevel level in ReasoningLevels)
+            {
+                if (string.Equals(level.Id, effort, StringComparison.OrdinalIgnoreCase))
+                {
+                    return level;
+                }
+            }
+
+            return ReasoningLevels[0];
         }
 
         /// <summary>由主窗口同步左栏当前会话行的置顶 / 归档状态，保证两处菜单文案一致。</summary>
@@ -628,7 +844,7 @@ namespace MiaoWu.App.ViewModels
             SetPlanMode(!IsPlanMode);
         }
 
-        /// <summary>`/plan` 与 `/work` 都走这里；状态立即反映到输入框的 chip 上。</summary>
+        /// <summary>`/plan` 与 `/work` 都走这里；状态同步到 `IsPlanMode` 与状态行（工具行不再有 chip）。</summary>
         public void SetPlanMode(bool active)
         {
             IAgentSession session = CurrentSession;
@@ -2316,7 +2532,8 @@ namespace MiaoWu.App.ViewModels
                     model.ModelId,
                     model.GetDisplayName(),
                     GetProviderName(model.ProviderId),
-                    string.Equals(model.Key, defaultKey, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(model.Key, defaultKey, StringComparison.OrdinalIgnoreCase),
+                    model.SupportsReasoning);
 
                 ModelOptions.Add(option);
 
