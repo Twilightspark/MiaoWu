@@ -164,6 +164,40 @@ namespace MiaoWu.Infrastructure.Tools
             return list;
         }
 
+        /// <summary>
+        /// 移除本会话已结束的任务记录（运行中的不动）。注册表本身不会自动丢弃历史，
+        /// 标题栏菜单用这个动作把「已结束」组清干净。
+        /// </summary>
+        public int RemoveFinished(string sessionId)
+        {
+            lock (_gate)
+            {
+                var remove = new List<string>();
+                foreach (BackgroundJob job in _jobs.Values)
+                {
+                    if (job.IsRunning)
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(sessionId)
+                        && !string.Equals(job.SessionId, sessionId, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    remove.Add(job.Id);
+                }
+
+                foreach (string id in remove)
+                {
+                    _jobs.Remove(id);
+                }
+
+                return remove.Count;
+            }
+        }
+
         public void Dispose()
         {
             List<BackgroundJob> jobs;
@@ -354,6 +388,35 @@ namespace MiaoWu.Infrastructure.Tools
                     }
 
                     return true;
+                }
+            }
+
+            /// <summary>
+            /// 只读地取输出末尾 <paramref name="maxChars"/> 个字符，不改变 <see cref="Read"/> 的读取位置。
+            /// 标题栏的任务菜单用它做实时输出；读走一段输出仍应由 <see cref="Read"/> 负责。
+            /// </summary>
+            public string PeekTail(int maxChars)
+            {
+                if (maxChars <= 0)
+                {
+                    return string.Empty;
+                }
+
+                lock (_jobGate)
+                {
+                    if (_output.Length == 0)
+                    {
+                        return string.Empty;
+                    }
+
+                    int start = Math.Max(0, _output.Length - maxChars);
+                    string text = _output.ToString(start, _output.Length - start);
+                    if (_droppedChars > 0 && start == 0)
+                    {
+                        return "[更早的输出已丢弃，只保留最后 " + MaxOutputChars + " 字符]\n" + text;
+                    }
+
+                    return text;
                 }
             }
 

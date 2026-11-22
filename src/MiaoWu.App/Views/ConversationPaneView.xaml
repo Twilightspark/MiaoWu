@@ -185,6 +185,61 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
         </Style>
 
+        <!-- 会话头「N 个任务」：28 高的小 chip，静止态 tertiary，悬停才出浅底。 -->
+        <Style x:Key="Header.JobsChip" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="6,0,8,0" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+        </Style>
+
+        <!-- 任务行状态点：运行中 accent、失败 danger、已结束 tertiary；不靠文字染色。 -->
+        <Style x:Key="Job.StatusDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="{StaticResource Metric.Chat.StatusDot}" />
+            <Setter Property="Height" Value="{StaticResource Metric.Chat.StatusDot}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Fill" Value="{DynamicResource Brush.Text3}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                    <Setter Property="Fill" Value="{DynamicResource Brush.Accent}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                    <Setter Property="Fill" Value="{DynamicResource Brush.Danger}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 任务行：整行悬停出浅底；按钮各自可点。 -->
+        <Style x:Key="Job.Row" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Brush.Transparent}" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Button}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush.Sel}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Job.Action" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text3}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+        </Style>
+
+        <!-- 停止是破坏性动作，但只在小菜单里；悬停才转 danger。 -->
+        <Style x:Key="Job.StopAction" TargetType="Button" BasedOn="{StaticResource Job.Action}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Danger}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- 输入卡下方读数：三个只读 pill，共用 12/20 与 tertiary 静止态。 -->
         <Style x:Key="Composer.DockPill" TargetType="Button" BasedOn="{StaticResource Button.Base}">
             <Setter Property="Height" Value="{StaticResource Metric.Dock.Height}" />
@@ -331,6 +386,56 @@
                       Fill="{DynamicResource Brush.Text3}"
                       Visibility="{Binding IsDirectory, Converter={StaticResource BoolToVisibility}}" />
             </Grid>
+        </DataTemplate>
+
+        <!-- 后台任务行：分组标题 + 状态点 + 标题 / 详情 + 输出 / 停止。 -->
+        <DataTemplate x:Key="Job.RowTemplate">
+            <StackPanel>
+                <TextBlock Margin="8,6,8,2"
+                           Text="{Binding GroupHeader}"
+                           Style="{StaticResource Text.Group}"
+                           Visibility="{Binding ShowGroupHeader, Converter={StaticResource BoolToVisibility}}" />
+                <Border Style="{StaticResource Job.Row}">
+                    <Grid Height="46">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Ellipse Margin="9,0,0,0" Style="{StaticResource Job.StatusDot}" />
+
+                        <StackPanel Grid.Column="1"
+                                    Margin="9,0,6,0"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}"
+                                       Style="{StaticResource Text.Chip}"
+                                       Foreground="{DynamicResource Brush.Text}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding DetailText}"
+                                       Style="{StaticResource Text.Meta}" />
+                        </StackPanel>
+
+                        <Button Grid.Column="2"
+                                Style="{StaticResource Job.Action}"
+                                Content="输出"
+                                Command="{Binding DataContext.ShowJobOutputCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}"
+                                ToolTip="读取这段任务的实时输出"
+                                AutomationProperties.Name="{Binding Title, StringFormat=查看任务输出：{0}}" />
+                        <Button Grid.Column="3"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource Job.StopAction}"
+                                Content="停止"
+                                Command="{Binding DataContext.StopJobCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}"
+                                ToolTip="停止后台任务"
+                                AutomationProperties.Name="{Binding Title, StringFormat=停止后台任务：{0}}"
+                                Visibility="{Binding ShowStop, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
+                </Border>
+            </StackPanel>
         </DataTemplate>
 
         <!-- 消息流的每一行都居中落在与输入卡等宽的内容列里：
@@ -1090,6 +1195,52 @@
             <StackPanel Grid.Column="1"
                         VerticalAlignment="Center"
                         Orientation="Horizontal">
+                <!-- 后台任务：没有任务时整块不渲染；有任务在跑时只报运行数，并叠一个 6px 点。 -->
+                <Button x:Name="JobsChip"
+                        Style="{StaticResource Header.JobsChip}"
+                        Command="{Binding ToggleJobsCommand}"
+                        ToolTip="{Binding JobToolTip}"
+                        AutomationProperties.Name="{Binding JobChipAutomationName}"
+                        PreviewKeyDown="OnJobsChipKeyDown"
+                        Visibility="{Binding HasJobs, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <Grid Width="{StaticResource Metric.Icon}"
+                              Height="{StaticResource Metric.Icon}">
+                            <Path Style="{StaticResource Chat.Icon}"
+                                  Data="{StaticResource Ico.Tasks}" />
+                            <Ellipse x:Name="JobRunningDot"
+                                     Width="6"
+                                     Height="6"
+                                     HorizontalAlignment="Right"
+                                     VerticalAlignment="Top"
+                                     Margin="0,-1,-2,0"
+                                     Fill="{DynamicResource Brush.Accent}"
+                                     IsHitTestVisible="False"
+                                     Visibility="{Binding IsAnyJobRunning, Converter={StaticResource BoolToVisibility}}">
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                 From="1"
+                                                                 To="0.35"
+                                                                 Duration="0:0:0.9"
+                                                                 AutoReverse="True"
+                                                                 RepeatBehavior="Forever" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                        </Grid>
+                        <TextBlock Margin="6,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding JobChipText}"
+                                   Style="{StaticResource Text.Chip}"
+                                   Foreground="{DynamicResource Brush.Text3}" />
+                    </StackPanel>
+                </Button>
+
                 <!-- 新建入口保留在左栏与 Ctrl+N；会话头只留「更多」，菜单与左栏会话行共用。 -->
                 <Button x:Name="MoreButton"
                         Style="{StaticResource Button.Icon}"
@@ -1140,6 +1291,110 @@
                 </Button>
             </StackPanel>
         </Grid>
+
+        <!-- 后台任务菜单：贴着 chip 的下缘展开、右缘与 chip 对齐；点外部或再次点 chip 关闭。
+             运行中的行可以停止或看实时输出，已结束的行保留在下方作为凭据。 -->
+        <Popup x:Name="JobsPopup"
+               Placement="Custom"
+               PlacementTarget="{Binding ElementName=JobsChip}"
+               AllowsTransparency="True"
+               StaysOpen="False"
+               Focusable="False"
+               PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}"
+               IsOpen="{Binding IsJobsOpen, Mode=TwoWay}">
+            <Border Background="Transparent"
+                    BorderBrush="{DynamicResource Brush.MenuHairline}"
+                    BorderThickness="{StaticResource Thickness.MenuHairline}"
+                    CornerRadius="{StaticResource Radius.MenuHairline}"
+                    SnapsToDevicePixels="False"
+                    UseLayoutRounding="False">
+                <Border Style="{StaticResource Menu.Surface}"
+                        Width="340"
+                        Padding="6"
+                        PreviewKeyDown="OnJobsPopupKeyDown">
+                    <StackPanel>
+                        <Grid Margin="8,2,8,4">
+                            <TextBlock Text="后台任务"
+                                       Style="{StaticResource Text.Chip}"
+                                       Foreground="{DynamicResource Brush.Text2}" />
+                            <TextBlock HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding JobChipAutomationName}"
+                                       Style="{StaticResource Text.Meta}" />
+                        </Grid>
+
+                        <ScrollViewer MaxHeight="280"
+                                      Focusable="False"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Jobs}"
+                                          ItemTemplate="{StaticResource Job.RowTemplate}"
+                                          Focusable="False" />
+                        </ScrollViewer>
+
+                        <TextBlock Margin="8,8,8,6"
+                                   Text="没有后台任务"
+                                   Style="{StaticResource Text.Meta}"
+                                   Visibility="{Binding HasJobs, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                        <Border Margin="8,6,8,2"
+                                Padding="8"
+                                Background="{DynamicResource Brush.Tab}"
+                                CornerRadius="{StaticResource Radius.Code}"
+                                Visibility="{Binding HasSelectedJobOutput, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center"
+                                               Text="{Binding SelectedJobTitle}"
+                                               Style="{StaticResource Text.Chip}"
+                                               Foreground="{DynamicResource Brush.Text2}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Button Grid.Column="1"
+                                            Width="20"
+                                            Height="20"
+                                            MinHeight="20"
+                                            Style="{StaticResource Button.Icon}"
+                                            Command="{Binding CloseJobOutputCommand}"
+                                            ToolTip="关闭输出"
+                                            AutomationProperties.Name="关闭任务输出">
+                                        <Path Width="10"
+                                              Height="10"
+                                              Style="{StaticResource Icon}"
+                                              Data="{StaticResource Ico.Close}"
+                                              Fill="{DynamicResource Brush.Text3}" />
+                                    </Button>
+                                </Grid>
+                                <TextBox Margin="0,4,0,0"
+                                         MaxHeight="150"
+                                         Style="{StaticResource Composer.TextBox}"
+                                         IsReadOnly="True"
+                                         AcceptsReturn="True"
+                                         FontFamily="{StaticResource Font.Family.Code}"
+                                         FontSize="{StaticResource Font.Code.Size}"
+                                         Foreground="{DynamicResource Brush.Text2}"
+                                         Text="{Binding SelectedJobOutput, Mode=OneWay}"
+                                         VerticalScrollBarVisibility="Auto"
+                                         HorizontalScrollBarVisibility="Auto"
+                                         AutomationProperties.Name="任务输出" />
+                            </StackPanel>
+                        </Border>
+
+                        <Button Margin="8,4,8,2"
+                                HorizontalAlignment="Right"
+                                Style="{StaticResource Job.Action}"
+                                Content="清空已结束"
+                                Command="{Binding ClearFinishedJobsCommand}"
+                                ToolTip="从列表移除已结束的任务记录"
+                                AutomationProperties.Name="清空已结束的后台任务"
+                                Visibility="{Binding HasSettledJobs, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+                </Border>
+            </Border>
+        </Popup>
 
         <!-- 消息列表：像素滚动，拖动滚动条是连续的；是否跟随新内容由视图判断贴底，
              用户上滚后不再自动拉回（见 ConversationPaneView.xaml.cs），

@@ -188,6 +188,19 @@ namespace MiaoWu.App.ViewModels
         private readonly DispatcherTimer _markdownTimer;
         private readonly DispatcherTimer _clockTimer;
 
+        /// <summary>标题栏后台任务：当前会话的任务投影，每秒与注册表对齐。</summary>
+        private readonly ObservableCollection<JobChipItemViewModel> _jobs =
+            new ObservableCollection<JobChipItemViewModel>();
+
+        private bool _isJobsOpen;
+        private string _selectedJobId;
+        private string _selectedJobOutput;
+        private string _jobChipText;
+        private string _jobToolTip;
+        private int _jobCount;
+        private int _jobRunningCount;
+        private int _jobSettledCount;
+
         private ProcessGroupViewModel _openGroup;
         private UserChatItemViewModel _turnUser;
 
@@ -282,6 +295,11 @@ namespace MiaoWu.App.ViewModels
             AttachFilesCommand = new RelayCommand(
                 () => FireAndForget(AttachFilesAsync()),
                 () => HasWorkspace);
+            ToggleJobsCommand = new RelayCommand(ToggleJobs, () => HasJobs);
+            StopJobCommand = new RelayCommand(StopJob);
+            ShowJobOutputCommand = new RelayCommand(ShowJobOutput);
+            CloseJobOutputCommand = new RelayCommand(CloseJobOutput);
+            ClearFinishedJobsCommand = new RelayCommand(ClearFinishedJobs, () => HasSettledJobs);
 
             _markdownTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
             {
@@ -358,11 +376,107 @@ namespace MiaoWu.App.ViewModels
         /// <summary>输入框左侧 `+`：选择文件 / 图片插入草稿。</summary>
         public RelayCommand AttachFilesCommand { get; }
 
+        /// <summary>标题栏「N 个任务」：展开 / 收起任务下拉。</summary>
+        public RelayCommand ToggleJobsCommand { get; }
+
+        /// <summary>任务行右侧「停止」：参数是 <see cref="JobChipItemViewModel"/>。</summary>
+        public RelayCommand StopJobCommand { get; }
+
+        /// <summary>任务行右侧「输出」：展开 / 收起该任务的实时输出。</summary>
+        public RelayCommand ShowJobOutputCommand { get; }
+
+        /// <summary>输出面板右上角的关闭。</summary>
+        public RelayCommand CloseJobOutputCommand { get; }
+
+        /// <summary>任务菜单底部的「清空已结束」。</summary>
+        public RelayCommand ClearFinishedJobsCommand { get; }
+
         /// <summary>`/` 与 `@` 触发菜单；每个会话一个控制器。</summary>
         public ComposerTriggerViewModel ComposerTriggers { get; }
 
         /// <summary>输入框下方三个读数：会话统计 / Token 用量 / 上下文已用。</summary>
         public ComposerDockViewModel ComposerDock { get; }
+
+        /// <summary>标题栏「后台任务」下拉的行：运行中在前，已结束在后。</summary>
+        public ObservableCollection<JobChipItemViewModel> Jobs
+        {
+            get { return _jobs; }
+        }
+
+        /// <summary>没有任务时整枚 chip 不渲染（不要显示「0 个任务」）。</summary>
+        public bool HasJobs
+        {
+            get { return _jobCount > 0; }
+        }
+
+        public bool IsAnyJobRunning
+        {
+            get { return _jobRunningCount > 0; }
+        }
+
+        public bool HasSettledJobs
+        {
+            get { return _jobSettledCount > 0; }
+        }
+
+        /// <summary>与 DSH 一致：有任务在跑时只报运行数，全部结束后才报总数。</summary>
+        public string JobChipText
+        {
+            get { return _jobChipText; }
+        }
+
+        public string JobChipAutomationName
+        {
+            get
+            {
+                if (_jobCount <= 0)
+                {
+                    return "没有后台任务";
+                }
+
+                return _jobRunningCount > 0
+                    ? _jobCount + " 个后台任务，" + _jobRunningCount + " 个运行中"
+                    : _jobCount + " 个后台任务";
+            }
+        }
+
+        public string JobToolTip
+        {
+            get { return _jobToolTip; }
+        }
+
+        /// <summary>下拉是否展开；点击外部由 Popup 自己写回 false。</summary>
+        public bool IsJobsOpen
+        {
+            get { return _isJobsOpen; }
+            set
+            {
+                if (SetProperty(ref _isJobsOpen, value) && value)
+                {
+                    RefreshJobs();
+                }
+            }
+        }
+
+        /// <summary>任务菜单里是否正在看某个任务的输出。</summary>
+        public bool HasSelectedJobOutput
+        {
+            get { return !string.IsNullOrEmpty(_selectedJobId); }
+        }
+
+        public string SelectedJobTitle
+        {
+            get
+            {
+                JobChipItemViewModel item = FindJob(_selectedJobId);
+                return item == null ? string.Empty : item.Title;
+            }
+        }
+
+        public string SelectedJobOutput
+        {
+            get { return _selectedJobOutput; }
+        }
 
         /// <summary>当前草稿里的图片附件（base64），发送成功即清空。</summary>
         public ObservableCollection<ComposerImageAttachment> ComposerImages { get; }
@@ -949,6 +1063,7 @@ namespace MiaoWu.App.ViewModels
                 AgentSessionSnapshot snapshot = session.Snapshot();
                 ApplySnapshot(snapshot);
                 SyncModelSelection(snapshot);
+                RefreshJobs();
             }
             catch (Exception exception)
             {
@@ -1009,6 +1124,7 @@ namespace MiaoWu.App.ViewModels
             _isAttached = false;
             _sessionId = null;
             _title = null;
+            ClearJobs();
             Items.Clear();
             _userItems.Clear();
             _assistantItems.Clear();
@@ -2836,6 +2952,344 @@ namespace MiaoWu.App.ViewModels
         }
 
         // ---------------------------------------------------------------
+        // 标题栏后台任务
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// 把注册表里本会话的任务同步到 <see cref="Jobs"/>：运行中在前、已结束在后，
+        /// 每秒调用一次，按 id 原地更新而不是整表重建，避免下拉里的焦点与展开状态被重置。
+        /// </summary>
+        private void RefreshJobs()
+        {
+            if (!HasSession)
+            {
+                ClearJobs();
+                return;
+            }
+
+            IReadOnlyList<BackgroundJobInfo> infos;
+            try
+            {
+                infos = _app.BackgroundJobs.List(_sessionId);
+            }
+            catch (Exception exception)
+            {
+                _app.Logger.Warn("conversation.jobs", "读取后台任务失败：" + exception.Message);
+                infos = new BackgroundJobInfo[0];
+            }
+
+            var running = new List<BackgroundJobInfo>();
+            var settled = new List<BackgroundJobInfo>();
+            foreach (BackgroundJobInfo info in infos)
+            {
+                if (info.Running)
+                {
+                    running.Add(info);
+                }
+                else
+                {
+                    settled.Add(info);
+                }
+            }
+
+            running.Sort((a, b) => b.StartedAt.CompareTo(a.StartedAt));
+            settled.Sort((a, b) => b.StartedAt.CompareTo(a.StartedAt));
+
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var existing = new Dictionary<string, JobChipItemViewModel>(StringComparer.OrdinalIgnoreCase);
+            foreach (JobChipItemViewModel item in _jobs)
+            {
+                existing[item.Id] = item;
+            }
+
+            int index = 0;
+            foreach (BackgroundJobInfo info in running)
+            {
+                SyncJobRow(info, index, existing, now, index == 0 ? "运行中" : null);
+                index++;
+            }
+
+            bool firstSettled = true;
+            foreach (BackgroundJobInfo info in settled)
+            {
+                SyncJobRow(info, index, existing, now, firstSettled ? "已结束" : null);
+                firstSettled = false;
+                index++;
+            }
+
+            while (_jobs.Count > index)
+            {
+                _jobs.RemoveAt(_jobs.Count - 1);
+            }
+
+            int oldCount = _jobCount;
+            int oldRunning = _jobRunningCount;
+            int oldSettled = _jobSettledCount;
+            _jobRunningCount = running.Count;
+            _jobSettledCount = settled.Count;
+            _jobCount = running.Count + settled.Count;
+            _jobChipText = (_jobRunningCount > 0 ? _jobRunningCount : _jobCount) + " 个任务";
+
+            string tip = _jobCount + " 个后台任务";
+            if (_jobRunningCount > 0)
+            {
+                tip += "，" + _jobRunningCount + " 个运行中";
+            }
+
+            tip += "\n点击查看、停止或读取输出";
+            if (!string.Equals(_jobToolTip, tip, StringComparison.Ordinal))
+            {
+                _jobToolTip = tip;
+                OnPropertyChanged(nameof(JobToolTip));
+            }
+
+            if (oldCount != _jobCount || oldRunning != _jobRunningCount)
+            {
+                OnPropertyChanged(nameof(HasJobs));
+                OnPropertyChanged(nameof(IsAnyJobRunning));
+                OnPropertyChanged(nameof(JobChipText));
+                OnPropertyChanged(nameof(JobChipAutomationName));
+                CommandManager.InvalidateRequerySuggested();
+            }
+
+            if (oldSettled != _jobSettledCount)
+            {
+                OnPropertyChanged(nameof(HasSettledJobs));
+                CommandManager.InvalidateRequerySuggested();
+            }
+
+            if (_jobCount == 0)
+            {
+                IsJobsOpen = false;
+            }
+
+            if (HasSelectedJobOutput)
+            {
+                if (FindJob(_selectedJobId) == null)
+                {
+                    CloseJobOutput();
+                }
+                else
+                {
+                    RefreshSelectedJobOutput();
+                }
+            }
+        }
+
+        private void SyncJobRow(
+            BackgroundJobInfo info,
+            int index,
+            Dictionary<string, JobChipItemViewModel> existing,
+            DateTimeOffset now,
+            string groupHeader)
+        {
+            JobChipItemViewModel item;
+            if (existing.TryGetValue(info.Id, out item))
+            {
+                int current = _jobs.IndexOf(item);
+                if (current >= 0 && current != index)
+                {
+                    _jobs.Move(current, index);
+                }
+
+                item.Update(info, now);
+            }
+            else
+            {
+                item = new JobChipItemViewModel(info);
+                _jobs.Insert(index, item);
+            }
+
+            item.SetGroup(groupHeader);
+        }
+
+        private void ToggleJobs()
+        {
+            if (!HasJobs)
+            {
+                IsJobsOpen = false;
+                return;
+            }
+
+            if (IsJobsOpen)
+            {
+                IsJobsOpen = false;
+                return;
+            }
+
+            CloseJobOutput();
+
+            // 点击本身会完成一次鼠标捕获；同步打开会被 StaysOpen=False 当成外部点击立刻关掉。
+            _dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    if (HasJobs)
+                    {
+                        IsJobsOpen = true;
+                    }
+                }),
+                DispatcherPriority.Input);
+        }
+
+        private void StopJob(object parameter)
+        {
+            var item = parameter as JobChipItemViewModel;
+            if (item == null)
+            {
+                return;
+            }
+
+            try
+            {
+                BackgroundJobRegistry.BackgroundJob job = _app.BackgroundJobs.Find(item.Id);
+                if (job != null)
+                {
+                    job.Kill();
+                }
+            }
+            catch (Exception exception)
+            {
+                _app.Logger.Warn("conversation.jobs", "停止后台任务失败：" + exception.Message);
+            }
+
+            RefreshJobs();
+        }
+
+        private void ClearFinishedJobs()
+        {
+            if (!HasSession)
+            {
+                return;
+            }
+
+            try
+            {
+                _app.BackgroundJobs.RemoveFinished(_sessionId);
+            }
+            catch (Exception exception)
+            {
+                _app.Logger.Warn("conversation.jobs", "清理已结束任务失败：" + exception.Message);
+            }
+
+            RefreshJobs();
+        }
+
+        private void ShowJobOutput(object parameter)
+        {
+            var item = parameter as JobChipItemViewModel;
+            if (item == null)
+            {
+                return;
+            }
+
+            if (string.Equals(_selectedJobId, item.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                CloseJobOutput();
+                return;
+            }
+
+            _selectedJobId = item.Id;
+            _selectedJobOutput = null;
+            OnPropertyChanged(nameof(HasSelectedJobOutput));
+            OnPropertyChanged(nameof(SelectedJobTitle));
+            RefreshSelectedJobOutput();
+        }
+
+        private void RefreshSelectedJobOutput()
+        {
+            if (string.IsNullOrEmpty(_selectedJobId))
+            {
+                return;
+            }
+
+            string text;
+            try
+            {
+                BackgroundJobRegistry.BackgroundJob job = _app.BackgroundJobs.Find(_selectedJobId);
+                if (job == null)
+                {
+                    CloseJobOutput();
+                    return;
+                }
+
+                text = job.PeekTail(8000);
+                if (string.IsNullOrEmpty(text))
+                {
+                    text = job.IsRunning ? "（还没有输出）" : "（没有输出）";
+                }
+            }
+            catch (Exception exception)
+            {
+                text = "读取输出失败：" + exception.Message;
+            }
+
+            if (!string.Equals(_selectedJobOutput, text, StringComparison.Ordinal))
+            {
+                _selectedJobOutput = text;
+                OnPropertyChanged(nameof(SelectedJobOutput));
+            }
+        }
+
+        private void CloseJobOutput()
+        {
+            if (_selectedJobId == null && _selectedJobOutput == null)
+            {
+                return;
+            }
+
+            _selectedJobId = null;
+            _selectedJobOutput = null;
+            OnPropertyChanged(nameof(HasSelectedJobOutput));
+            OnPropertyChanged(nameof(SelectedJobTitle));
+            OnPropertyChanged(nameof(SelectedJobOutput));
+        }
+
+        private JobChipItemViewModel FindJob(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return null;
+            }
+
+            foreach (JobChipItemViewModel item in _jobs)
+            {
+                if (string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return item;
+                }
+            }
+
+            return null;
+        }
+
+        private void ClearJobs()
+        {
+            if (_jobs.Count > 0)
+            {
+                _jobs.Clear();
+            }
+
+            _selectedJobId = null;
+            _selectedJobOutput = null;
+            _jobCount = 0;
+            _jobRunningCount = 0;
+            _jobSettledCount = 0;
+            _jobChipText = null;
+            _jobToolTip = null;
+            _isJobsOpen = false;
+            OnPropertyChanged(nameof(HasJobs));
+            OnPropertyChanged(nameof(IsAnyJobRunning));
+            OnPropertyChanged(nameof(HasSettledJobs));
+            OnPropertyChanged(nameof(JobChipText));
+            OnPropertyChanged(nameof(JobChipAutomationName));
+            OnPropertyChanged(nameof(JobToolTip));
+            OnPropertyChanged(nameof(IsJobsOpen));
+            OnPropertyChanged(nameof(HasSelectedJobOutput));
+            OnPropertyChanged(nameof(SelectedJobTitle));
+            OnPropertyChanged(nameof(SelectedJobOutput));
+        }
+
+        // ---------------------------------------------------------------
         // 轮次计时
         // ---------------------------------------------------------------
 
@@ -2845,6 +3299,8 @@ namespace MiaoWu.App.ViewModels
             {
                 return;
             }
+
+            RefreshJobs();
 
             DateTimeOffset now = new DateTimeOffset(_clock());
             if (_openGroup != null)

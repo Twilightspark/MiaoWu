@@ -41,6 +41,7 @@ namespace MiaoWu.App.Views
             ModelPopup.CustomPopupPlacementCallback = PlaceModelPopup;
             TriggerPopup.CustomPopupPlacementCallback = PlaceTriggerPopup;
             DockPopup.CustomPopupPlacementCallback = PlaceDockPopup;
+            JobsPopup.CustomPopupPlacementCallback = PlaceJobsPopup;
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
             DataContextChanged += OnDataContextChanged;
@@ -739,6 +740,85 @@ namespace MiaoWu.App.Views
                 DispatcherPriority.Background);
         }
 
+        /// <summary>会话头的任务 chip：↓ 打开下拉并把焦点送到第一行动作；Esc 在菜单里收起。</summary>
+        private void OnJobsChipKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Down)
+            {
+                return;
+            }
+
+            var viewModel = DataContext as ConversationViewModel;
+            if (viewModel == null || !viewModel.HasJobs)
+            {
+                return;
+            }
+
+            viewModel.IsJobsOpen = true;
+            e.Handled = true;
+            Dispatcher.BeginInvoke(
+                new Action(FocusFirstJobAction),
+                DispatcherPriority.Input);
+        }
+
+        /// <summary>
+        /// 下拉里的第一颗按钮（「输出」）。Popup 里的控件不在会话头的 Tab 序列里，
+        /// 所以用 ↓ 打开时必须显式给一个落点。
+        /// </summary>
+        private void FocusFirstJobAction()
+        {
+            FrameworkElement root = JobsPopup.Child as FrameworkElement;
+            if (root == null)
+            {
+                return;
+            }
+
+            Button first = FindFirstButton(root);
+            if (first != null)
+            {
+                first.Focus();
+            }
+        }
+
+        private static Button FindFirstButton(DependencyObject root)
+        {
+            var button = root as Button;
+            if (button != null && button.IsVisible && button.IsEnabled)
+            {
+                return button;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                Button found = FindFirstButton(VisualTreeHelper.GetChild(root, i));
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>任务下拉里按 Esc 收起并把焦点还给 chip；点外部仍由 Popup 自己关。</summary>
+        private void OnJobsPopupKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape)
+            {
+                return;
+            }
+
+            var viewModel = DataContext as ConversationViewModel;
+            if (viewModel != null)
+            {
+                viewModel.IsJobsOpen = false;
+            }
+
+            JobsChip.Focus();
+            e.Handled = true;
+        }
+
         /// <summary>会话头「更多」左键打开与左栏会话行共用的菜单。</summary>
         private void OnMoreClick(object sender, RoutedEventArgs e)
         {
@@ -865,6 +945,27 @@ namespace MiaoWu.App.Views
                     PopupPrimaryAxis.Horizontal),
                 new CustomPopupPlacement(
                     new Point(x, targetSize.Height + gap),
+                    PopupPrimaryAxis.Horizontal)
+            };
+        }
+
+        /// <summary>
+        /// 任务下拉向下展开、右缘与 chip 对齐；下方空间不足时回退到 chip 上方。
+        /// </summary>
+        private static CustomPopupPlacement[] PlaceJobsPopup(
+            Size popupSize,
+            Size targetSize,
+            Point offset)
+        {
+            const double gap = 4;
+            double x = targetSize.Width - popupSize.Width;
+            return new[]
+            {
+                new CustomPopupPlacement(
+                    new Point(x, targetSize.Height + gap),
+                    PopupPrimaryAxis.Horizontal),
+                new CustomPopupPlacement(
+                    new Point(x, -popupSize.Height - gap),
                     PopupPrimaryAxis.Horizontal)
             };
         }

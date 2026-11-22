@@ -2,7 +2,7 @@
 
 MiaoWu 是一个本地优先的 Windows 桌面 AI 智能体工作台：把工作区文件、会话与模型调用放进同一个窗口，让智能体在你的目录里读文件、改代码、执行命令，每一步都可审批、可回溯。
 
-当前版本：**v0.5.3**（功能高速开发中，尚不具备使用条件）。变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：**v0.6.0**（功能高速开发中，尚不具备使用条件）。变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 特性
 
@@ -15,6 +15,7 @@ MiaoWu 是一个本地优先的 Windows 桌面 AI 智能体工作台：把工作
 - **设置与关闭行为**：设置收敛为通用 / 模型 / 关于三页；通用页提供外观、语言（预留）、关闭行为与「流程审批（每次询问 / 从不询问）」「任务目标（关闭 / 自动续跑）」，关闭可选“每次询问 / 退出应用 / 后台运行”；托盘不可用（受限权限）时降级为最小化到任务栏并给出提示。
 - **工具调用与审批**：读写文件、搜索、执行命令都经过路径沙箱与风险分级；审批以右下角通知出现（标题带风险级别，可就地展开 diff），允许一次 / 本会话允许 / 拒绝，不打断消息流；写文件自动备份，可撤销。
 - **自主推进**：模型可以把一段任务写成会话目标并自动续跑，开启计划模式后先出计划再执行；需要选择时用右下角提问（选项即动作、可跳过），也能创建定时任务、跑后台命令、搜索与抓取网页。
+- **后台任务看得见**：会话标题行在「⋯」左侧显示「N 个任务」（有任务在跑时只报运行数并带呼吸点），点开是 340 宽下拉，分「运行中 / 已结束」两组，能看到命令、状态与耗时，直接读实时输出、停止任务，或清空已结束记录。
 - **首次启动引导**：主窗口内两栏完成第一个工作区与可选模型供应商；完成前不进入三栏。
 - **本地数据**：配置、会话与审计日志保存在本机（`用户目录\.miaowu`），不依赖云端服务。
 - **Windows 7 友好**：基于 .NET Framework 4.8，无需额外运行时。
@@ -64,13 +65,13 @@ installer/                 # Inno Setup 安装脚本
 
 `scripts\publish.ps1` 执行 Release 构建；检测到 Inno Setup 6 时会一并生成安装包与便携包：
 
-- `.artifacts\installer\MiaoWu-0.5.3-setup.exe`：**管理员安装**（`%ProgramFiles%\MiaoWu`），
+- `.artifacts\installer\MiaoWu-0.6.0-setup.exe`：**管理员安装**（`%ProgramFiles%\MiaoWu`），
   **双击即弹 UAC**（`publish.ps1` 编译后用 `scripts\patch-setup-manifest.ps1` 把 SetupLdr 清单改成
   `requireAdministrator`，Windows 在进程创建时就提权）；.NET Framework 4.8 检测，开始菜单 /
   可选公共桌面与开机启动，卸载时询问是否保留 `%USERPROFILE%\.miaowu`；装完以原用户身份启动，
   运行期不需要管理员。
-- `.artifacts\installer\MiaoWu-0.5.3-portable.zip`：不经过安装器，解压即用，供临时目录不可写时兜底。
-- `.artifacts\installer\MiaoWu-0.5.3-setup-offline.exe`：**全量包**，内嵌 .NET Framework 4.8 离线安装程序
+- `.artifacts\installer\MiaoWu-0.6.0-portable.zip`：不经过安装器，解压即用，供临时目录不可写时兜底。
+- `.artifacts\installer\MiaoWu-0.6.0-setup-offline.exe`：**全量包**，内嵌 .NET Framework 4.8 离线安装程序
   （约 105 MB）。目标机缺 4.8 时，安装器在「准备安装」阶段静默装好 4.8 再继续；已有 4.8 的机器只多背体积，
   不会重复安装。生成方式：
 
@@ -103,7 +104,7 @@ Medium 标记的 Temp。现在 `setup.exe` 的清单是 `requireAdministrator`�
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path src\MiaoWu.App\bin\Release\net48\MiaoWu.exe
-powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path .artifacts\installer\MiaoWu-0.5.3-setup.exe
+powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path .artifacts\installer\MiaoWu-0.6.0-setup.exe
 ```
 
 - **开发自签名**：`powershell -File scripts\sign.ps1 -CreateDevCertificate` 生成

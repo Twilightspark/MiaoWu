@@ -65,6 +65,73 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
+        public async Task PeekTailReadsWithoutConsuming()
+        {
+            BackgroundJobRegistry.BackgroundJob job = _jobs.Start(
+                "s1",
+                "Write-Output 'peek-a'; Write-Output 'peek-b'",
+                Environment.CurrentDirectory,
+                "输出预览");
+
+            string preview = await PeekUntilAsync(job, "peek-b", TimeSpan.FromSeconds(10));
+
+            Assert.Contains("peek-a", preview);
+            Assert.Contains("peek-b", preview);
+
+            // 预览不移动读取位置：再读一次仍能拿到整段输出。
+            string read = job.Read();
+            Assert.Contains("peek-a", read);
+            Assert.Contains("peek-b", read);
+        }
+
+        [Fact]
+        public void PeekTailKeepsAtMostRequestedCharacters()
+        {
+            BackgroundJobRegistry.BackgroundJob job = _jobs.Start(
+                "s1",
+                "Write-Output 'abcdef'",
+                Environment.CurrentDirectory,
+                "截断预览");
+
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (DateTime.UtcNow < deadline && job.PeekTail(4).Length < 4)
+            {
+                Thread.Sleep(50);
+            }
+
+            Assert.Equal(4, job.PeekTail(4).Length);
+        }
+
+        [Fact]
+        public async Task RemoveFinishedKeepsRunningJobs()
+        {
+            BackgroundJobRegistry.BackgroundJob finished = _jobs.Start(
+                "s1",
+                "Write-Output 'done'",
+                Environment.CurrentDirectory,
+                "短任务");
+            BackgroundJobRegistry.BackgroundJob running = _jobs.Start(
+                "s1",
+                "Start-Sleep -Seconds 30",
+                Environment.CurrentDirectory,
+                "长任务");
+
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (DateTime.UtcNow < deadline && finished.Snapshot().Running)
+            {
+                await Task.Delay(50);
+            }
+
+            Assert.False(finished.Snapshot().Running);
+            Assert.Equal(1, _jobs.RemoveFinished("s1"));
+
+            BackgroundJobInfo remaining = Assert.Single(_jobs.List("s1"));
+            Assert.Equal(running.Id, remaining.Id);
+            Assert.True(remaining.Running);
+            running.Kill();
+        }
+
+        [Fact]
         public void UnknownJobLookupReturnsNull()
         {
             Assert.Null(_jobs.Find("job_missing"));
@@ -121,6 +188,32 @@ namespace MiaoWu.Tests.Tools
             {
                 job.Kill();
             }
+        }
+
+        private static async Task<string> PeekUntilAsync(
+            BackgroundJobRegistry.BackgroundJob job,
+            string marker,
+            TimeSpan timeout)
+        {
+            DateTime deadline = DateTime.UtcNow + timeout;
+            string text = string.Empty;
+            while (DateTime.UtcNow < deadline)
+            {
+                text = job.PeekTail(8000);
+                if (text.IndexOf(marker, StringComparison.Ordinal) >= 0)
+                {
+                    return text;
+                }
+
+                if (!job.Snapshot().Running)
+                {
+                    break;
+                }
+
+                await Task.Delay(100);
+            }
+
+            return job.PeekTail(8000);
         }
 
         private static async Task<string> ReadUntilAsync(
