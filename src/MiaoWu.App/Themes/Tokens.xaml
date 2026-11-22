@@ -172,8 +172,8 @@
     <sys:Double x:Key="Metric.Splitter">4</sys:Double>
     <sys:Double x:Key="Metric.SplitterHit">7</sys:Double>
     <sys:Double x:Key="Metric.Middle.Baseline">580</sys:Double>
-    <sys:Double x:Key="Metric.TabRow.Height">40</sys:Double>
-    <sys:Double x:Key="Metric.RightTitle.Height">34</sys:Double>
+    <!-- 中栏会话头与右栏标签行共用同一条标题行高度，保证两栏标题在同一水平线上。 -->
+    <sys:Double x:Key="Metric.PaneHeader.Height">40</sys:Double>
     <sys:Double x:Key="Metric.Avatar">22</sys:Double>
     <sys:Double x:Key="Metric.Message.Gap">17</sys:Double>
 
@@ -328,17 +328,18 @@
     <Thickness x:Key="Margin.DockPill">0,0,8,0</Thickness>
     <Thickness x:Key="Pad.DockPanel">12,10,12,12</Thickness>
 
-    <!-- 会话消息流：行内边距 14 与输入框、会话头对齐；轮次间距 18，轮内 10 -->
-    <Thickness x:Key="Margin.Chat.User">14,18,14,0</Thickness>
-    <Thickness x:Key="Margin.Chat.Assistant">14,10,14,0</Thickness>
-    <Thickness x:Key="Margin.Chat.Tool">14,6,14,0</Thickness>
-    <!-- 执行过程组头与组内成员：成员缩进 22（16 图标 + 6 间距），与 DSH 的组体对齐 -->
-    <Thickness x:Key="Margin.Chat.Process">14,6,14,0</Thickness>
-    <!-- 组内成员：缩进 22（36 = 组头 14 + 22），只留 4 底距，
+    <!-- 会话消息流：内容列与输入卡同宽（`Margin.ContentColumn` 28 + `Metric.Composer.MaxWidth` 720），
+         行内不再留左右边距；轮次间距 18，轮内 10 -->
+    <Thickness x:Key="Margin.ContentColumn">28,0,28,0</Thickness>
+    <Thickness x:Key="Margin.Chat.User">0,18,0,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Assistant">0,10,0,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Tool">0,6,0,0</Thickness>
+    <!-- 执行过程组头与组内成员同一条左基线：成员不缩进，只留 4 底距，
          行间距由成员自己承担，避免思考行与工具行之间叠加出空档。 -->
-    <Thickness x:Key="Margin.Chat.ProcessMember">36,0,14,4</Thickness>
+    <Thickness x:Key="Margin.Chat.Process">0,6,0,0</Thickness>
+    <Thickness x:Key="Margin.Chat.ProcessMember">0,0,0,4</Thickness>
     <Thickness x:Key="Thickness.Chat.ProcessRule">0,0,0,1</Thickness>
-    <Thickness x:Key="Margin.Chat.Notice">14,10,14,0</Thickness>
+    <Thickness x:Key="Margin.Chat.Notice">0,10,0,0</Thickness>
     <Thickness x:Key="Margin.Chat.Footer">0,2,0,0</Thickness>
     <Thickness x:Key="Pad.Bubble">9,12</Thickness>
     <Thickness x:Key="Pad.Chat.Body">10,8</Thickness>

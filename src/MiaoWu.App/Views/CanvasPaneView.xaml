@@ -133,7 +133,7 @@
         </Grid.RowDefinitions>
 
         <!-- 标签行 -->
-        <Grid Grid.Row="0" Height="{StaticResource Metric.TabRow.Height}" Margin="10,0">
+        <Grid Grid.Row="0" Height="{StaticResource Metric.PaneHeader.Height}" Margin="10,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -271,7 +271,8 @@
                              Text="{Binding FindQuery, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.AutomationId="FindBox"
                              AutomationProperties.Name="{x:Static res:Strings.FindPlaceholder}" />
-                    <TextBlock Margin="9,0,0,0"
+                    <!-- 占位提示比文字起点再内缩 2px：光标落在左侧，不压第一个字。 -->
+                    <TextBlock Margin="11,0,0,0"
                                VerticalAlignment="Center"
                                IsHitTestVisible="False"
                                Text="{x:Static res:Strings.FindPlaceholder}"

@@ -32,6 +32,9 @@ namespace MiaoWu.App.Views
         private bool _welcomeLayout;
         private bool _composerSettleQueued;
 
+        /// <summary>读数明细的锚点：最近一次点击的 pill，面板左缘与它对齐。</summary>
+        private Button _dockAnchorPill;
+
         public ConversationPaneView()
         {
             InitializeComponent();
@@ -591,7 +594,25 @@ namespace MiaoWu.App.Views
                 panel = ComposerDockPanel.Stats;
             }
 
+            // 明细跟着被点的 pill 走：换 panel 时重新落位，而不是停在第一颗 pill 上方。
+            _dockAnchorPill = button;
             viewModel.ComposerDock.Toggle(panel);
+            RepositionDockPopup();
+        }
+
+        /// <summary>
+        /// 自定义落位只在目标重新布局时才重算；换 pill 时读数行尺寸没变，
+        /// 用一次 0.5 → 0 的偏移抖动把同一帧里的落位再算一遍（不产生可见位移）。
+        /// </summary>
+        private void RepositionDockPopup()
+        {
+            if (!DockPopup.IsOpen)
+            {
+                return;
+            }
+
+            DockPopup.HorizontalOffset = 0.5;
+            DockPopup.HorizontalOffset = 0;
         }
 
         /// <summary>点外部或再次点击 pill 关闭面板时，视图模型也要归位。</summary>
@@ -797,23 +818,56 @@ namespace MiaoWu.App.Views
             };
         }
 
-        /// <summary>读数明细向上展开、右缘与读数行对齐；上方放不下时回退到下方。</summary>
-        private static CustomPopupPlacement[] PlaceDockPopup(
+        /// <summary>
+        /// 读数明细像模型菜单一样向上弹出：底边在读数行上方 6px、水平居中对着被点的 pill，
+        /// 越界时贴住读数行两侧；上方放不下时回退到读数行下方。
+        /// </summary>
+        private CustomPopupPlacement[] PlaceDockPopup(
             Size popupSize,
             Size targetSize,
             Point offset)
         {
             const double gap = 6;
-            double x = Math.Max(0, targetSize.Width - popupSize.Width);
+
+            // 自定义落位的回调坐标是 Popup 的屏幕坐标系，高 DPI 下是设备像素；
+            // 元素 ActualWidth/Height 却是 DIP。用读数行自身的尺寸反推缩放，避免混用。
+            double scale = ComposerDockRowHost != null && ComposerDockRowHost.ActualHeight > 0
+                ? targetSize.Height / ComposerDockRowHost.ActualHeight
+                : 1;
+            if (scale <= 0)
+            {
+                scale = 1;
+            }
+
+            double x = DockAnchorLeft(popupSize.Width / scale) * scale;
+            double gapPixels = gap * scale;
             return new[]
             {
                 new CustomPopupPlacement(
-                    new Point(x, -popupSize.Height - gap),
+                    new Point(x, -popupSize.Height - gapPixels),
                     PopupPrimaryAxis.Horizontal),
                 new CustomPopupPlacement(
-                    new Point(x, targetSize.Height + gap),
+                    new Point(x, targetSize.Height + gapPixels),
                     PopupPrimaryAxis.Horizontal)
             };
+        }
+
+        /// <summary>
+        /// 面板左缘在读数行里的位置：右缘对齐被点 pill 的右缘（与模型菜单同一套对齐），
+        /// 再夹在读数行内；面板比读数行还宽时贴左。
+        /// </summary>
+        private double DockAnchorLeft(double popupWidth)
+        {
+            if (_dockAnchorPill == null || ComposerDockRowHost == null)
+            {
+                return 0;
+            }
+
+            Point pill = _dockAnchorPill.TranslatePoint(new Point(0, 0), ComposerDockRowHost);
+            double right = pill.X + _dockAnchorPill.ActualWidth;
+            double hostWidth = ComposerDockRowHost.ActualWidth;
+            double maxLeft = Math.Max(0, hostWidth - popupWidth);
+            return Math.Min(Math.Max(0, right - popupWidth), maxLeft);
         }
 
         /// <summary>触发菜单向上展开、左缘与输入卡对齐；上方放不下时回退到输入卡下方。</summary>

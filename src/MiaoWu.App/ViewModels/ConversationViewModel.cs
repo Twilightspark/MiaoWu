@@ -384,7 +384,7 @@ namespace MiaoWu.App.ViewModels
         /// </summary>
         public string EmptyTitle
         {
-            get { return _workspace == null ? "请选择工作区" : "开始新的探索"; }
+            get { return _workspace == null ? "请选择或新建一个工作区再开始" : "开始新的探索"; }
         }
 
         public bool CanPickModel

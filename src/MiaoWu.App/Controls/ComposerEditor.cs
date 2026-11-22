@@ -50,7 +50,6 @@ namespace MiaoWu.App.Controls
             Background = Brushes.Transparent;
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            Document.PagePadding = new Thickness(0);
             Document.LineHeight = 22;
 
             TextChanged += OnDocumentTextChanged;
@@ -84,6 +83,16 @@ namespace MiaoWu.App.Controls
             }
 
             Document.FontSize = FindDouble("Font.Body.Size", 13);
+        }
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+
+            // 富文本默认带 5px 的 PagePadding，且模板套用时 WPF 会把文档的 PagePadding 再写回 5。
+            // 这里清零后，光标与正文落在输入卡的内边距上，占位提示再往里 2px：
+            // 两者既不重叠，打字时也不会出现“文字比提示右移几像素”的跳动。
+            Document.PagePadding = new Thickness(0);
         }
 
         public string PlainText

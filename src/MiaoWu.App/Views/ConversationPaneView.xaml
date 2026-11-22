@@ -346,6 +346,28 @@
             </Grid>
         </DataTemplate>
 
+        <!-- 消息流的每一行都居中落在与输入卡等宽的内容列里：
+             `Margin.ContentColumn` 28 + `Metric.Composer.MaxWidth` 720，和 ComposerGroup 同一套算法，
+             所以正文、气泡、过程组的左右边缘与输入卡对齐。滚动条改为覆盖式，出现时不再挤窄内容列。 -->
+        <Style x:Key="Chat.MessageList" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <ScrollViewer x:Name="PART_ScrollViewer"
+                                      Style="{StaticResource ScrollViewer.Overlay}"
+                                      CanContentScroll="True"
+                                      Focusable="False"
+                                      Padding="{TemplateBinding Padding}">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ChatItemContainer" TargetType="ListBoxItem">
             <Setter Property="Focusable" Value="False" />
             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
@@ -355,7 +377,9 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <ContentPresenter />
+                        <ContentPresenter MaxWidth="{StaticResource Metric.Composer.MaxWidth}"
+                                          Margin="{StaticResource Margin.ContentColumn}"
+                                          HorizontalAlignment="Stretch" />
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -1036,10 +1060,11 @@
                            Height="{Binding IsEmpty, Converter={StaticResource BoolToStar}}" />
         </Grid.RowDefinitions>
 
-        <!-- 会话头：标题 + 更多。轮次计时在问题气泡下方，标题栏不再放计时。 -->
+        <!-- 会话头：标题 + 更多。与右栏标签行同高；欢迎态（新会话 / 没有工作区）不显示标题。
+             左右内边距按可见图标对齐：标题左缘 14，折叠按钮的 16 图标右缘也是 14（按钮盒右外边距 8）。 -->
         <Grid Grid.Row="0"
-              Height="{StaticResource Metric.RightTitle.Height}"
-              Margin="14,0">
+              Height="{StaticResource Metric.PaneHeader.Height}"
+              Margin="14,0,8,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -1049,9 +1074,23 @@
                        Margin="0,0,10,0"
                        VerticalAlignment="Center"
                        Text="{Binding Title}"
-                       Style="{StaticResource Text.Section}"
-                       TextTrimming="CharacterEllipsis"
-                       Visibility="{Binding IsRenaming, Converter={StaticResource InverseBoolToVisibility}}" />
+                       TextTrimming="CharacterEllipsis">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Section}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <!-- 欢迎态不显示标题（新会话 / 没有工作区时中栏已有大标题），重命名时让位给输入框。 -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsEmpty}" Value="False" />
+                                    <Condition Binding="{Binding IsRenaming}" Value="False" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
             <TextBox x:Name="RenameBox"
                      Grid.Column="0"
@@ -1117,18 +1156,14 @@
 
         <!-- 消息列表：像素滚动，拖动滚动条是连续的；是否跟随新内容由视图判断贴底，
              用户上滚后不再自动拉回（见 ConversationPaneView.xaml.cs），
-             本轮计时在问题气泡下方，列表底部不再放运行状态条。 -->
+             本轮计时在问题气泡下方，列表底部不再放运行状态条。
+             模板用覆盖式滚动条（`ScrollViewer.Overlay`），滚动条出现时不挤窄内容列。 -->
         <Grid Grid.Row="1">
             <ListBox x:Name="MessageList"
                      ItemsSource="{Binding Items}"
+                     Style="{StaticResource Chat.MessageList}"
                      ItemContainerStyle="{StaticResource ChatItemContainer}"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     Padding="0"
                      PreviewMouseWheel="OnMessageListPreviewMouseWheel"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ScrollViewer.CanContentScroll="True"
                      VirtualizingPanel.IsVirtualizing="True"
                      VirtualizingPanel.ScrollUnit="Pixel"
                      VirtualizingPanel.VirtualizationMode="Recycling"
@@ -1143,11 +1178,12 @@
         </Grid>
 
         <!-- 欢迎态：应用图标 + 标题，下面接输入卡；有 / 无工作区保持同一版式。
-             没有工作区时只把输入卡挡住，不隐藏、不改高度。 -->
+             没有工作区时只把输入卡挡住，不隐藏、不改高度。
+             输入卡与消息流共用同一条内容列（`Margin.ContentColumn` + `Metric.Composer.MaxWidth`）。 -->
         <StackPanel x:Name="ComposerGroup"
                     Grid.Row="2"
                     MaxWidth="{StaticResource Metric.Composer.MaxWidth}"
-                    Margin="28,0,28,0"
+                    Margin="{StaticResource Margin.ContentColumn}"
                     HorizontalAlignment="Stretch">
             <StackPanel Margin="0,0,0,24"
                         HorizontalAlignment="Center"
@@ -1207,7 +1243,8 @@
                                              LostKeyboardFocus="OnComposerLostFocus"
                                              AutomationProperties.AutomationId="ComposerInput"
                                              AutomationProperties.Name="消息输入框" />
-                    <TextBlock Margin="2,0,0,0"
+                    <TextBlock x:Name="PlaceholderText"
+                               Margin="2,0,0,0"
                                VerticalAlignment="Top"
                                IsHitTestVisible="False"
                                Text="{Binding ComposerPlaceholder, FallbackValue=发送问题或任务，/调用指令，@引用文件}"
@@ -1524,7 +1561,9 @@
             </StackPanel>
         </Grid>
 
-        <!-- 读数明细：点 pill 才出现，锚在读数行上方；点外部或 Esc 关闭。 -->
+        <!-- 读数明细：点 pill 才出现，像模型菜单一样贴着被点的 pill 向上弹出（底边留 6px、右缘对齐），
+             面板只压到工具行左半的状态文字；点外部或 Esc 关闭。PlacementTarget 在点击时
+             改成触发的那颗 pill，这里的读数行只是初始锚点。 -->
         <Popup x:Name="DockPopup"
                Placement="Custom"
                PlacementTarget="{Binding ElementName=ComposerDockRowHost}"

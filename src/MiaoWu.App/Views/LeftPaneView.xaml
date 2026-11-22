@@ -684,24 +684,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-
-            <!-- 没有工作区 -->
-            <StackPanel MaxWidth="220"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{x:Static res:Strings.WorkspaceListEmptyTitle}"
-                           Style="{StaticResource Text.Empty}"
-                           Foreground="{DynamicResource Brush.Text}" />
-                <TextBlock Margin="0,4,0,0"
-                           Text="{x:Static res:Strings.WorkspaceListEmptyBody}"
-                           Style="{StaticResource Text.Empty}" />
-                <Button Margin="0,12,0,0"
-                        HorizontalAlignment="Center"
-                        Content="{x:Static res:Strings.NewWorkspace}"
-                        Style="{StaticResource Button.Primary}"
-                        Command="{Binding AddWorkspaceCommand}" />
-            </StackPanel>
+            <!-- 没有工作区时不显示空态文案：顶部「新建工作区」就是入口，内容区留空。 -->
         </Grid>
 
         <!-- 底部固定入口 -->

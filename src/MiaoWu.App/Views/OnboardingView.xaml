@@ -483,7 +483,7 @@
                                                          AutomationProperties.Name="模型供应密钥，可留空"
                                                          KeyboardNavigation.TabIndex="4" />
                                             <TextBlock x:Name="ApiKeyHint"
-                                                       Margin="9,0,0,0"
+                                                       Margin="11,0,0,0"
                                                        VerticalAlignment="Center"
                                                        IsHitTestVisible="False"
                                                        Text="API Key（可留空）"
