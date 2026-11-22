@@ -5,7 +5,7 @@
     <Product>MiaoWu</Product>
     <Company>MiaoWu</Company>
     <Copyright>Copyright (c) 2026 MiaoWu</Copyright>
-    <VersionPrefix>0.6.0</VersionPrefix>
+    <VersionPrefix>0.6.1</VersionPrefix>
     <NeutralLanguage>zh-CN</NeutralLanguage>
     <!-- 离线/Win7 环境：关闭 NuGet 漏洞审计，避免每次 restore 访问 nuget.org 并产生 NU1900。 -->
     <NuGetAudit>false</NuGetAudit>

@@ -497,13 +497,32 @@
             <Setter Property="Stroke" Value="{DynamicResource Brush.Text3}" />
         </Style>
 
-        <!-- 过程行（工具调用）：整行可点，悬停出浅灰底与展开箭头 -->
-        <Style x:Key="Chat.Row" TargetType="Button" BasedOn="{StaticResource Button.Base}">
-            <Setter Property="MinHeight" Value="{StaticResource Metric.Chat.Row}" />
+        <!-- 过程行（工具 / 思考 / 压缩）：整行可点，但没有卡片底色与悬停灰底；
+             悬停 / 键盘焦点只让左侧图标变成展开 / 收起按钮，整行保持同一条 24 高基线。
+             `Button.Base` 的悬停底色会把过程行画成一块灰条，所以这里换成不带状态底色的模板。 -->
+        <Style x:Key="Chat.Row" TargetType="Button">
+            <Setter Property="Height" Value="{StaticResource Metric.Chat.Row}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Transparent}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- 思考折叠行：与工具行同高、同字号；行距由过程成员统一。 -->
@@ -511,20 +530,68 @@
             <Setter Property="Margin" Value="0" />
         </Style>
 
-        <!-- 展开箭头：收起指向右、展开指向下；默认隐形，悬停或展开时出现。 -->
-        <Style x:Key="Chat.Chevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
+        <!-- 过程行的左侧开关：收起时是原始图标；悬停 / 键盘焦点把图标换成展开箭头；
+             展开后一直保持收起箭头，行尾不再重复一个箭头。 -->
+        <Style x:Key="Chat.ToolGlyph" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Chat.ToolChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
             <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
-            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="True">
                     <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeDown}" />
-                    <Setter Property="Opacity" Value="1" />
+                    <Setter Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
-                    <Setter Property="Opacity" Value="1" />
+                    <Setter Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
-                    <Setter Property="Opacity" Value="1" />
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 思考行同理，展开状态读 IsThinkingExpanded。 -->
+        <Style x:Key="Chat.ThinkGlyph" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
+            <Setter Property="Data" Value="{StaticResource Ico.Think}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsThinkingExpanded}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Chat.ThinkChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
+            <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsThinkingExpanded}" Value="True">
+                    <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeDown}" />
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -580,38 +647,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 思考行的箭头：随思考开合换向；收起时只在悬停出现。 -->
-        <Style x:Key="Chat.ThinkingChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
-            <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
-            <Setter Property="Opacity" Value="0" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsThinkingExpanded}" Value="True">
-                    <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeDown}" />
-                    <Setter Property="Opacity" Value="1" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
-                    <Setter Property="Opacity" Value="1" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
-                    <Setter Property="Opacity" Value="1" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="Chat.CompactionChevron" TargetType="Path" BasedOn="{StaticResource Chat.Icon}">
-            <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeRight}" />
-            <Setter Property="Opacity" Value="0" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                    <Setter Property="Data" Value="{StaticResource Ico.ChevronStrokeDown}" />
-                    <Setter Property="Opacity" Value="1" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
-                    <Setter Property="Opacity" Value="1" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
         <!-- 压缩分隔行：说明从这里往前的对话已收进摘要；展开可看六段摘要。 -->
         <DataTemplate DataType="{x:Type vm:CompactionChatItemViewModel}">
             <StackPanel Margin="0,10,0,4">
@@ -623,17 +658,16 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Path Style="{StaticResource Chat.Icon}" Data="{StaticResource Ico.Sparkle}" />
+                        <Grid VerticalAlignment="Center">
+                            <Path Style="{StaticResource Chat.ToolGlyph}" Data="{StaticResource Ico.Sparkle}" />
+                            <Path Style="{StaticResource Chat.ToolChevron}" />
+                        </Grid>
                         <TextBlock Grid.Column="1"
                                    Margin="6,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="{Binding HeaderText}"
                                    Style="{StaticResource Text.ChatProcess}" />
-                        <Path Grid.Column="2"
-                              Margin="6,0,0,0"
-                              Style="{StaticResource Chat.CompactionChevron}" />
                     </Grid>
                 </Button>
                 <TextBlock Margin="22,4,0,0"
@@ -733,10 +767,11 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Path Style="{StaticResource Chat.Icon}"
-                                  Data="{StaticResource Ico.Think}" />
+                            <Grid VerticalAlignment="Center">
+                                <Path Style="{StaticResource Chat.ThinkGlyph}" />
+                                <Path Style="{StaticResource Chat.ThinkChevron}" />
+                            </Grid>
                             <TextBlock Grid.Column="1"
                                        Margin="6,0,0,0"
                                        VerticalAlignment="Center"
@@ -749,9 +784,6 @@
                                        Style="{StaticResource Text.ChatProcessPreview}"
                                        TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding IsThinkingExpanded, Converter={StaticResource InverseBoolToVisibility}}" />
-                            <Path Grid.Column="3"
-                                  Margin="6,0,0,0"
-                                  Style="{StaticResource Chat.ThinkingChevron}" />
                         </Grid>
                     </Button>
 
@@ -780,7 +812,8 @@
                            TextWrapping="Wrap"
                            Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}" />
 
-                <!-- 尾部元信息只留时间与动作：模型 / 用量不再占回答下方一行。 -->
+                <!-- 尾部元信息只留时间与动作，贴正文左缘：时间与复制 / 重试在该行左侧，
+                     失败 / 中断这类静态状态留在行尾。 -->
                 <Grid Margin="{StaticResource Margin.Chat.Footer}"
                       Visibility="{Binding ShowFooter, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
@@ -788,16 +821,10 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="RunStatus"
-                               Grid.Column="0"
-                               VerticalAlignment="Center"
-                               Text="{Binding StatusText}"
-                               Style="{StaticResource Text.Meta}"
-                               Visibility="{Binding StatusText, Converter={StaticResource NonEmptyToVisibility}}" />
-
-                    <StackPanel Grid.Column="1"
+                    <StackPanel x:Name="AssistantMeta"
+                                Grid.Column="0"
                                 VerticalAlignment="Center"
-                                HorizontalAlignment="Right"
+                                HorizontalAlignment="Left"
                                 Orientation="Horizontal">
                         <TextBlock Margin="0,0,4,0"
                                    VerticalAlignment="Center"
@@ -823,10 +850,19 @@
                                   Fill="{DynamicResource Brush.Accent}" />
                         </Button>
                     </StackPanel>
+
+                    <TextBlock x:Name="RunStatus"
+                               Grid.Column="1"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Right"
+                               Text="{Binding StatusText}"
+                               Style="{StaticResource Text.Meta}"
+                               Visibility="{Binding StatusText, Converter={StaticResource NonEmptyToVisibility}}" />
                 </Grid>
             </StackPanel>
             <DataTemplate.Triggers>
-                <!-- 只带工具调用的助手步骤没有正文与思考：整行不占高，否则组内会多出一段空白。 -->
+                <!-- 只带工具调用、没有正文与思考的助手步骤整行不占高，否则组内会多出一段空白。
+                     流式期间成员身份还没落定，用 IsInsideOpenGroup 先把空行收掉。 -->
                 <MultiDataTrigger>
                     <MultiDataTrigger.Conditions>
                         <Condition Binding="{Binding IsProcessMember}" Value="True" />
@@ -836,16 +872,36 @@
                     </MultiDataTrigger.Conditions>
                     <Setter TargetName="AssistantRoot" Property="Visibility" Value="Collapsed" />
                 </MultiDataTrigger>
-                <!-- 过程组成员在展开时缩进 22，和组头文字对齐 -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsProcessMember}" Value="False" />
+                        <Condition Binding="{Binding IsInsideOpenGroup}" Value="True" />
+                        <Condition Binding="{Binding HasThinking}" Value="False" />
+                        <Condition Binding="{Binding HasVisibleText}" Value="False" />
+                        <Condition Binding="{Binding HasError}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="AssistantRoot" Property="Visibility" Value="Collapsed" />
+                </MultiDataTrigger>
+                <!-- 过程组成员与组内流式步骤都用 4px 行距；步骤落定前 IsProcessMember 还是 false，
+                     若按答案的 10px 上边距排版，工具行与下一步「思考」之间会多出一条空档。 -->
                 <DataTrigger Binding="{Binding IsProcessMember}" Value="True">
                     <Setter TargetName="AssistantRoot"
                             Property="Margin"
                             Value="{StaticResource Margin.Chat.ProcessMember}" />
                 </DataTrigger>
-                <!-- 答案里的思考块与正文之间留 4；组内的行距由成员自己承担，不再叠加 -->
-                <DataTrigger Binding="{Binding IsProcessMember}" Value="False">
-                    <Setter TargetName="ThinkingBlock" Property="Margin" Value="0,0,0,4" />
+                <DataTrigger Binding="{Binding IsInsideOpenGroup}" Value="True">
+                    <Setter TargetName="AssistantRoot"
+                            Property="Margin"
+                            Value="{StaticResource Margin.Chat.ProcessMember}" />
                 </DataTrigger>
+                <!-- 答案里的思考块与正文之间留 4；组内行距由成员自己承担，不再叠加 -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsProcessMember}" Value="False" />
+                        <Condition Binding="{Binding IsInsideOpenGroup}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="ThinkingBlock" Property="Margin" Value="0,0,0,4" />
+                </MultiDataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
@@ -866,11 +922,13 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <Path Style="{StaticResource Chat.Icon}"
-                              Data="{Binding ToolName, Converter={StaticResource ToolIcon}}" />
+                        <Grid VerticalAlignment="Center">
+                            <Path Style="{StaticResource Chat.ToolGlyph}"
+                                  Data="{Binding ToolName, Converter={StaticResource ToolIcon}}" />
+                            <Path Style="{StaticResource Chat.ToolChevron}" />
+                        </Grid>
 
                         <TextBlock Grid.Column="1"
                                    Margin="6,0,0,0"
@@ -945,10 +1003,6 @@
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
-
-                        <Path Grid.Column="6"
-                              Margin="6,0,0,0"
-                              Style="{StaticResource Chat.Chevron}" />
                     </Grid>
                 </Button>
 
@@ -1035,10 +1089,11 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Path Style="{StaticResource Chat.Icon}"
-                              Data="{StaticResource Ico.Think}" />
+                        <Grid VerticalAlignment="Center">
+                            <Path Style="{StaticResource Chat.ThinkGlyph}" />
+                            <Path Style="{StaticResource Chat.ThinkChevron}" />
+                        </Grid>
                         <TextBlock Grid.Column="1"
                                    Margin="6,0,0,0"
                                    VerticalAlignment="Center"
@@ -1051,9 +1106,6 @@
                                    Style="{StaticResource Text.ChatProcessPreview}"
                                    TextTrimming="CharacterEllipsis"
                                    Visibility="{Binding IsThinkingExpanded, Converter={StaticResource InverseBoolToVisibility}}" />
-                        <Path Grid.Column="3"
-                              Margin="6,0,0,0"
-                              Style="{StaticResource Chat.ThinkingChevron}" />
                     </Grid>
                 </Button>
 
@@ -1399,8 +1451,9 @@
         <!-- 消息列表：像素滚动，拖动滚动条是连续的；是否跟随新内容由视图判断贴底，
              用户上滚后不再自动拉回（见 ConversationPaneView.xaml.cs），
              本轮计时在问题气泡下方，列表底部不再放运行状态条。
-             模板用覆盖式滚动条（`ScrollViewer.Overlay`），滚动条出现时不挤窄内容列。 -->
-        <Grid Grid.Row="1">
+             模板用覆盖式滚动条（`ScrollViewer.Overlay`），滚动条出现时不挤窄内容列。
+             与输入卡之间留出 `Margin.Chat.BottomGap`：滚到底时最后一行不贴住输入卡上边缘。 -->
+        <Grid Grid.Row="1" Margin="{StaticResource Margin.Chat.BottomGap}">
             <ListBox x:Name="MessageList"
                      ItemsSource="{Binding Items}"
                      Style="{StaticResource Chat.MessageList}"

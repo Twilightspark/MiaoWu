@@ -2330,11 +2330,8 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            var stepStarted = evt as StepStartedEvent;
-            if (stepStarted != null && !stepStarted.IsFirstStep)
-            {
-                StatusText = "第 " + stepStarted.StepIndex + " 步…";
-            }
+            // 步骤进度不再写进工具行：过程中只有「正在探索，用时 N秒」与执行过程组头，
+            // 不再出现「第 N 步…」这类按步计数的临时状态。
         }
 
         private void ApplyMessage(AgentMessage message, bool live)

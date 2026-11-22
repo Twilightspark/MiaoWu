@@ -498,9 +498,16 @@ namespace MiaoWu.App.ViewModels
         }
 
         /// <summary>
-        /// 这一行是否处在展开的过程组里：组头已经显示「正在探索，用时 N秒」，
-        /// 流式步骤的尾部不再重复一条同样的计时与时间。
+        /// 这一行是否处在展开的过程组里。除了隐藏尾部计时，模板也据此在流式期间就用
+        /// 过程成员的 4px 行距：步骤以工具调用收尾之前 <see cref="IsProcessMember"/> 还是 false，
+        /// 若仍按答案的 10px 上边距排版，工具行与下一步的「思考」之间会多出一条空档，
+        /// 等步骤落定、组收起再展开才消失。
         /// </summary>
+        public bool IsInsideOpenGroup
+        {
+            get { return _isInsideOpenGroup; }
+        }
+
         internal void SetInsideOpenGroup(bool value)
         {
             if (SetProperty(ref _isInsideOpenGroup, value))

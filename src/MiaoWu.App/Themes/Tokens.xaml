@@ -345,6 +345,8 @@
     <Thickness x:Key="Thickness.Chat.ProcessRule">0,0,0,1</Thickness>
     <Thickness x:Key="Margin.Chat.Notice">0,10,0,0</Thickness>
     <Thickness x:Key="Margin.Chat.Footer">0,2,0,0</Thickness>
+    <!-- 消息流与输入卡之间留一条呼吸区：滚到底时最后一行不贴住输入卡上边缘 -->
+    <Thickness x:Key="Margin.Chat.BottomGap">0,0,0,12</Thickness>
     <Thickness x:Key="Pad.Bubble">9,12</Thickness>
     <Thickness x:Key="Pad.Chat.Body">10,8</Thickness>
     <Thickness x:Key="Pad.Chat.Reasoning">10,0,0,0</Thickness>
