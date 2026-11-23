@@ -13,6 +13,9 @@ namespace MiaoWu.Infrastructure.Tools
     /// </summary>
     public sealed class ScheduleService : IScheduleService, IDisposable
     {
+        /// <summary>每个任务保留的投递记录条数；超出时丢弃最旧的。</summary>
+        public const int HistoryLimit = 50;
+
         private readonly object _gate = new object();
         private readonly ScheduleFileStore _store;
         private readonly IClock _clock;
@@ -98,6 +101,12 @@ namespace MiaoWu.Infrastructure.Tools
             string workspaceId)
         {
             ScheduleRecurrence recurrence = ScheduleRecurrence.Parse(rule);
+            DateTimeOffset? nextRun = recurrence.FirstOnOrAfter(Now);
+            if (!nextRun.HasValue)
+            {
+                throw new ScheduleException("not_future", "规则没有未来的运行时间。");
+            }
+
             var definition = new ScheduleDefinition
             {
                 Id = "sch_" + Guid.NewGuid().ToString("N").Substring(0, 12),
@@ -111,7 +120,8 @@ namespace MiaoWu.Infrastructure.Tools
                 CreatedAt = Now,
                 UpdatedAt = Now,
                 RunCount = 0,
-                NextRunAt = recurrence.FirstOnOrAfter(Now)
+                NextRunAt = nextRun,
+                History = new List<ScheduleDeliveryRecord>()
             };
 
             lock (_gate)
@@ -124,25 +134,42 @@ namespace MiaoWu.Infrastructure.Tools
             return Clone(definition);
         }
 
-        public bool Update(string id, string title, string prompt, string rule, bool? active)
+        public ScheduleUpdateResult Update(
+            string id,
+            string title,
+            string prompt,
+            string rule,
+            bool? active,
+            DateTimeOffset? expectedUpdatedAt = null,
+            ScheduleTarget? target = null,
+            string sessionId = null,
+            string workspaceId = null)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
-                return false;
+                return new ScheduleUpdateResult(ScheduleUpdateStatus.NotFound, null);
             }
 
             ScheduleRecurrence recurrence = null;
-            if (!string.IsNullOrWhiteSpace(rule))
+            string trimmedRule = null;
+            if (rule != null)
             {
-                recurrence = ScheduleRecurrence.Parse(rule);
+                trimmedRule = rule.Trim();
+                recurrence = ScheduleRecurrence.Parse(trimmedRule);
             }
 
+            ScheduleDefinition snapshot;
             lock (_gate)
             {
                 ScheduleDefinition definition;
                 if (!_schedules.TryGetValue(id, out definition))
                 {
-                    return false;
+                    return new ScheduleUpdateResult(ScheduleUpdateStatus.NotFound, null);
+                }
+
+                if (expectedUpdatedAt.HasValue && definition.UpdatedAt != expectedUpdatedAt.Value)
+                {
+                    return new ScheduleUpdateResult(ScheduleUpdateStatus.Conflict, null);
                 }
 
                 if (title != null)
@@ -155,26 +182,107 @@ namespace MiaoWu.Infrastructure.Tools
                     definition.Prompt = prompt.Trim();
                 }
 
-                if (rule != null)
+                if (trimmedRule != null
+                    && !string.Equals(definition.Rule, trimmedRule, StringComparison.Ordinal))
                 {
-                    definition.Rule = rule.Trim();
+                    definition.Rule = trimmedRule;
                     definition.NextRunAt = recurrence.FirstOnOrAfter(Now);
+                }
+
+                if (target.HasValue)
+                {
+                    definition.Target = target.Value;
+                    if (target.Value == ScheduleTarget.New)
+                    {
+                        definition.SessionId = null;
+                    }
+                }
+
+                if (sessionId != null)
+                {
+                    definition.SessionId = sessionId;
+                }
+
+                if (workspaceId != null)
+                {
+                    definition.WorkspaceId = workspaceId;
                 }
 
                 if (active.HasValue)
                 {
-                    definition.Active = active.Value;
                     if (active.Value && !definition.NextRunAt.HasValue)
                     {
-                        definition.NextRunAt = SafeNext(definition.Rule, Now, true);
+                        DateTimeOffset? resumed = SafeNext(definition.Rule, Now, true);
+                        if (!resumed.HasValue)
+                        {
+                            throw new ScheduleException(
+                                "not_future",
+                                "请选择未来的运行时间；恢复前请先修改任务时间。");
+                        }
+
+                        definition.NextRunAt = resumed;
                     }
+
+                    definition.Active = active.Value;
                 }
 
-                definition.UpdatedAt = Now;
+                definition.UpdatedAt = NextStamp(definition.UpdatedAt);
+                SaveLocked();
+                snapshot = Clone(definition);
+            }
+
+            RaiseChanged();
+            return new ScheduleUpdateResult(ScheduleUpdateStatus.Updated, snapshot);
+        }
+
+        public bool Delete(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return false;
+            }
+
+            lock (_gate)
+            {
+                if (!_schedules.Remove(id))
+                {
+                    return false;
+                }
+
                 SaveLocked();
             }
 
             RaiseChanged();
+            return true;
+        }
+
+        public bool RunNow(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id) || _disposed)
+            {
+                return false;
+            }
+
+            ScheduleDefinition snapshot;
+            lock (_gate)
+            {
+                ScheduleDefinition definition;
+                if (!_schedules.TryGetValue(id, out definition))
+                {
+                    return false;
+                }
+
+                DateTimeOffset now = Now;
+                definition.LastRunAt = now;
+                definition.RunCount++;
+                definition.UpdatedAt = NextStamp(definition.UpdatedAt);
+                AppendHistory(definition, now, ScheduleDeliveryKind.Manual);
+                SaveLocked();
+                snapshot = Clone(definition);
+            }
+
+            RaiseChanged();
+            Dispatch(snapshot);
             return true;
         }
 
@@ -194,7 +302,7 @@ namespace MiaoWu.Infrastructure.Tools
                 }
 
                 definition.SessionId = sessionId;
-                definition.UpdatedAt = Now;
+                definition.UpdatedAt = NextStamp(definition.UpdatedAt);
                 SaveLocked();
             }
 
@@ -202,7 +310,8 @@ namespace MiaoWu.Infrastructure.Tools
             return true;
         }
 
-        public IReadOnlyList<ScheduleDefinition> List(bool includeInactive)        {
+        public IReadOnlyList<ScheduleDefinition> List(bool includeInactive)
+        {
             var list = new List<ScheduleDefinition>();
             lock (_gate)
             {
@@ -289,18 +398,29 @@ namespace MiaoWu.Infrastructure.Tools
 
                 current.RunCount++;
                 current.LastRunAt = now;
-                current.UpdatedAt = now;
+                current.UpdatedAt = NextStamp(current.UpdatedAt);
                 current.NextRunAt = SafeNext(current.Rule, now, false);
                 if (!current.NextRunAt.HasValue)
                 {
                     current.Active = false;
                 }
 
+                AppendHistory(current, now, ScheduleDeliveryKind.Automatic);
                 snapshot = Clone(current);
                 SaveLocked();
             }
 
             RaiseChanged();
+            Dispatch(snapshot);
+        }
+
+        private void Dispatch(ScheduleDefinition snapshot)
+        {
+            if (_deliver == null)
+            {
+                return;
+            }
+
             try
             {
                 Task task = _deliver(snapshot);
@@ -313,6 +433,7 @@ namespace MiaoWu.Infrastructure.Tools
             }
             catch (Exception exception)
             {
+                MarkFailed(snapshot);
                 if (_log != null)
                 {
                     _log("日程投递失败（" + snapshot.Id + "）：" + exception.Message);
@@ -322,11 +443,78 @@ namespace MiaoWu.Infrastructure.Tools
 
         private void LogFailure(ScheduleDefinition snapshot, Task task)
         {
-            if (task.IsFaulted && _log != null)
+            if (!task.IsFaulted)
+            {
+                return;
+            }
+
+            MarkFailed(snapshot);
+            if (_log != null)
             {
                 Exception error = task.Exception == null ? null : task.Exception.GetBaseException();
                 _log("日程投递失败（" + snapshot.Id + "）：" + (error == null ? "未知错误" : error.Message));
             }
+        }
+
+        private void MarkFailed(ScheduleDefinition snapshot)
+        {
+            if (snapshot == null || snapshot.History == null || snapshot.History.Count == 0)
+            {
+                return;
+            }
+
+            ScheduleDeliveryRecord attempt = snapshot.History[snapshot.History.Count - 1];
+            lock (_gate)
+            {
+                ScheduleDefinition current;
+                if (!_schedules.TryGetValue(snapshot.Id, out current) || current.History == null)
+                {
+                    return;
+                }
+
+                for (int i = current.History.Count - 1; i >= 0; i--)
+                {
+                    ScheduleDeliveryRecord record = current.History[i];
+                    if (record != null
+                        && record.DeliveredAt == attempt.DeliveredAt
+                        && record.Kind == attempt.Kind)
+                    {
+                        record.Failed = true;
+                        SaveLocked();
+                        return;
+                    }
+                }
+            }
+        }
+
+        private static void AppendHistory(
+            ScheduleDefinition definition,
+            DateTimeOffset at,
+            ScheduleDeliveryKind kind)
+        {
+            if (definition.History == null)
+            {
+                definition.History = new List<ScheduleDeliveryRecord>();
+            }
+
+            definition.History.Add(new ScheduleDeliveryRecord
+            {
+                DeliveredAt = at,
+                Prompt = definition.Prompt ?? string.Empty,
+                Kind = kind,
+                Failed = false
+            });
+
+            while (definition.History.Count > HistoryLimit)
+            {
+                definition.History.RemoveAt(0);
+            }
+        }
+
+        private DateTimeOffset NextStamp(DateTimeOffset previous)
+        {
+            DateTimeOffset now = Now;
+            return now <= previous ? previous.AddTicks(1) : now;
         }
 
         private static DateTimeOffset? SafeNext(string rule, DateTimeOffset now, bool inclusive)
@@ -376,7 +564,7 @@ namespace MiaoWu.Infrastructure.Tools
 
         private static ScheduleDefinition Clone(ScheduleDefinition definition)
         {
-            return new ScheduleDefinition
+            var clone = new ScheduleDefinition
             {
                 Id = definition.Id,
                 Title = definition.Title,
@@ -390,8 +578,31 @@ namespace MiaoWu.Infrastructure.Tools
                 UpdatedAt = definition.UpdatedAt,
                 LastRunAt = definition.LastRunAt,
                 NextRunAt = definition.NextRunAt,
-                RunCount = definition.RunCount
+                RunCount = definition.RunCount,
+                History = new List<ScheduleDeliveryRecord>()
             };
+
+            if (definition.History != null)
+            {
+                for (int i = 0; i < definition.History.Count; i++)
+                {
+                    ScheduleDeliveryRecord record = definition.History[i];
+                    if (record == null)
+                    {
+                        continue;
+                    }
+
+                    clone.History.Add(new ScheduleDeliveryRecord
+                    {
+                        DeliveredAt = record.DeliveredAt,
+                        Prompt = record.Prompt,
+                        Kind = record.Kind,
+                        Failed = record.Failed
+                    });
+                }
+            }
+
+            return clone;
         }
     }
 }

@@ -81,5 +81,31 @@ namespace MiaoWu.App.Views
                 window.Close();
             }
         }
+
+        /// <summary>Esc 优先收定时任务页面；设置、浮层与确认框打开时仍交给它们处理。</summary>
+        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape || e.Handled)
+            {
+                return;
+            }
+
+            MainWindowViewModel viewModel = ViewModel;
+            if (viewModel == null || viewModel.Schedules == null || !viewModel.Schedules.IsOpen)
+            {
+                return;
+            }
+
+            if ((viewModel.Settings != null && viewModel.Settings.IsOpen)
+                || viewModel.Overlay.IsOpen
+                || viewModel.ConfirmPrompt.IsOpen
+                || viewModel.ClosePrompt.IsOpen)
+            {
+                return;
+            }
+
+            viewModel.Schedules.Close();
+            e.Handled = true;
+        }
     }
 }

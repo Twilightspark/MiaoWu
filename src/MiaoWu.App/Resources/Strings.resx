@@ -88,13 +88,46 @@
     <value>定时任务</value>
   </data>
   <data name="ScheduledTasksHint" xml:space="preserve">
-    <value>定时任务即将推出</value>
+    <value>定时任务：按计划把消息投递到会话</value>
   </data>
-  <data name="ScheduledTasksPendingTitle" xml:space="preserve">
-    <value>定时任务</value>
+  <data name="SchedulesCloseTooltip" xml:space="preserve">
+    <value>返回会话</value>
   </data>
-  <data name="ScheduledTasksPendingBody" xml:space="preserve">
-    <value>定时任务将在后续版本提供：按计划自动运行指定的会话与工具，当前版本只保留入口。</value>
+  <data name="SchedulesFilterAutomation" xml:space="preserve">
+    <value>定时任务筛选</value>
+  </data>
+  <data name="SchedulesTabsAutomation" xml:space="preserve">
+    <value>任务详情页签</value>
+  </data>
+  <data name="SchedulesSearchHint" xml:space="preserve">
+    <value>搜索名称、内容或会话</value>
+  </data>
+  <data name="SchedulesNew" xml:space="preserve">
+    <value>新建</value>
+  </data>
+  <data name="SchedulesRunNow" xml:space="preserve">
+    <value>立即执行</value>
+  </data>
+  <data name="SchedulesDelete" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="SchedulesOverwrite" xml:space="preserve">
+    <value>覆盖保存</value>
+  </data>
+  <data name="SchedulesReload" xml:space="preserve">
+    <value>重新载入</value>
+  </data>
+  <data name="SchedulesNameLabel" xml:space="preserve">
+    <value>任务名称</value>
+  </data>
+  <data name="SchedulesContentLabel" xml:space="preserve">
+    <value>任务内容</value>
+  </data>
+  <data name="SchedulesDiscard" xml:space="preserve">
+    <value>放弃</value>
+  </data>
+  <data name="SchedulesSave" xml:space="preserve">
+    <value>保存</value>
   </data>
   <data name="NewSession" xml:space="preserve">
     <value>新建会话</value>

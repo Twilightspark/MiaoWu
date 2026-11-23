@@ -151,8 +151,49 @@ namespace MiaoWu.Infrastructure.Tools
                 UpdatedAt = updated,
                 LastRunAt = lastRun,
                 NextRunAt = nextRun,
-                RunCount = GetInt(item, "runCount", 0)
+                RunCount = GetInt(item, "runCount", 0),
+                History = ReadHistory(item)
             };
+        }
+
+        private static List<ScheduleDeliveryRecord> ReadHistory(JsonValue item)
+        {
+            var history = new List<ScheduleDeliveryRecord>();
+            JsonValue array = item.Get("history");
+            if (array == null || array.Kind != JsonKind.Array)
+            {
+                return history;
+            }
+
+            foreach (JsonValue entry in array.Items)
+            {
+                if (entry == null || entry.Kind != JsonKind.Object)
+                {
+                    continue;
+                }
+
+                DateTimeOffset at;
+                if (!TryGetTime(entry, "at", out at))
+                {
+                    continue;
+                }
+
+                ScheduleDeliveryKind kind;
+                if (!Enum.TryParse(GetString(entry, "kind"), true, out kind))
+                {
+                    kind = ScheduleDeliveryKind.Automatic;
+                }
+
+                history.Add(new ScheduleDeliveryRecord
+                {
+                    DeliveredAt = at,
+                    Prompt = GetString(entry, "prompt") ?? string.Empty,
+                    Kind = kind,
+                    Failed = GetBool(entry, "failed", false)
+                });
+            }
+
+            return history;
         }
 
         private static JsonValue WriteDefinition(ScheduleDefinition schedule)
@@ -171,6 +212,32 @@ namespace MiaoWu.Infrastructure.Tools
             item["lastRunAt"] = JsonValue.From(schedule.LastRunAt.HasValue ? FormatTime(schedule.LastRunAt.Value) : null);
             item["nextRunAt"] = JsonValue.From(schedule.NextRunAt.HasValue ? FormatTime(schedule.NextRunAt.Value) : null);
             item["runCount"] = JsonValue.From((double)schedule.RunCount);
+
+            JsonValue history = JsonValue.NewArray();
+            if (schedule.History != null)
+            {
+                for (int i = 0; i < schedule.History.Count; i++)
+                {
+                    ScheduleDeliveryRecord record = schedule.History[i];
+                    if (record == null)
+                    {
+                        continue;
+                    }
+
+                    JsonValue entry = JsonValue.NewObject();
+                    entry["at"] = JsonValue.From(FormatTime(record.DeliveredAt));
+                    entry["prompt"] = JsonValue.From(record.Prompt);
+                    entry["kind"] = JsonValue.From(record.Kind.ToString());
+                    entry["failed"] = JsonValue.From(record.Failed);
+                    history.Add(entry);
+                }
+            }
+
+            if (history.Items.Count > 0)
+            {
+                item["history"] = history;
+            }
+
             return item;
         }
 

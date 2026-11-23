@@ -17,7 +17,8 @@
              UseLayoutRounding="True"
              SnapsToDevicePixels="True"
              TextOptions.TextFormattingMode="Display"
-             AutomationProperties.AutomationId="Shell">
+             AutomationProperties.AutomationId="Shell"
+             PreviewKeyDown="OnPreviewKeyDown">
 
     <UserControl.InputBindings>
         <KeyBinding Key="J" Modifiers="Control" Command="{Binding ToggleRightPaneCommand}" />
@@ -29,6 +30,7 @@
     <UserControl.Resources>
         <conv:DoubleToGridLengthConverter x:Key="DoubleToGridLength" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </UserControl.Resources>
 
     <Grid x:Name="Root"
@@ -141,51 +143,58 @@
                                    AutomationProperties.AutomationId="LeftSplitter"
                                    AutomationProperties.Name="{x:Static res:Strings.LeftSplitterAutomation}" />
 
-            <!-- 一块白色圆角表面同时承载问答与文件/预览；右栏折叠时问答自动占满。 -->
+            <!-- 一块白色圆角表面同时承载问答与文件/预览；右栏折叠时问答自动占满。
+                 定时任务页面打开时整块表面换成任务页，左栏仍是同一块壳。 -->
             <Border x:Name="ContentPanel"
                     Grid.Column="2"
                     Margin="{StaticResource Margin.Pane.Right}"
                     Style="{StaticResource Pane.Card}">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="{StaticResource GridLength.Splitter}" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                    <Grid Visibility="{Binding Schedules.IsOpen, Converter={StaticResource InverseBoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="{StaticResource GridLength.Splitter}" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                    <!-- 中栏：问答。折叠按钮在会话头「更多」右侧，由右栏的展开状态驱动。 -->
-                    <Grid x:Name="MiddlePane" Grid.Column="0">
-                        <views:ConversationPaneView x:Name="ConversationPane"
-                                                    DataContext="{Binding Conversation}" />
+                        <!-- 中栏：问答。折叠按钮在会话头「更多」右侧，由右栏的展开状态驱动。 -->
+                        <Grid x:Name="MiddlePane" Grid.Column="0">
+                            <views:ConversationPaneView x:Name="ConversationPane"
+                                                        DataContext="{Binding Conversation}" />
+                        </Grid>
+
+                        <!-- 中/右之间唯一的分割线：静止 1px，悬停 / 拖动转 accent。 -->
+                        <controls:PaneSplitter x:Name="RightSplitter"
+                                               Grid.Column="1"
+                                               Panel.ZIndex="10"
+                                               Style="{StaticResource PaneSplitter}"
+                                               Value="{Binding RightExpandedWidth, Mode=TwoWay}"
+                                               Minimum="{StaticResource Metric.Right.Min}"
+                                               Maximum="{Binding RightPaneMax}"
+                                               IsRight="True"
+                                               IdleLineVisible="True"
+                                               Visibility="{Binding IsRightPaneCollapsed, Converter={StaticResource InverseBoolToVisibility}}"
+                                               AutomationProperties.AutomationId="RightSplitter"
+                                               AutomationProperties.Name="{x:Static res:Strings.RightSplitterAutomation}" />
+
+                        <!-- 右栏：文件浏览 / 预览，可折叠至 0。 -->
+                        <controls:CollapsiblePane x:Name="RightPane"
+                                                  Grid.Column="2"
+                                                  Style="{StaticResource CollapsiblePane}"
+                                                  Background="Transparent"
+                                                  ExpandedWidth="{Binding RightExpandedWidth}"
+                                                  IsCollapsed="{Binding IsRightPaneCollapsed, Mode=OneWay}"
+                                                  DurationMilliseconds="{StaticResource Motion.PanelMs}"
+                                                  AutomationProperties.AutomationId="RightPane"
+                                                  AutomationProperties.Name="{x:Static res:Strings.RightPaneAutomation}">
+                            <views:CanvasPaneView x:Name="DocumentPane"
+                                                  DataContext="{Binding Canvas}" />
+                        </controls:CollapsiblePane>
                     </Grid>
 
-                    <!-- 中/右之间唯一的分割线：静止 1px，悬停 / 拖动转 accent。 -->
-                    <controls:PaneSplitter x:Name="RightSplitter"
-                                           Grid.Column="1"
-                                           Panel.ZIndex="10"
-                                           Style="{StaticResource PaneSplitter}"
-                                           Value="{Binding RightExpandedWidth, Mode=TwoWay}"
-                                           Minimum="{StaticResource Metric.Right.Min}"
-                                           Maximum="{Binding RightPaneMax}"
-                                           IsRight="True"
-                                           IdleLineVisible="True"
-                                           Visibility="{Binding IsRightPaneCollapsed, Converter={StaticResource InverseBoolToVisibility}}"
-                                           AutomationProperties.AutomationId="RightSplitter"
-                                           AutomationProperties.Name="{x:Static res:Strings.RightSplitterAutomation}" />
-
-                    <!-- 右栏：文件浏览 / 预览，可折叠至 0。 -->
-                    <controls:CollapsiblePane x:Name="RightPane"
-                                              Grid.Column="2"
-                                              Style="{StaticResource CollapsiblePane}"
-                                              Background="Transparent"
-                                              ExpandedWidth="{Binding RightExpandedWidth}"
-                                              IsCollapsed="{Binding IsRightPaneCollapsed, Mode=OneWay}"
-                                              DurationMilliseconds="{StaticResource Motion.PanelMs}"
-                                              AutomationProperties.AutomationId="RightPane"
-                                              AutomationProperties.Name="{x:Static res:Strings.RightPaneAutomation}">
-                        <views:CanvasPaneView x:Name="DocumentPane"
-                                              DataContext="{Binding Canvas}" />
-                    </controls:CollapsiblePane>
+                    <views:SchedulesPageView x:Name="SchedulesPage"
+                                             DataContext="{Binding Schedules}"
+                                             Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
                 </Grid>
             </Border>
         </Grid>

@@ -99,7 +99,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 工作区上方的功能入口：新建工作区（主题色主操作）、定时任务（即将推出） -->
+        <!-- 工作区上方的功能入口：新建工作区（主题色主操作）、定时任务（时钟图标，打开任务页） -->
         <StackPanel Grid.Row="0" Margin="{StaticResource Pad.Left.Actions}">
             <Button x:Name="AddWorkspaceButton"
                     Style="{StaticResource Button.NavAccent}"
@@ -134,21 +134,15 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Path Style="{StaticResource Icon}"
-                          Data="{StaticResource Ico.Refresh}"
-                          Fill="{DynamicResource Brush.Text3}" />
+                    <Path Style="{StaticResource Icon.Stroke.Exact}"
+                          Data="{StaticResource Ico.Clock}"
+                          Stroke="{DynamicResource Brush.Text3}" />
                     <TextBlock Grid.Column="1"
                                Margin="8,0,0,0"
                                VerticalAlignment="Center"
                                Text="{x:Static res:Strings.ScheduledTasks}"
                                Style="{StaticResource Text.ListRow}" />
-                    <TextBlock Grid.Column="2"
-                               VerticalAlignment="Center"
-                               Text="{x:Static res:Strings.MarketplaceComingSoon}"
-                               Style="{StaticResource Text.Time}"
-                               Foreground="{DynamicResource Brush.Text3}" />
                 </Grid>
             </Button>
         </StackPanel>

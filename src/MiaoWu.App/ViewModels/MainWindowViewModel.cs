@@ -177,7 +177,7 @@ namespace MiaoWu.App.ViewModels
             Left.FileOpenRequested += OnFileOpenRequested;
             Left.SettingsRequested += (sender, args) => ShowSettings();
             Left.MarketplaceRequested += (sender, args) => ShowMarketplacePlaceholder();
-            Left.ScheduledTasksRequested += (sender, args) => ShowScheduledTasksPlaceholder();
+            Left.ScheduledTasksRequested += (sender, args) => ToggleSchedules();
             Left.SessionRenamed += OnLeftSessionRenamed;
             Left.SessionDeleteRequested += OnLeftSessionDeleteRequested;
             Left.SessionExportRequested += OnLeftSessionExportRequested;
@@ -213,6 +213,29 @@ namespace MiaoWu.App.ViewModels
                 Onboarding.Completed += OnOnboardingCompleted;
                 Onboarding.CloseRequested += OnOnboardingCloseRequested;
 
+                Schedules = new SchedulesViewModel(
+                    services.Schedules,
+                    () => Conversation != null && Conversation.HasSession
+                        ? Conversation.SessionId
+                        : Left.ActiveSessionId,
+                    () => Left.ActiveWorkspace == null ? null : Left.ActiveWorkspace.Id,
+                    id => Left.FindWorkspaceName(id),
+                    action =>
+                    {
+                        Application app = Application.Current;
+                        if (app == null)
+                        {
+                            action();
+                        }
+                        else
+                        {
+                            app.Dispatcher.BeginInvoke(action);
+                        }
+                    },
+                    (title, message, confirmText, cancelText, destructive) =>
+                        ConfirmPrompt.Confirm(title, message, confirmText, cancelText, destructive),
+                    () => new DateTimeOffset(now()));
+
                 Conversation.SessionListChanged += OnConversationSessionListChanged;
                 Conversation.SettingsRequested += (sender, args) => ShowSettings();
                 Conversation.SessionPinRequested += OnConversationSessionPinRequested;
@@ -246,6 +269,7 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(ConfirmPrompt));
             OnPropertyChanged(nameof(Conversation));
             OnPropertyChanged(nameof(Settings));
+            OnPropertyChanged(nameof(Schedules));
             OnPropertyChanged(nameof(Onboarding));
             OnPropertyChanged(nameof(IsOnboarding));
             OnPropertyChanged(nameof(Notifications));
@@ -280,6 +304,9 @@ namespace MiaoWu.App.ViewModels
         public ConversationViewModel Conversation { get; }
 
         public SettingsViewModel Settings { get; }
+
+        /// <summary>定时任务页面：左栏入口打开，占满中/右两张面板的原位置。</summary>
+        public SchedulesViewModel Schedules { get; }
 
         public OnboardingViewModel Onboarding { get; }
 
@@ -601,9 +628,24 @@ namespace MiaoWu.App.ViewModels
             Overlay.Show(Strings.CapabilityMarketPendingTitle, Strings.CapabilityMarketPendingBody);
         }
 
-        public void ShowScheduledTasksPlaceholder()
+        /// <summary>左栏「定时任务」入口：打开 / 收起页面态，不另外开窗口。</summary>
+        public void ToggleSchedules()
         {
-            Overlay.Show(Strings.ScheduledTasksPendingTitle, Strings.ScheduledTasksPendingBody);
+            if (Schedules == null)
+            {
+                Overlay.Show("定时任务不可用", "当前进程没有装载定时任务服务，无法打开定时任务页面。");
+                return;
+            }
+
+            if (Schedules.IsOpen)
+            {
+                Schedules.Close();
+                return;
+            }
+
+            CloseSettings();
+            Overlay.Close();
+            Schedules.Open();
         }
 
         /// <summary>兼容离屏快照工具的旧入口：没有真实服务时退化为文本浮层。</summary>
@@ -717,6 +759,11 @@ namespace MiaoWu.App.ViewModels
                 _services.Runtime.SessionChanged -= OnRuntimeSessionChanged;
                 _services.Approvals.Changed -= OnApprovalChanged;
                 _services.Questions.Changed -= OnQuestionChanged;
+            }
+
+            if (Schedules != null)
+            {
+                Schedules.Dispose();
             }
 
             if (Conversation != null)
@@ -1021,6 +1068,12 @@ namespace MiaoWu.App.ViewModels
             if (Conversation == null)
             {
                 return;
+            }
+
+            // 选中会话意味着离开定时任务页面；左栏仍是同一块壳，不新开窗口。
+            if (Schedules != null && Schedules.IsOpen)
+            {
+                Schedules.Close();
             }
 
             WorkspaceItemViewModel workspace = Left.ActiveWorkspace;

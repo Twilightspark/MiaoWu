@@ -4,6 +4,42 @@ using System.Globalization;
 
 namespace MiaoWu.Core.Agents.Schedules
 {
+    /// <summary>任务在列表里的三态。</summary>
+    public enum ScheduleStatus
+    {
+        /// <summary>已开启，到点会投递。</summary>
+        Active = 0,
+
+        /// <summary>已暂停，保留下一次时刻，但不投递。</summary>
+        Paused = 1,
+
+        /// <summary>规则已耗尽或一次性任务已跑完。</summary>
+        Ended = 2
+    }
+
+    /// <summary>一次投递是到点触发还是用户点了「立即执行」。</summary>
+    public enum ScheduleDeliveryKind
+    {
+        Automatic = 0,
+        Manual = 1
+    }
+
+    /// <summary>
+    /// 一次投递的记录。只证明消息已排进会话（或投递失败），不代表模型执行成功；
+    /// <see cref="Prompt"/> 是当时的不可变快照，之后改任务内容不会回填旧记录。
+    /// </summary>
+    public sealed class ScheduleDeliveryRecord
+    {
+        public DateTimeOffset DeliveredAt { get; set; }
+
+        public string Prompt { get; set; }
+
+        public ScheduleDeliveryKind Kind { get; set; }
+
+        /// <summary>投递委托报告失败时为 true；任务本身仍会推进下一次。</summary>
+        public bool Failed { get; set; }
+    }
+
     /// <summary>定时任务投递到哪里。</summary>
     public enum ScheduleTarget
     {
@@ -49,6 +85,46 @@ namespace MiaoWu.Core.Agents.Schedules
         public DateTimeOffset? NextRunAt { get; set; }
 
         public int RunCount { get; set; }
+
+        /// <summary>最近若干次投递记录，按发生顺序排列；旧文件没有该字段时为空。</summary>
+        public List<ScheduleDeliveryRecord> History { get; set; }
+
+        /// <summary>由 <see cref="Active"/> 与 <see cref="NextRunAt"/> 推出的三态。</summary>
+        public ScheduleStatus Status
+        {
+            get
+            {
+                if (Active)
+                {
+                    return ScheduleStatus.Active;
+                }
+
+                return NextRunAt.HasValue ? ScheduleStatus.Paused : ScheduleStatus.Ended;
+            }
+        }
+    }
+
+    /// <summary>编辑结果：更新成功、任务不存在、或 <c>expectedUpdatedAt</c> 与当前版本不一致。</summary>
+    public enum ScheduleUpdateStatus
+    {
+        Updated = 0,
+        NotFound = 1,
+        Conflict = 2
+    }
+
+    /// <summary>一次编辑的结果；冲突时不做任何写入。</summary>
+    public sealed class ScheduleUpdateResult
+    {
+        public ScheduleUpdateResult(ScheduleUpdateStatus status, ScheduleDefinition definition)
+        {
+            Status = status;
+            Definition = definition;
+        }
+
+        public ScheduleUpdateStatus Status { get; }
+
+        /// <summary>更新成功时是写入后的任务快照；其它情况为 null。</summary>
+        public ScheduleDefinition Definition { get; }
     }
 
     /// <summary>规则、存储或参数错误；工具层把它转成结构化失败结果。</summary>
@@ -80,8 +156,26 @@ namespace MiaoWu.Core.Agents.Schedules
             string sessionId,
             string workspaceId);
 
-        /// <summary>编辑；传 null 表示不改该字段。找不到任务时返回 false。</summary>
-        bool Update(string id, string title, string prompt, string rule, bool? active);
+        /// <summary>
+        /// 编辑；传 null 表示不改该字段。带 <paramref name="expectedUpdatedAt"/> 时按 CAS 校验，
+        /// 与当前版本不一致返回 <see cref="ScheduleUpdateStatus.Conflict"/> 且不写入。
+        /// </summary>
+        ScheduleUpdateResult Update(
+            string id,
+            string title,
+            string prompt,
+            string rule,
+            bool? active,
+            DateTimeOffset? expectedUpdatedAt = null,
+            ScheduleTarget? target = null,
+            string sessionId = null,
+            string workspaceId = null);
+
+        /// <summary>删除任务及其投递记录；已排进会话的消息不撤回。</summary>
+        bool Delete(string id);
+
+        /// <summary>立即投递一次，但不移动下一次时刻；任务不存在时返回 false。</summary>
+        bool RunNow(string id);
 
         /// <summary>
         /// 记下 NewOnce 首次投递创建的会话 id；之后同一任务复用它。

@@ -207,6 +207,25 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        /// <summary>按工作区 id 找显示名；定时任务页面用来显示关联工作区。</summary>
+        public string FindWorkspaceName(string workspaceId)
+        {
+            if (string.IsNullOrWhiteSpace(workspaceId))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < _workspaces.Count; i++)
+            {
+                if (string.Equals(_workspaces[i].Id, workspaceId, StringComparison.Ordinal))
+                {
+                    return _workspaces[i].Name;
+                }
+            }
+
+            return null;
+        }
+
         public string SearchToolTip
         {
             get { return Strings.SearchPendingHint; }

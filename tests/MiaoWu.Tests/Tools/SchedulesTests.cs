@@ -176,7 +176,9 @@ namespace MiaoWu.Tests.Tools
                     "s1",
                     "w1");
 
-                Assert.True(service.Update(created.Id, "新标题", null, null, false));
+                Assert.Equal(
+                    ScheduleUpdateStatus.Updated,
+                    service.Update(created.Id, "新标题", null, null, false).Status);
                 ScheduleDefinition edited = service.Get(created.Id);
                 Assert.Equal("新标题", edited.Title);
                 Assert.Equal("旧内容", edited.Prompt);
@@ -185,7 +187,9 @@ namespace MiaoWu.Tests.Tools
                 service.Tick(new DateTimeOffset(2026, 11, 21, 9, 30, 0, TimeSpan.FromHours(8)));
                 Assert.Empty(_delivered);
 
-                Assert.True(service.Update(created.Id, null, null, null, true));
+                Assert.Equal(
+                    ScheduleUpdateStatus.Updated,
+                    service.Update(created.Id, null, null, null, true).Status);
                 service.Tick(new DateTimeOffset(2026, 11, 21, 9, 30, 0, TimeSpan.FromHours(8)));
                 Assert.Single(_delivered);
             }
@@ -354,6 +358,251 @@ namespace MiaoWu.Tests.Tools
 
             Assert.Equal(ToolResultStatus.Failed, list.Status);
             Assert.Equal("schedule_unavailable", list.ErrorCode);
+        }
+
+        // ---- 投递回执、立即执行与 CAS ----
+
+        [Fact]
+        public void RunNowDeliversWithoutMovingNextRun()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                ScheduleDefinition created = service.Create(
+                    "立即执行",
+                    "现在跑一次",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+
+                DateTimeOffset? next = created.NextRunAt;
+                Assert.True(service.RunNow(created.Id));
+
+                Assert.Single(_delivered);
+                ScheduleDefinition after = service.Get(created.Id);
+                Assert.Equal(next, after.NextRunAt);
+                Assert.Equal(1, after.RunCount);
+                Assert.Single(after.History);
+                Assert.Equal(ScheduleDeliveryKind.Manual, after.History[0].Kind);
+                Assert.Equal("现在跑一次", after.History[0].Prompt);
+                Assert.False(after.History[0].Failed);
+            }
+        }
+
+        [Fact]
+        public void TickAppendsAutomaticHistory()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                service.Create(
+                    "到点",
+                    "到点投递的正文",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+
+                service.Tick(new DateTimeOffset(2026, 11, 21, 9, 0, 0, TimeSpan.FromHours(8)));
+
+                ScheduleDefinition after = service.List(true)[0];
+                Assert.Single(after.History);
+                Assert.Equal(ScheduleDeliveryKind.Automatic, after.History[0].Kind);
+                Assert.Equal("到点投递的正文", after.History[0].Prompt);
+            }
+        }
+
+        [Fact]
+        public void HistoryIsCappedAndSurvivesReload()
+        {
+            string path = Path.Combine(_root, "schedules.json");
+            string id;
+            using (var service = new ScheduleService(new ScheduleFileStore(path), _clock, Deliver))
+            {
+                ScheduleDefinition created = service.Create(
+                    "回执上限",
+                    "每次投递都记一条",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+                id = created.Id;
+
+                for (int i = 0; i < ScheduleService.HistoryLimit + 5; i++)
+                {
+                    service.RunNow(id);
+                }
+
+                Assert.Equal(ScheduleService.HistoryLimit, service.Get(id).History.Count);
+            }
+
+            using (var reloaded = new ScheduleService(new ScheduleFileStore(path), _clock, Deliver))
+            {
+                ScheduleDefinition after = reloaded.Get(id);
+                Assert.Equal(ScheduleService.HistoryLimit, after.History.Count);
+                Assert.Equal(ScheduleDeliveryKind.Manual, after.History[after.History.Count - 1].Kind);
+            }
+        }
+
+        [Fact]
+        public void DeleteRemovesTaskAndHistory()
+        {
+            string path = Path.Combine(_root, "schedules.json");
+            string id;
+            using (var service = new ScheduleService(new ScheduleFileStore(path), _clock, Deliver))
+            {
+                ScheduleDefinition created = service.Create(
+                    "待删除",
+                    "内容",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+                id = created.Id;
+                service.RunNow(id);
+
+                Assert.True(service.Delete(id));
+                Assert.Null(service.Get(id));
+                Assert.Empty(service.List(true));
+                Assert.False(service.Delete(id));
+            }
+
+            using (var reloaded = new ScheduleService(new ScheduleFileStore(path), _clock, Deliver))
+            {
+                Assert.Empty(reloaded.List(true));
+            }
+        }
+
+        [Fact]
+        public void StaleUpdatedAtIsRejectedWithoutWriting()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                ScheduleDefinition created = service.Create(
+                    "冲突",
+                    "原始内容",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+
+                DateTimeOffset stale = created.UpdatedAt;
+                ScheduleUpdateResult first = service.Update(created.Id, "先写", null, null, null);
+                Assert.Equal(ScheduleUpdateStatus.Updated, first.Status);
+
+                ScheduleUpdateResult second = service.Update(
+                    created.Id,
+                    "后写",
+                    null,
+                    null,
+                    null,
+                    stale);
+                Assert.Equal(ScheduleUpdateStatus.Conflict, second.Status);
+
+                ScheduleDefinition after = service.Get(created.Id);
+                Assert.Equal("先写", after.Title);
+            }
+        }
+
+        [Fact]
+        public void EquivalentRuleEditKeepsCommittedNextRun()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                string rule = "DTSTART:20261121T090000\nRRULE:FREQ=DAILY";
+                ScheduleDefinition created = service.Create(
+                    "等价编辑",
+                    "内容",
+                    rule,
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+
+                DateTimeOffset? next = created.NextRunAt;
+                ScheduleUpdateResult result = service.Update(created.Id, null, null, rule, null);
+                Assert.Equal(ScheduleUpdateStatus.Updated, result.Status);
+                Assert.Equal(next, service.Get(created.Id).NextRunAt);
+            }
+        }
+
+        [Fact]
+        public void UpdateCanSwitchTargetAndWorkspace()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                ScheduleDefinition created = service.Create(
+                    "切目标",
+                    "内容",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+
+                ScheduleUpdateResult result = service.Update(
+                    created.Id,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    ScheduleTarget.New,
+                    null,
+                    "w2");
+
+                Assert.Equal(ScheduleUpdateStatus.Updated, result.Status);
+                Assert.Equal(ScheduleTarget.New, result.Definition.Target);
+                Assert.Null(result.Definition.SessionId);
+                Assert.Equal("w2", result.Definition.WorkspaceId);
+            }
+        }
+
+        [Fact]
+        public void CreateRejectsRuleWithoutFutureOccurrence()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                ScheduleException error = Assert.Throws<ScheduleException>(() => service.Create(
+                    "过期规则",
+                    "内容",
+                    "DTSTART:20200101T090000\nRRULE:FREQ=DAILY;COUNT=1",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1"));
+
+                Assert.Equal("not_future", error.Code);
+                Assert.Empty(service.List(true));
+            }
+        }
+
+        [Fact]
+        public void RestoreEndedOneOffLeavesStateUntouched()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                ScheduleDefinition created = service.Create(
+                    "一次性",
+                    "只跑一次",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY;COUNT=1",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1");
+
+                service.Tick(new DateTimeOffset(2026, 11, 21, 9, 0, 0, TimeSpan.FromHours(8)));
+                ScheduleDefinition ended = service.Get(created.Id);
+                Assert.False(ended.Active);
+                Assert.Null(ended.NextRunAt);
+
+                // 时钟走到发生时刻之后，恢复已耗尽的一次性任务没有未来时点。
+                _clock.UtcNow = new DateTimeOffset(2026, 11, 21, 10, 0, 0, TimeSpan.FromHours(8))
+                    .ToUniversalTime();
+
+                ScheduleException error = Assert.Throws<ScheduleException>(() =>
+                    service.Update(created.Id, null, null, null, true));
+                Assert.Equal("not_future", error.Code);
+
+                ScheduleDefinition after = service.Get(created.Id);
+                Assert.False(after.Active);
+                Assert.Null(after.NextRunAt);
+            }
         }
 
         private ScheduleService CreateService()

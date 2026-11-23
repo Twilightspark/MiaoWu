@@ -170,8 +170,16 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
-    <Style x:Key="Text.H2" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-        <Setter Property="FontSize" Value="{StaticResource Font.H2.Size}" />
+    <!-- 页面级标题：定时任务页等“占满中栏”的页面，20/28/500 -->
+    <Style x:Key="Text.PageTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource Font.PageTitle.Size}" />
+        <Setter Property="LineHeight" Value="{StaticResource Font.PageTitle.Line}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="FontWeight" Value="{StaticResource Font.Weight.Medium}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style x:Key="Text.H2" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">        <Setter Property="FontSize" Value="{StaticResource Font.H2.Size}" />
         <Setter Property="LineHeight" Value="{StaticResource Font.H2.Line}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
         <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />

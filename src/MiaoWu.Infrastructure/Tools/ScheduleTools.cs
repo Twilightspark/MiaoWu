@@ -291,8 +291,10 @@ namespace MiaoWu.Infrastructure.Tools
 
             try
             {
-                bool updated = _schedules != null && _schedules.Update(id, title, prompt, rule, active);
-                if (!updated)
+                ScheduleUpdateResult result = _schedules == null
+                    ? null
+                    : _schedules.Update(id, title, prompt, rule, active);
+                if (result == null || result.Status == ScheduleUpdateStatus.NotFound)
                 {
                     return Task.FromResult(ToolResult.Failure(
                         call,
@@ -301,7 +303,16 @@ namespace MiaoWu.Infrastructure.Tools
                         "找不到定时任务：" + id + "。"));
                 }
 
-                ScheduleDefinition definition = _schedules.Get(id);
+                if (result.Status == ScheduleUpdateStatus.Conflict)
+                {
+                    return Task.FromResult(ToolResult.Failure(
+                        call,
+                        ToolResultStatus.Failed,
+                        "schedule_conflict",
+                        "定时任务已在别处被修改，请重新读取后再改：" + id + "。"));
+                }
+
+                ScheduleDefinition definition = result.Definition;
                 return Task.FromResult(ToolResult.Success(
                     call,
                     "已更新：\n" + ScheduleText.Describe(definition),

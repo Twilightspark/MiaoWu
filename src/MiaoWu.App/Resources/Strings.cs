@@ -62,9 +62,31 @@ namespace MiaoWu.App.Resources
 
         public static string ScheduledTasksHint => Get(nameof(ScheduledTasksHint));
 
-        public static string ScheduledTasksPendingTitle => Get(nameof(ScheduledTasksPendingTitle));
+        public static string SchedulesCloseTooltip => Get(nameof(SchedulesCloseTooltip));
 
-        public static string ScheduledTasksPendingBody => Get(nameof(ScheduledTasksPendingBody));
+        public static string SchedulesFilterAutomation => Get(nameof(SchedulesFilterAutomation));
+
+        public static string SchedulesTabsAutomation => Get(nameof(SchedulesTabsAutomation));
+
+        public static string SchedulesSearchHint => Get(nameof(SchedulesSearchHint));
+
+        public static string SchedulesNew => Get(nameof(SchedulesNew));
+
+        public static string SchedulesRunNow => Get(nameof(SchedulesRunNow));
+
+        public static string SchedulesDelete => Get(nameof(SchedulesDelete));
+
+        public static string SchedulesOverwrite => Get(nameof(SchedulesOverwrite));
+
+        public static string SchedulesReload => Get(nameof(SchedulesReload));
+
+        public static string SchedulesNameLabel => Get(nameof(SchedulesNameLabel));
+
+        public static string SchedulesContentLabel => Get(nameof(SchedulesContentLabel));
+
+        public static string SchedulesDiscard => Get(nameof(SchedulesDiscard));
+
+        public static string SchedulesSave => Get(nameof(SchedulesSave));
 
         public static string NewSession => Get(nameof(NewSession));
 

@@ -131,6 +131,8 @@
     <sys:Double x:Key="Font.Empty.Size">12.5</sys:Double>
     <sys:Double x:Key="Font.Segment.Size">11.5</sys:Double>
     <sys:Double x:Key="Font.Tab.Size">12</sys:Double>
+    <!-- 页面标题（定时任务页）：20/28/500，比 H1（22/32）小一档，给页面内的列表让位 -->
+    <sys:Double x:Key="Font.PageTitle.Size">20</sys:Double>
 
     <!-- 行高 -->
     <sys:Double x:Key="Font.AppName.Line">22</sys:Double>
@@ -153,6 +155,7 @@
     <sys:Double x:Key="Font.Dock.Line">20</sys:Double>
     <sys:Double x:Key="Font.Reasoning.Line">20</sys:Double>
     <sys:Double x:Key="Font.Empty.Line">20</sys:Double>
+    <sys:Double x:Key="Font.PageTitle.Line">28</sys:Double>
     <!-- 过程行与组头：DSH 的 TurnProcess / DisclosureRow 都是 24 行高。
          过程行文字比正文小一档（13 → 12），思考行与工具行共用这一档。 -->
     <sys:Double x:Key="Font.ChatProcess.Size">12</sys:Double>
@@ -240,6 +243,11 @@
     <sys:Double x:Key="Metric.ModelPicker.MaxHeight">280</sys:Double>
     <!-- 输入卡最大宽度：中栏再宽也不铺满，两侧至少留出 28 的呼吸区 -->
     <sys:Double x:Key="Metric.Composer.MaxWidth">720</sys:Double>
+    <!-- 定时任务页面：列表与详情合成一列最宽 1040 并居中；表格化的任务列表与表单同宽 -->
+    <sys:Double x:Key="Metric.Schedules.Content.MaxWidth">1040</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Chip.Height">28</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.TextArea.Height">96</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.RuleArea.Height">72</sys:Double>
     <sys:Double x:Key="Metric.Notification.Width">384</sys:Double>
     <sys:Double x:Key="Metric.Notification.Right">16</sys:Double>
     <sys:Double x:Key="Metric.Notification.Bottom">172</sys:Double>
@@ -331,6 +339,13 @@
     <Thickness x:Key="Margin.Dock">14,0,14,10</Thickness>
     <Thickness x:Key="Margin.DockPill">0,0,8,0</Thickness>
     <Thickness x:Key="Pad.DockPanel">12,10,12,12</Thickness>
+
+    <!-- 定时任务页面：页内边距、列表行内衬、详情列左内衬与字段底距 -->
+    <Thickness x:Key="Pad.Schedules.Page">24,18,24,16</Thickness>
+    <Thickness x:Key="Pad.Schedules.Row">10,8,10,8</Thickness>
+    <Thickness x:Key="Pad.Schedules.Detail">20,0,0,0</Thickness>
+    <Thickness x:Key="Margin.Schedules.Field">0,0,0,12</Thickness>
+    <Thickness x:Key="Margin.Schedules.Preview">0,8,0,0</Thickness>
 
     <!-- 会话消息流：内容列与输入卡同宽（`Margin.ContentColumn` 28 + `Metric.Composer.MaxWidth` 720），
          行内不再留左右边距；轮次间距 18，轮内 10 -->
