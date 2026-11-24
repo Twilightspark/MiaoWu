@@ -44,7 +44,7 @@ namespace MiaoWu.Tests.Tools
 
                 Assert.NotNull(path);
                 Assert.True(File.Exists(path));
-                Assert.Contains(Path.Combine(".agent", "cache", "tool-output"), path);
+                Assert.Contains(Path.Combine(".miaowu", "cache", "tool-output"), path);
                 Assert.Contains("line-2500", File.ReadAllText(path));
             }
             finally

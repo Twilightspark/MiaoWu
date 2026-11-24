@@ -10,7 +10,7 @@ namespace MiaoWu.Infrastructure.Tools
 {
     /// <summary>
     /// create_goal：为当前会话建立一个可跟踪的长期目标。同一时刻只有一个目标；
-    /// 目标只写工作区 <c>.agent\goals</c>（由宿主注入的持久化实现负责），不碰用户文件。
+    /// 目标只写工作区 <c>.miaowu\goals</c>（由宿主注入的持久化实现负责），不碰用户文件。
     /// </summary>
     public sealed class CreateGoalTool : IAgentTool, IToolAuditRedactor
     {

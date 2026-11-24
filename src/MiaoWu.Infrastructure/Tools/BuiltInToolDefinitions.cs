@@ -63,7 +63,7 @@ namespace MiaoWu.Infrastructure.Tools
                         "按名字找文件",
                         new[]
                         {
-                            "glob：pattern 支持 **、*、?；跳过 .git/bin/obj/node_modules/.agent。",
+                            "glob：pattern 支持 **、*、?；跳过 .git/bin/obj/node_modules/.miaowu。",
                             "glob：先按扩展名缩小范围，再读取命中的文件。"
                         });
 

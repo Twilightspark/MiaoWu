@@ -38,6 +38,9 @@ namespace MiaoWu.App.ViewModels
         private readonly Dictionary<string, bool> _runningSessions =
             new Dictionary<string, bool>(StringComparer.Ordinal);
 
+        /// <summary>上一次真正生效的会话选择；后台刷新重建行时 id 不变，不应当成用户切走。</summary>
+        private string _lastSessionSelectionId;
+
         private readonly DispatcherTimer _refreshTimer;
         private PaneLayout _layout;
         private double _windowWidth = 1440;
@@ -220,6 +223,9 @@ namespace MiaoWu.App.ViewModels
                         : Left.ActiveSessionId,
                     () => Left.ActiveWorkspace == null ? null : Left.ActiveWorkspace.Id,
                     id => Left.FindWorkspaceName(id),
+                    () => Left.Workspaces.Select(item => item.Model).ToList(),
+                    () => services.Models.Models,
+                    () => services.ResolveDefaultModel(),
                     action =>
                     {
                         Application app = Application.Current;
@@ -1070,8 +1076,15 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            // 选中会话意味着离开定时任务页面；左栏仍是同一块壳，不新开窗口。
-            if (Schedules != null && Schedules.IsOpen)
+            // 用户切到另一个会话意味着离开定时任务页面；后台刷新会重建左栏会话行，
+            // 即使 id 没变也会触发一次 SelectedSession 变更，不能把它当成用户切走。
+            string activeSessionId = Left.ActiveSessionId;
+            bool sessionChanged = !string.Equals(
+                _lastSessionSelectionId,
+                activeSessionId,
+                StringComparison.Ordinal);
+            _lastSessionSelectionId = activeSessionId;
+            if (sessionChanged && Schedules != null && Schedules.IsOpen)
             {
                 Schedules.Close();
             }

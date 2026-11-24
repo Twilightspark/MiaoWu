@@ -17,6 +17,8 @@ namespace MiaoWu.Tests.Workspaces
             Directory.CreateDirectory(_directory);
             Directory.CreateDirectory(Path.Combine(_directory, "z-folder"));
             Directory.CreateDirectory(Path.Combine(_directory, "a-folder"));
+            Directory.CreateDirectory(Path.Combine(_directory, ".miaowu", "sessions"));
+            Directory.CreateDirectory(Path.Combine(_directory, ".agent", "sessions"));
             File.WriteAllText(Path.Combine(_directory, "b.txt"), "b");
             File.WriteAllText(Path.Combine(_directory, "A.txt"), "a");
         }
@@ -39,6 +41,8 @@ namespace MiaoWu.Tests.Workspaces
             Assert.Equal("z-folder", nodes[1].Name);
             Assert.Equal("A.txt", nodes[2].Name);
             Assert.Equal("b.txt", nodes[3].Name);
+            Assert.DoesNotContain(nodes, node => node.Name == ".miaowu");
+            Assert.DoesNotContain(nodes, node => node.Name == ".agent");
             Assert.True(nodes[0].IsDirectory);
             Assert.False(nodes[2].IsDirectory);
             Assert.Equal(FileNodeState.NotLoaded, nodes[0].State);

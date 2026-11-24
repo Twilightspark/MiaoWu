@@ -31,7 +31,7 @@ namespace MiaoWu.Tests.Conversations
         {
             string agent = AgentWorkspaceLayout.GetAgentDirectory(_workspace);
 
-            Assert.Equal(Path.Combine(_workspace, ".agent"), agent);
+            Assert.Equal(Path.Combine(_workspace, ".miaowu"), agent);
             Assert.Equal(
                 Path.Combine(agent, "sessions"),
                 AgentWorkspaceLayout.GetSessionsDirectory(_workspace));
@@ -61,7 +61,7 @@ namespace MiaoWu.Tests.Conversations
             string path = AgentWorkspaceLayout.GetSessionFilePath(_workspace, "s_20260101120000_ab12cd34");
 
             Assert.Equal(
-                Path.Combine(_workspace, ".agent", "sessions", "s_20260101120000_ab12cd34.jsonl"),
+                Path.Combine(_workspace, ".miaowu", "sessions", "s_20260101120000_ab12cd34.jsonl"),
                 path);
         }
 
@@ -124,13 +124,42 @@ namespace MiaoWu.Tests.Conversations
         [Fact]
         public void InsideAgentDirectoryChecksResolvedPrefix()
         {
-            string inside = Path.Combine(_workspace, ".agent", "sessions", "x.jsonl");
+            string inside = Path.Combine(_workspace, ".miaowu", "sessions", "x.jsonl");
+            string legacyInside = Path.Combine(_workspace, ".agent", "sessions", "x.jsonl");
             string outside = Path.Combine(_workspace, "docs", "x.jsonl");
-            string sibling = Path.Combine(_workspace, ".agent2", "x.jsonl");
+            string sibling = Path.Combine(_workspace, ".miaowu2", "x.jsonl");
 
             Assert.True(AgentWorkspaceLayout.IsInsideAgentDirectory(_workspace, inside));
+            Assert.True(AgentWorkspaceLayout.IsInsideAgentDirectory(_workspace, legacyInside));
             Assert.False(AgentWorkspaceLayout.IsInsideAgentDirectory(_workspace, outside));
             Assert.False(AgentWorkspaceLayout.IsInsideAgentDirectory(_workspace, sibling));
+        }
+
+        [Fact]
+        public void EnsureCreatedDoesNotMoveLegacyAgentDirectory()
+        {
+            string legacy = Path.Combine(_workspace, ".agent", "sessions");
+            Directory.CreateDirectory(legacy);
+            File.WriteAllText(Path.Combine(legacy, "s_old.jsonl"), "{}");
+
+            var store = new WorkspaceConversationStore(
+                "w1",
+                _workspace,
+                new MutableClock(DateTimeOffset.UtcNow));
+
+            store.EnsureCreated();
+
+            Assert.True(File.Exists(Path.Combine(
+                _workspace,
+                ".agent",
+                "sessions",
+                "s_old.jsonl")));
+            Assert.True(Directory.Exists(Path.Combine(_workspace, ".miaowu", "sessions")));
+            Assert.False(File.Exists(Path.Combine(
+                _workspace,
+                ".miaowu",
+                "sessions",
+                "s_old.jsonl")));
         }
 
         [Fact]
@@ -143,11 +172,15 @@ namespace MiaoWu.Tests.Conversations
 
             store.EnsureCreated();
 
-            Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "skills")));
-            Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "sessions")));
-            Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "goals")));
-            Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "attachments")));
-            Assert.True(Directory.Exists(Path.Combine(_workspace, ".agent", "cache")));
+            Assert.True(Directory.Exists(Path.Combine(_workspace, ".miaowu", "skills")));
+            Assert.True(Directory.Exists(Path.Combine(_workspace, ".miaowu", "sessions")));
+            Assert.True(Directory.Exists(Path.Combine(_workspace, ".miaowu", "goals")));
+            Assert.True(Directory.Exists(Path.Combine(_workspace, ".miaowu", "attachments")));
+            Assert.True(Directory.Exists(Path.Combine(_workspace, ".miaowu", "cache")));
+
+            FileAttributes attributes = File.GetAttributes(
+                Path.Combine(_workspace, ".miaowu"));
+            Assert.True((attributes & FileAttributes.Hidden) != 0);
 
             store.EnsureCreated();
         }

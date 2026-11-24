@@ -12,7 +12,7 @@ using MiaoWu.Infrastructure.Conversations;
 namespace MiaoWu.Infrastructure.Sessions
 {
     /// <summary>
-    /// 从工作区 <c>.agent\sessions</c> 读取会话列表。每次取列表都会重新读索引
+    /// 从工作区 <c>.miaowu\sessions</c> 读取会话列表。每次取列表都会重新读索引
     /// （索引已缓存且原子写，读取成本低），这样新建/重命名/删除后左栏刷新即可见。
     /// </summary>
     /// <remarks>

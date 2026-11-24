@@ -5,6 +5,8 @@ using System.Globalization;
 using System.Linq;
 using MiaoWu.App.Mvvm;
 using MiaoWu.Core.Agents.Schedules;
+using MiaoWu.Core.Models;
+using MiaoWu.Core.Workspaces;
 
 namespace MiaoWu.App.ViewModels
 {
@@ -43,21 +45,131 @@ namespace MiaoWu.App.ViewModels
         }
     }
 
+    /// <summary>「重复」下拉的一项。</summary>
+    public sealed class ScheduleRepeatOption
+    {
+        public ScheduleRepeatOption(ScheduleRepeatMode mode, string label)
+        {
+            Mode = mode;
+            Label = label;
+        }
+
+        public ScheduleRepeatMode Mode { get; }
+
+        public string Label { get; }
+    }
+
+    /// <summary>「执行位置」下拉的一项。</summary>
+    public sealed class ScheduleTargetOption
+    {
+        public ScheduleTargetOption(ScheduleTarget target, string label)
+        {
+            Target = target;
+            Label = label;
+        }
+
+        public ScheduleTarget Target { get; }
+
+        public string Label { get; }
+    }
+
+    /// <summary>「关联工作区」下拉的一项。</summary>
+    public sealed class ScheduleWorkspaceOption
+    {
+        public ScheduleWorkspaceOption(string id, string label)
+        {
+            Id = id;
+            Label = label;
+        }
+
+        public string Id { get; }
+
+        public string Label { get; }
+    }
+
+    /// <summary>「执行模型」下拉的一项；ProviderId / ModelId 为空表示默认模型。</summary>
+    public sealed class ScheduleModelOption
+    {
+        public ScheduleModelOption(
+            string providerId,
+            string modelId,
+            string label,
+            bool isDefault,
+            bool supportsReasoning)
+        {
+            ProviderId = providerId;
+            ModelId = modelId;
+            Label = label;
+            IsDefault = isDefault;
+            SupportsReasoning = supportsReasoning;
+        }
+
+        public string ProviderId { get; }
+
+        public string ModelId { get; }
+
+        public string Label { get; }
+
+        public bool IsDefault { get; }
+
+        public bool SupportsReasoning { get; }
+    }
+
+    /// <summary>「推理等级」下拉的一项；Value 为空表示默认档。</summary>
+    public sealed class ScheduleReasoningOption
+    {
+        public ScheduleReasoningOption(string value, string label)
+        {
+            Value = value;
+            Label = label;
+        }
+
+        public string Value { get; }
+
+        public string Label { get; }
+    }
+
     /// <summary>
     /// 单条定时任务的编辑草稿。字段都是表单值（时间用字符串，允许输入中间态），
     /// 保存时再由 <see cref="ScheduleRuleDraft"/> 生成规则；<see cref="HasChanges"/> 只比较少数字段。
     /// </summary>
     public sealed class ScheduleEditorViewModel : ObservableObject
     {
+        private static readonly ScheduleRepeatOption[] RepeatOptionList =
+        {
+            new ScheduleRepeatOption(ScheduleRepeatMode.Once, "仅一次"),
+            new ScheduleRepeatOption(ScheduleRepeatMode.Daily, "每天"),
+            new ScheduleRepeatOption(ScheduleRepeatMode.Weekly, "每周"),
+            new ScheduleRepeatOption(ScheduleRepeatMode.Monthly, "每月"),
+            new ScheduleRepeatOption(ScheduleRepeatMode.Custom, "自定义")
+        };
+
+        private static readonly ScheduleTargetOption[] TargetOptionList =
+        {
+            new ScheduleTargetOption(ScheduleTarget.NewOnce, "新建会话并复用"),
+            new ScheduleTargetOption(ScheduleTarget.ThisSession, "当前会话"),
+            new ScheduleTargetOption(ScheduleTarget.New, "每次新建会话")
+        };
+
+        private static readonly ScheduleReasoningOption[] ReasoningOptionList =
+        {
+            new ScheduleReasoningOption(null, "默认"),
+            new ScheduleReasoningOption("low", "低"),
+            new ScheduleReasoningOption("medium", "中"),
+            new ScheduleReasoningOption("high", "高")
+        };
+
         private readonly Func<DateTimeOffset> _now;
         private readonly Func<string, string> _workspaceName;
+        private readonly Func<IReadOnlyList<Workspace>> _workspaces;
+        private readonly Func<IReadOnlyList<ModelDescriptor>> _models;
+        private readonly Func<ModelDescriptor> _defaultModel;
 
         private string _id;
         private string _title = string.Empty;
         private string _prompt = string.Empty;
         private ScheduleRepeatMode _mode = ScheduleRepeatMode.Daily;
-        private string _hourText = "09";
-        private string _minuteText = "00";
+        private string _timeText = "09:00:00";
         private string _intervalText = "1";
         private bool _sunday;
         private bool _monday = true;
@@ -72,21 +184,33 @@ namespace MiaoWu.App.ViewModels
         private string _currentSessionId;
         private string _workspaceId;
         private string _workspaceDisplay;
+        private List<ScheduleWorkspaceOption> _workspaceOptions = new List<ScheduleWorkspaceOption>();
+        private ScheduleWorkspaceOption _selectedWorkspaceOption;
+        private string _providerId;
+        private string _modelId;
+        private string _reasoningEffort;
+        private List<ScheduleModelOption> _modelOptions = new List<ScheduleModelOption>();
+        private ScheduleModelOption _selectedModelOption;
+        private ScheduleReasoningOption _selectedReasoningOption;
         private ScheduleDefinition _model;
         private DateTimeOffset? _baselineUpdatedAt;
         private bool _isConflict;
         private string _errorMessage;
-        private string _rulePreview = string.Empty;
-        private string _nextRunPreview = string.Empty;
         private string _initialKey = string.Empty;
         private bool _loading;
 
         public ScheduleEditorViewModel(
             Func<DateTimeOffset> now,
-            Func<string, string> workspaceName)
+            Func<string, string> workspaceName,
+            Func<IReadOnlyList<Workspace>> workspaces = null,
+            Func<IReadOnlyList<ModelDescriptor>> models = null,
+            Func<ModelDescriptor> defaultModel = null)
         {
             _now = now ?? (() => DateTimeOffset.Now);
             _workspaceName = workspaceName ?? (id => id);
+            _workspaces = workspaces;
+            _models = models;
+            _defaultModel = defaultModel;
             History = new ObservableCollection<ScheduleHistoryRowViewModel>();
         }
 
@@ -94,7 +218,19 @@ namespace MiaoWu.App.ViewModels
         public string Id
         {
             get { return _id; }
-            private set { SetProperty(ref _id, value); OnPropertyChanged(nameof(IsExisting)); OnPropertyChanged(nameof(PageTitle)); OnPropertyChanged(nameof(HeaderTitle)); }
+            private set
+            {
+                if (!SetProperty(ref _id, value))
+                {
+                    return;
+                }
+
+                OnPropertyChanged(nameof(IsExisting));
+                OnPropertyChanged(nameof(PageTitle));
+                OnPropertyChanged(nameof(HeaderTitle));
+                OnPropertyChanged(nameof(SaveButtonText));
+                OnPropertyChanged(nameof(CanSave));
+            }
         }
 
         public bool IsExisting
@@ -114,10 +250,189 @@ namespace MiaoWu.App.ViewModels
             {
                 if (!IsExisting)
                 {
-                    return "新建定时任务";
+                    return "手动创建";
                 }
 
                 return string.IsNullOrWhiteSpace(_title) ? "未命名任务" : _title.Trim();
+            }
+        }
+
+        public IReadOnlyList<ScheduleRepeatOption> RepeatOptions
+        {
+            get { return RepeatOptionList; }
+        }
+
+        public ScheduleRepeatOption SelectedRepeatOption
+        {
+            get
+            {
+                for (int i = 0; i < RepeatOptionList.Length; i++)
+                {
+                    if (RepeatOptionList[i].Mode == _mode)
+                    {
+                        return RepeatOptionList[i];
+                    }
+                }
+
+                return RepeatOptionList[1];
+            }
+            set
+            {
+                if (value != null && value.Mode != _mode)
+                {
+                    Mode = value.Mode;
+                }
+            }
+        }
+
+        public IReadOnlyList<ScheduleTargetOption> TargetOptions
+        {
+            get { return TargetOptionList; }
+        }
+
+        public ScheduleTargetOption SelectedTargetOption
+        {
+            get
+            {
+                for (int i = 0; i < TargetOptionList.Length; i++)
+                {
+                    if (TargetOptionList[i].Target == _target)
+                    {
+                        return TargetOptionList[i];
+                    }
+                }
+
+                return TargetOptionList[0];
+            }
+            set
+            {
+                if (value != null && value.Target != _target)
+                {
+                    Target = value.Target;
+                }
+            }
+        }
+
+        public IReadOnlyList<ScheduleModelOption> ModelOptions
+        {
+            get { return _modelOptions; }
+        }
+
+        public ScheduleModelOption SelectedModelOption
+        {
+            get { return _selectedModelOption; }
+            set
+            {
+                if (ReferenceEquals(_selectedModelOption, value) || value == null)
+                {
+                    return;
+                }
+
+                _selectedModelOption = value;
+                _providerId = value.IsDefault ? null : value.ProviderId;
+                _modelId = value.IsDefault ? null : value.ModelId;
+                if (!value.SupportsReasoning)
+                {
+                    _reasoningEffort = null;
+                    _selectedReasoningOption = ReasoningOptionList[0];
+                    OnPropertyChanged(nameof(SelectedReasoningOption));
+                }
+
+                OnPropertyChanged(nameof(SelectedModelOption));
+                OnPropertyChanged(nameof(ProviderId));
+                OnPropertyChanged(nameof(ModelId));
+                OnPropertyChanged(nameof(IsReasoningEnabled));
+                OnEdited();
+            }
+        }
+
+        public string ProviderId
+        {
+            get { return _providerId; }
+        }
+
+        public string ModelId
+        {
+            get { return _modelId; }
+        }
+
+        public IReadOnlyList<ScheduleReasoningOption> ReasoningOptions
+        {
+            get { return ReasoningOptionList; }
+        }
+
+        public ScheduleReasoningOption SelectedReasoningOption
+        {
+            get
+            {
+                for (int i = 0; i < ReasoningOptionList.Length; i++)
+                {
+                    if (string.Equals(ReasoningOptionList[i].Value, _reasoningEffort, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return ReasoningOptionList[i];
+                    }
+                }
+
+                return ReasoningOptionList[0];
+            }
+            set
+            {
+                if (value == null)
+                {
+                    return;
+                }
+
+                _reasoningEffort = string.IsNullOrWhiteSpace(value.Value) ? null : value.Value;
+                OnPropertyChanged(nameof(SelectedReasoningOption));
+                OnPropertyChanged(nameof(ReasoningEffort));
+                OnEdited();
+            }
+        }
+
+        public string ReasoningEffort
+        {
+            get { return _reasoningEffort; }
+        }
+
+        public bool IsReasoningEnabled
+        {
+            get
+            {
+                if (_selectedModelOption == null)
+                {
+                    return true;
+                }
+
+                return _selectedModelOption.SupportsReasoning;
+            }
+        }
+
+        /// <summary>底栏主按钮：新建是「创建」，编辑是「保存」。</summary>
+        public string SaveButtonText
+        {
+            get { return IsExisting ? "保存" : "创建"; }
+        }
+
+        /// <summary>时区跟随系统；MiaoWu 的规则按本地时间计算，这里只读展示。</summary>
+        public string TimeZoneLabel
+        {
+            get
+            {
+                TimeSpan offset = TimeZoneInfo.Local.GetUtcOffset(_now());
+                string sign = offset < TimeSpan.Zero ? "-" : "+";
+                offset = offset.Duration();
+                int hours = (int)offset.TotalHours;
+                int minutes = offset.Minutes;
+                string name = TimeZoneInfo.Local.StandardName;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = "本地时间";
+                }
+
+                return "UTC" + sign
+                    + hours.ToString("00", CultureInfo.InvariantCulture)
+                    + ":" + minutes.ToString("00", CultureInfo.InvariantCulture)
+                    + " · " + name + "（系统）";
             }
         }
 
@@ -155,9 +470,11 @@ namespace MiaoWu.App.ViewModels
                 OnPropertyChanged(nameof(IsWeekly));
                 OnPropertyChanged(nameof(IsMonthly));
                 OnPropertyChanged(nameof(IsCustom));
+                OnPropertyChanged(nameof(SelectedRepeatOption));
                 OnPropertyChanged(nameof(IntervalUnit));
                 OnPropertyChanged(nameof(ShowsInterval));
                 OnPropertyChanged(nameof(ShowsWeekdays));
+                OnPropertyChanged(nameof(ShowsTime));
                 OnPropertyChanged(nameof(ShowsCustomRule));
                 OnEdited();
             }
@@ -203,6 +520,12 @@ namespace MiaoWu.App.ViewModels
             get { return _mode == ScheduleRepeatMode.Weekly; }
         }
 
+        /// <summary>自定义规则自己带 DTSTART，表单时间与星期都不再参与生成。</summary>
+        public bool ShowsTime
+        {
+            get { return _mode != ScheduleRepeatMode.Custom; }
+        }
+
         public bool ShowsCustomRule
         {
             get { return _mode == ScheduleRepeatMode.Custom; }
@@ -221,16 +544,11 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        public string HourText
+        /// <summary>时间输入，接受 HH:mm 或 HH:mm:ss；秒只用于显示，规则落到分钟。</summary>
+        public string TimeText
         {
-            get { return _hourText; }
-            set { if (SetProperty(ref _hourText, value)) OnEdited(); }
-        }
-
-        public string MinuteText
-        {
-            get { return _minuteText; }
-            set { if (SetProperty(ref _minuteText, value)) OnEdited(); }
+            get { return _timeText; }
+            set { if (SetProperty(ref _timeText, value)) OnEdited(); }
         }
 
         public string IntervalText
@@ -310,6 +628,7 @@ namespace MiaoWu.App.ViewModels
                 OnPropertyChanged(nameof(IsTargetNewOnce));
                 OnPropertyChanged(nameof(IsTargetThisSession));
                 OnPropertyChanged(nameof(IsTargetNew));
+                OnPropertyChanged(nameof(SelectedTargetOption));
                 OnPropertyChanged(nameof(SessionId));
                 OnPropertyChanged(nameof(SessionLabel));
                 OnEdited();
@@ -357,6 +676,42 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
+        public IReadOnlyList<ScheduleWorkspaceOption> WorkspaceOptions
+        {
+            get { return _workspaceOptions; }
+        }
+
+        public bool HasWorkspaceOptions
+        {
+            get { return _workspaceOptions.Count > 0; }
+        }
+
+        public bool HasSelectedWorkspace
+        {
+            get { return _selectedWorkspaceOption != null; }
+        }
+
+        public ScheduleWorkspaceOption SelectedWorkspaceOption
+        {
+            get { return _selectedWorkspaceOption; }
+            set
+            {
+                if (ReferenceEquals(_selectedWorkspaceOption, value))
+                {
+                    return;
+                }
+
+                _selectedWorkspaceOption = value;
+                _workspaceId = value == null ? null : value.Id;
+                _workspaceDisplay = value == null ? null : value.Label;
+                OnPropertyChanged(nameof(SelectedWorkspaceOption));
+                OnPropertyChanged(nameof(HasSelectedWorkspace));
+                OnPropertyChanged(nameof(WorkspaceId));
+                OnPropertyChanged(nameof(WorkspaceLabel));
+                OnEdited();
+            }
+        }
+
         public string SessionLabel
         {
             get
@@ -391,7 +746,15 @@ namespace MiaoWu.App.ViewModels
         public bool IsConflict
         {
             get { return _isConflict; }
-            private set { if (SetProperty(ref _isConflict, value)) OnPropertyChanged(nameof(CanSave)); }
+            private set
+            {
+                if (!SetProperty(ref _isConflict, value))
+                {
+                    return;
+                }
+
+                OnPropertyChanged(nameof(CanSave));
+            }
         }
 
         /// <summary>与当前模型相比，用户能编辑的字段是否有变化（不把投递回执当成内容变化）。</summary>
@@ -408,6 +771,9 @@ namespace MiaoWu.App.ViewModels
                 || _model.Target != definition.Target
                 || _model.SessionId != definition.SessionId
                 || _model.WorkspaceId != definition.WorkspaceId
+                || !string.Equals(_model.ProviderId, definition.ProviderId, StringComparison.Ordinal)
+                || !string.Equals(_model.ModelId, definition.ModelId, StringComparison.Ordinal)
+                || !string.Equals(_model.ReasoningEffort, definition.ReasoningEffort, StringComparison.OrdinalIgnoreCase)
                 || _model.Active != definition.Active;
         }
 
@@ -424,13 +790,16 @@ namespace MiaoWu.App.ViewModels
 
             _model = definition;
             _baselineUpdatedAt = definition.UpdatedAt;
+            _providerId = definition.ProviderId;
+            _modelId = definition.ModelId;
+            _reasoningEffort = NormalizeReasoning(definition.ReasoningEffort);
+            RebuildModelOptions();
             OnPropertyChanged(nameof(Model));
-            OnPropertyChanged(nameof(StatusLabel));
             OnPropertyChanged(nameof(ToggleActiveText));
             OnPropertyChanged(nameof(NextRunLabel));
             OnPropertyChanged(nameof(LastRunLabel));
             OnPropertyChanged(nameof(HistoryEmptyText));
-            RefreshPreview();
+            RefreshValidation();
         }
 
         public string ConflictText
@@ -454,39 +823,9 @@ namespace MiaoWu.App.ViewModels
             get { return !string.IsNullOrEmpty(_errorMessage); }
         }
 
-        public string RulePreview
-        {
-            get { return _rulePreview; }
-            private set { SetProperty(ref _rulePreview, value); }
-        }
-
-        public string NextRunPreview
-        {
-            get { return _nextRunPreview; }
-            private set { SetProperty(ref _nextRunPreview, value); }
-        }
-
-        public string StatusLabel
-        {
-            get
-            {
-                if (_model == null)
-                {
-                    return "未保存";
-                }
-
-                switch (_model.Status)
-                {
-                    case ScheduleStatus.Active: return "已开启";
-                    case ScheduleStatus.Paused: return "已暂停";
-                    default: return "已结束";
-                }
-            }
-        }
-
         public string ToggleActiveText
         {
-            get { return _model != null && _model.Active ? "暂停" : "恢复"; }
+            get { return _model != null && _model.Active ? "暂停使用" : "恢复使用"; }
         }
 
         public string NextRunLabel
@@ -524,18 +863,43 @@ namespace MiaoWu.App.ViewModels
 
         public bool HasChanges
         {
-            get { return !_loading && !string.Equals(SnapshotKey(), _initialKey, StringComparison.Ordinal); }
+            get
+            {
+                if (_loading)
+                {
+                    return false;
+                }
+
+                // 新建草稿没有已保存版本，天然就是未保存状态；底栏因此显示「有未保存的修改」。
+                return !IsExisting || !string.Equals(SnapshotKey(), _initialKey, StringComparison.Ordinal);
+            }
         }
 
+        /// <summary>底栏按钮只在有改动、必填项齐备且规则可生成时可用。</summary>
         public bool CanSave
         {
-            get { return HasChanges && !IsConflict; }
-        }
+            get
+            {
+                if (_loading || IsConflict || !HasChanges)
+                {
+                    return false;
+                }
 
-        /// <summary>新建或已改动时才显示表单预览；未改动的已存任务只显示真实的下次运行。</summary>
-        public bool ShowsPreview
-        {
-            get { return !IsExisting || HasChanges; }
+                if (string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_prompt))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    BuildRule();
+                    return true;
+                }
+                catch (ScheduleException)
+                {
+                    return false;
+                }
+            }
         }
 
         /// <summary>从已存任务载入表单；同时把当前值记为基线。</summary>
@@ -558,14 +922,18 @@ namespace MiaoWu.App.ViewModels
                 _currentSessionId = definition.SessionId;
                 _workspaceId = definition.WorkspaceId;
                 _workspaceDisplay = _workspaceName(definition.WorkspaceId);
+                _providerId = definition.ProviderId;
+                _modelId = definition.ModelId;
+                _reasoningEffort = NormalizeReasoning(definition.ReasoningEffort);
+                RebuildWorkspaceOptions();
+                RebuildModelOptions();
                 _baselineUpdatedAt = definition.UpdatedAt;
                 _isConflict = false;
                 _errorMessage = null;
 
                 ScheduleRuleDraft draft = ScheduleRuleDraft.FromRule(definition.Rule, _now());
                 _mode = draft.Mode;
-                _hourText = draft.Hour.ToString("00", CultureInfo.InvariantCulture);
-                _minuteText = draft.Minute.ToString("00", CultureInfo.InvariantCulture);
+                _timeText = FormatTime(draft.Hour, draft.Minute);
                 _intervalText = draft.Interval.ToString(CultureInfo.InvariantCulture);
                 _customRule = draft.CustomRule ?? definition.Rule ?? string.Empty;
                 ApplyWeekdays(draft.Weekdays);
@@ -586,10 +954,10 @@ namespace MiaoWu.App.ViewModels
 
             _initialKey = SnapshotKey();
             RaiseAll();
-            RefreshPreview();
+            RefreshValidation();
         }
 
-        /// <summary>新建草稿：默认每天 09:00、新建会话并复用。</summary>
+        /// <summary>新建草稿：默认每周一当前整点、新建会话并复用。</summary>
         public void LoadNew(string workspaceId, string sessionId)
         {
             _loading = true;
@@ -599,10 +967,9 @@ namespace MiaoWu.App.ViewModels
                 Id = null;
                 _title = string.Empty;
                 _prompt = string.Empty;
-                _mode = ScheduleRepeatMode.Daily;
+                _mode = ScheduleRepeatMode.Weekly;
                 DateTimeOffset now = _now();
-                _hourText = now.Hour.ToString("00", CultureInfo.InvariantCulture);
-                _minuteText = "00";
+                _timeText = FormatTime(now.Hour, 0);
                 _intervalText = "1";
                 _customRule = string.Empty;
                 ApplyWeekdays(new List<DayOfWeek> { DayOfWeek.Monday });
@@ -611,6 +978,11 @@ namespace MiaoWu.App.ViewModels
                 _currentSessionId = sessionId;
                 _workspaceId = workspaceId;
                 _workspaceDisplay = _workspaceName(workspaceId);
+                _providerId = null;
+                _modelId = null;
+                _reasoningEffort = null;
+                RebuildWorkspaceOptions();
+                RebuildModelOptions();
                 _baselineUpdatedAt = null;
                 _isConflict = false;
                 _errorMessage = null;
@@ -623,22 +995,17 @@ namespace MiaoWu.App.ViewModels
 
             _initialKey = SnapshotKey();
             RaiseAll();
-            RefreshPreview();
+            RefreshValidation();
         }
 
         /// <summary>生成规则文本；字段不合法时抛 <see cref="ScheduleException"/>。</summary>
         public string BuildRule()
         {
             int hour;
-            if (!int.TryParse(_hourText, NumberStyles.Integer, CultureInfo.InvariantCulture, out hour))
-            {
-                throw new ScheduleException("invalid_time", "小时必须是 0–23 的整数。");
-            }
-
             int minute;
-            if (!int.TryParse(_minuteText, NumberStyles.Integer, CultureInfo.InvariantCulture, out minute))
+            if (!TryParseTime(_timeText, out hour, out minute))
             {
-                throw new ScheduleException("invalid_time", "分钟必须是 0–59 的整数。");
+                throw new ScheduleException("invalid_time", "时间要写成 时:分，例如 09:30 或 22:15:00。");
             }
 
             int interval;
@@ -728,21 +1095,17 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            RefreshPreview();
+            RefreshValidation();
             OnPropertyChanged(nameof(HasChanges));
             OnPropertyChanged(nameof(CanSave));
-            OnPropertyChanged(nameof(ShowsPreview));
+            OnPropertyChanged(nameof(SaveButtonText));
         }
 
-        private void RefreshPreview()
+        private void RefreshValidation()
         {
             try
             {
-                string rule = BuildRule();
-                ScheduleRecurrence recurrence = ScheduleRecurrence.Parse(rule);
-                RulePreview = recurrence.Describe();
-                DateTimeOffset? next = recurrence.FirstOnOrAfter(_now());
-                NextRunPreview = next.HasValue ? SchedulesViewModel.FormatTime(next) : "没有未来的运行时间";
+                BuildRule();
                 if (!IsConflict)
                 {
                     ErrorMessage = null;
@@ -750,8 +1113,6 @@ namespace MiaoWu.App.ViewModels
             }
             catch (ScheduleException exception)
             {
-                RulePreview = "规则还需要补充";
-                NextRunPreview = "—";
                 ErrorMessage = exception.Message;
             }
         }
@@ -762,22 +1123,241 @@ namespace MiaoWu.App.ViewModels
             {
                 nameof(Id), nameof(IsExisting), nameof(PageTitle), nameof(HeaderTitle), nameof(Title), nameof(Prompt),
                 nameof(Mode), nameof(IsOnce), nameof(IsDaily), nameof(IsWeekly), nameof(IsMonthly),
-                nameof(IsCustom), nameof(ShowsInterval), nameof(ShowsWeekdays), nameof(ShowsCustomRule),
-                nameof(IntervalUnit), nameof(HourText), nameof(MinuteText), nameof(IntervalText),
+                nameof(IsCustom), nameof(RepeatOptions), nameof(SelectedRepeatOption),
+                nameof(TargetOptions), nameof(SelectedTargetOption),
+                nameof(ShowsInterval), nameof(ShowsWeekdays), nameof(ShowsTime), nameof(ShowsCustomRule),
+                nameof(IntervalUnit), nameof(TimeText), nameof(IntervalText),
                 nameof(Sunday), nameof(Monday), nameof(Tuesday), nameof(Wednesday), nameof(Thursday),
                 nameof(Friday), nameof(Saturday), nameof(CustomRule), nameof(Target),
                 nameof(IsTargetNewOnce), nameof(IsTargetThisSession), nameof(IsTargetNew),
-                nameof(SessionLabel), nameof(WorkspaceLabel), nameof(IsConflict), nameof(ConflictText),
-                nameof(ErrorMessage), nameof(HasError), nameof(RulePreview), nameof(NextRunPreview),
-                nameof(StatusLabel), nameof(ToggleActiveText), nameof(NextRunLabel), nameof(LastRunLabel),
-                nameof(HasHistory), nameof(HistoryEmptyText), nameof(HasChanges), nameof(CanSave),
-                nameof(ShowsPreview)
+                nameof(SessionLabel), nameof(WorkspaceLabel), nameof(WorkspaceOptions),
+                nameof(HasWorkspaceOptions), nameof(HasSelectedWorkspace), nameof(SelectedWorkspaceOption),
+                nameof(ModelOptions), nameof(SelectedModelOption), nameof(ProviderId), nameof(ModelId),
+                nameof(ReasoningOptions), nameof(SelectedReasoningOption), nameof(ReasoningEffort),
+                nameof(IsReasoningEnabled), nameof(TimeZoneLabel),
+                nameof(SaveButtonText), nameof(IsConflict), nameof(ConflictText),
+                nameof(ErrorMessage), nameof(HasError),
+                nameof(ToggleActiveText), nameof(NextRunLabel), nameof(LastRunLabel),
+                nameof(HasHistory), nameof(HistoryEmptyText), nameof(HasChanges), nameof(CanSave)
             };
 
             for (int i = 0; i < properties.Length; i++)
             {
                 OnPropertyChanged(properties[i]);
             }
+        }
+
+        private static string NormalizeReasoning(string value)
+        {
+            string normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+            return normalized == "low" || normalized == "medium" || normalized == "high"
+                ? normalized
+                : null;
+        }
+
+        private static string FormatTime(int hour, int minute)
+        {
+            return hour.ToString("00", CultureInfo.InvariantCulture)
+                + ":" + minute.ToString("00", CultureInfo.InvariantCulture)
+                + ":00";
+        }
+
+        private static bool TryParseTime(string text, out int hour, out int minute)
+        {
+            hour = 0;
+            minute = 0;
+            string value = (text ?? string.Empty).Trim();
+            if (value.Length == 0)
+            {
+                return false;
+            }
+
+            string[] parts = value.Split(':');
+            if (parts.Length < 2 || parts.Length > 3)
+            {
+                return false;
+            }
+
+            if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out hour)
+                || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out minute))
+            {
+                return false;
+            }
+
+            if (hour < 0 || hour > 23 || minute < 0 || minute > 59)
+            {
+                return false;
+            }
+
+            if (parts.Length == 3)
+            {
+                int second;
+                if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out second)
+                    || second < 0 || second > 59)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private string CanonicalTime()
+        {
+            int hour;
+            int minute;
+            return TryParseTime(_timeText, out hour, out minute)
+                ? hour.ToString("00", CultureInfo.InvariantCulture)
+                    + ":" + minute.ToString("00", CultureInfo.InvariantCulture)
+                : (_timeText ?? string.Empty).Trim();
+        }
+
+        private void RebuildWorkspaceOptions()
+        {
+            var options = new List<ScheduleWorkspaceOption>();
+            IReadOnlyList<Workspace> source = _workspaces == null ? null : _workspaces();
+            if (source != null)
+            {
+                for (int i = 0; i < source.Count; i++)
+                {
+                    Workspace workspace = source[i];
+                    if (workspace == null || string.IsNullOrWhiteSpace(workspace.Id))
+                    {
+                        continue;
+                    }
+
+                    string label = string.IsNullOrWhiteSpace(workspace.Name) ? workspace.Id : workspace.Name;
+                    options.Add(new ScheduleWorkspaceOption(workspace.Id, label));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(_workspaceId))
+            {
+                bool present = false;
+                for (int i = 0; i < options.Count; i++)
+                {
+                    if (string.Equals(options[i].Id, _workspaceId, StringComparison.Ordinal))
+                    {
+                        present = true;
+                        break;
+                    }
+                }
+
+                if (!present)
+                {
+                    options.Insert(0, new ScheduleWorkspaceOption(
+                        _workspaceId,
+                        string.IsNullOrWhiteSpace(_workspaceDisplay) ? _workspaceId : _workspaceDisplay));
+                }
+            }
+
+            _workspaceOptions = options;
+            _selectedWorkspaceOption = null;
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (string.Equals(options[i].Id, _workspaceId, StringComparison.Ordinal))
+                {
+                    _selectedWorkspaceOption = options[i];
+                    break;
+                }
+            }
+
+            OnPropertyChanged(nameof(WorkspaceOptions));
+            OnPropertyChanged(nameof(HasWorkspaceOptions));
+            OnPropertyChanged(nameof(SelectedWorkspaceOption));
+            OnPropertyChanged(nameof(HasSelectedWorkspace));
+        }
+
+        private void RebuildModelOptions()
+        {
+            var options = new List<ScheduleModelOption>();
+            ModelDescriptor defaultDescriptor = _defaultModel == null ? null : _defaultModel();
+            string defaultLabel = defaultDescriptor == null
+                ? "默认模型"
+                : "默认模型（" + defaultDescriptor.GetDisplayName() + "）";
+            options.Add(new ScheduleModelOption(
+                null,
+                null,
+                defaultLabel,
+                true,
+                defaultDescriptor == null || defaultDescriptor.SupportsReasoning));
+
+            IReadOnlyList<ModelDescriptor> source = _models == null ? null : _models();
+            var ordered = new List<ModelDescriptor>();
+            if (source != null)
+            {
+                for (int i = 0; i < source.Count; i++)
+                {
+                    if (source[i] != null && !string.IsNullOrWhiteSpace(source[i].ModelId))
+                    {
+                        ordered.Add(source[i]);
+                    }
+                }
+            }
+
+            ordered.Sort((a, b) =>
+            {
+                int provider = string.Compare(
+                    a.ProviderId,
+                    b.ProviderId,
+                    StringComparison.OrdinalIgnoreCase);
+                return provider != 0
+                    ? provider
+                    : string.Compare(a.GetDisplayName(), b.GetDisplayName(), StringComparison.OrdinalIgnoreCase);
+            });
+
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                ModelDescriptor model = ordered[i];
+                options.Add(new ScheduleModelOption(
+                    model.ProviderId,
+                    model.ModelId,
+                    model.GetDisplayName(),
+                    false,
+                    model.SupportsReasoning));
+            }
+
+            if (!string.IsNullOrWhiteSpace(_modelId))
+            {
+                bool present = false;
+                for (int i = 0; i < options.Count; i++)
+                {
+                    if (string.Equals(options[i].ModelId, _modelId, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(options[i].ProviderId, _providerId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        present = true;
+                        break;
+                    }
+                }
+
+                if (!present)
+                {
+                    options.Insert(1, new ScheduleModelOption(
+                        _providerId,
+                        _modelId,
+                        "已移除的模型（" + _modelId + "）",
+                        false,
+                        false));
+                }
+            }
+
+            _modelOptions = options;
+            _selectedModelOption = options[0];
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (string.Equals(options[i].ProviderId, _providerId, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(options[i].ModelId, _modelId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _selectedModelOption = options[i];
+                    break;
+                }
+            }
+
+            OnPropertyChanged(nameof(ModelOptions));
+            OnPropertyChanged(nameof(SelectedModelOption));
+            OnPropertyChanged(nameof(ProviderId));
+            OnPropertyChanged(nameof(ModelId));
+            OnPropertyChanged(nameof(IsReasoningEnabled));
         }
 
         private void ApplyWeekdays(IList<DayOfWeek> days)
@@ -844,14 +1424,16 @@ namespace MiaoWu.App.ViewModels
                 _title ?? string.Empty,
                 _prompt ?? string.Empty,
                 ((int)_mode).ToString(CultureInfo.InvariantCulture),
-                (_hourText ?? string.Empty).Trim(),
-                (_minuteText ?? string.Empty).Trim(),
+                CanonicalTime(),
                 _mode == ScheduleRepeatMode.Custom
                     ? string.Empty
                     : (_intervalText ?? string.Empty).Trim(),
                 _mode == ScheduleRepeatMode.Custom ? string.Empty : WeekdayBits(),
                 _mode == ScheduleRepeatMode.Custom ? (_customRule ?? string.Empty).Trim() : string.Empty,
-                ((int)_target).ToString(CultureInfo.InvariantCulture)
+                ((int)_target).ToString(CultureInfo.InvariantCulture),
+                _providerId ?? string.Empty,
+                _modelId ?? string.Empty,
+                _reasoningEffort ?? string.Empty
             };
 
             return string.Join("\u001f", parts.ToArray());

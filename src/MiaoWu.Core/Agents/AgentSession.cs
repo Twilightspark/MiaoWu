@@ -1448,9 +1448,12 @@ namespace MiaoWu.Core.Agents
             };
 
             // 推理等级只在该模型带思考通道时写进请求：默认档留空，让 Provider 用自己的预算。
-            string reasoning = _options.ReasoningEffortProvider != null
-                ? _options.ReasoningEffortProvider()
-                : _options.ReasoningEffort;
+            // 单条输入可以覆盖会话级选择（定时任务按任务配置的等级执行）。
+            string reasoning = input != null && !string.IsNullOrWhiteSpace(input.ReasoningEffort)
+                ? input.ReasoningEffort
+                : (_options.ReasoningEffortProvider != null
+                    ? _options.ReasoningEffortProvider()
+                    : _options.ReasoningEffort);
             if (!string.IsNullOrWhiteSpace(reasoning) && model.SupportsReasoning)
             {
                 request.ReasoningEffort = reasoning;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Input;
 
 namespace MiaoWu.Infrastructure.Workspaces
@@ -24,7 +25,13 @@ namespace MiaoWu.Infrastructure.Workspaces
         public static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(45);
 
         private static readonly HashSet<string> ExcludedDirectories = new HashSet<string>(
-            new[] { ".agent", ".artifacts", ".git", ".svn", ".vs", "node_modules", "packages", "bin", "obj", "TestResults" },
+            new[]
+            {
+                AgentWorkspaceLayout.DirectoryName,
+                AgentWorkspaceLayout.LegacyDirectoryName,
+                ".artifacts", ".git", ".svn", ".vs", "node_modules", "packages", "bin", "obj",
+                "TestResults"
+            },
             StringComparer.OrdinalIgnoreCase);
 
         private readonly string _root;

@@ -5,6 +5,8 @@ using System.Globalization;
 using System.Linq;
 using MiaoWu.App.Mvvm;
 using MiaoWu.Core.Agents.Schedules;
+using MiaoWu.Core.Models;
+using MiaoWu.Core.Workspaces;
 
 namespace MiaoWu.App.ViewModels
 {
@@ -239,7 +241,7 @@ namespace MiaoWu.App.ViewModels
 
         private static readonly ScheduleTabOption[] TabOptions =
         {
-            new ScheduleTabOption(false, "规则"),
+            new ScheduleTabOption(false, "规则配置"),
             new ScheduleTabOption(true, "运行记录")
         };
 
@@ -247,6 +249,9 @@ namespace MiaoWu.App.ViewModels
         private readonly Func<string> _sessionId;
         private readonly Func<string> _workspaceId;
         private readonly Func<string, string> _workspaceName;
+        private readonly Func<IReadOnlyList<Workspace>> _workspaces;
+        private readonly Func<IReadOnlyList<ModelDescriptor>> _models;
+        private readonly Func<ModelDescriptor> _defaultModel;
         private readonly Action<Action> _dispatch;
         private readonly Func<string, string, string, string, bool, bool> _confirm;
         private readonly Func<DateTimeOffset> _now;
@@ -272,6 +277,9 @@ namespace MiaoWu.App.ViewModels
             Func<string> sessionId,
             Func<string> workspaceId,
             Func<string, string> workspaceName,
+            Func<IReadOnlyList<Workspace>> workspaces = null,
+            Func<IReadOnlyList<ModelDescriptor>> models = null,
+            Func<ModelDescriptor> defaultModel = null,
             Action<Action> dispatch = null,
             Func<string, string, string, string, bool, bool> confirm = null,
             Func<DateTimeOffset> now = null)
@@ -280,6 +288,9 @@ namespace MiaoWu.App.ViewModels
             _sessionId = sessionId ?? (() => null);
             _workspaceId = workspaceId ?? (() => null);
             _workspaceName = workspaceName ?? (id => id);
+            _workspaces = workspaces;
+            _models = models;
+            _defaultModel = defaultModel;
             _dispatch = dispatch ?? (action => action());
             _confirm = confirm ?? ((title, message, confirmText, cancelText, destructive) => false);
             _now = now ?? (() => DateTimeOffset.Now);
@@ -396,7 +407,7 @@ namespace MiaoWu.App.ViewModels
                 _selected = value;
                 _isNewDraft = false;
                 OnPropertyChanged(nameof(Selected));
-                OnPropertyChanged(nameof(HasSelection));
+                NotifySelectionChanged();
                 ActivateEditor(value == null ? null : DraftFor(value));
             }
         }
@@ -404,6 +415,12 @@ namespace MiaoWu.App.ViewModels
         public bool HasSelection
         {
             get { return _selected != null || _editor != null; }
+        }
+
+        /// <summary>详情列是否收起：没有选中任务、也没有新建草稿时收起，列表占满整页。</summary>
+        public bool IsDetailCollapsed
+        {
+            get { return !HasSelection; }
         }
 
         public bool HasNoItems
@@ -447,7 +464,7 @@ namespace MiaoWu.App.ViewModels
 
                 _editor = value;
                 OnPropertyChanged(nameof(Editor));
-                OnPropertyChanged(nameof(HasSelection));
+                NotifySelectionChanged();
                 OnPropertyChanged(nameof(IsEditingExisting));
                 if (value != null)
                 {
@@ -614,7 +631,7 @@ namespace MiaoWu.App.ViewModels
 
             Editor = editor;
             OnPropertyChanged(nameof(IsEditingExisting));
-            OnPropertyChanged(nameof(HasSelection));
+            NotifySelectionChanged();
         }
 
         private void ApplyFilter(string selectId)
@@ -671,7 +688,9 @@ namespace MiaoWu.App.ViewModels
                 }
             }
 
-            Selected = target ?? (Items.Count > 0 ? Items[0] : null);
+            // 打开页面、切换筛选或后台刷新都不替用户选任务：右列先收起，
+            // 表单只在用户点某条任务（或点「新建」）之后出现。
+            Selected = target;
         }
 
         private bool MatchesFilter(ScheduleTaskRowViewModel row)
@@ -787,7 +806,12 @@ namespace MiaoWu.App.ViewModels
                 }
             }
 
-            draft = new ScheduleEditorViewModel(_now, _workspaceName);
+            draft = new ScheduleEditorViewModel(
+                _now,
+                _workspaceName,
+                _workspaces,
+                _models,
+                _defaultModel);
             draft.Load(row.Model);
             _drafts[row.Id] = draft;
             return draft;
@@ -810,12 +834,17 @@ namespace MiaoWu.App.ViewModels
             _isNewDraft = true;
             _selected = null;
             OnPropertyChanged(nameof(Selected));
-            OnPropertyChanged(nameof(HasSelection));
+            NotifySelectionChanged();
 
             ScheduleEditorViewModel draft;
             if (!_drafts.TryGetValue(NewDraftKey, out draft) || draft == null)
             {
-                draft = new ScheduleEditorViewModel(_now, _workspaceName);
+                draft = new ScheduleEditorViewModel(
+                    _now,
+                    _workspaceName,
+                    _workspaces,
+                    _models,
+                    _defaultModel);
                 draft.LoadNew(_workspaceId(), _sessionId());
                 _drafts[NewDraftKey] = draft;
             }
@@ -888,7 +917,10 @@ namespace MiaoWu.App.ViewModels
                         rule,
                         editor.Target,
                         sessionId,
-                        string.IsNullOrWhiteSpace(editor.WorkspaceId) ? _workspaceId() : editor.WorkspaceId);
+                        string.IsNullOrWhiteSpace(editor.WorkspaceId) ? _workspaceId() : editor.WorkspaceId,
+                        editor.ProviderId,
+                        editor.ModelId,
+                        editor.ReasoningEffort);
                     _drafts.Remove(NewDraftKey);
                     _isNewDraft = false;
                     ClearEditor();
@@ -925,7 +957,10 @@ namespace MiaoWu.App.ViewModels
                     force ? (DateTimeOffset?)null : editor.BaselineUpdatedAt,
                     editor.Target,
                     editor.Target == ScheduleTarget.New ? null : session,
-                    editor.WorkspaceId);
+                    editor.WorkspaceId,
+                    editor.ProviderId ?? string.Empty,
+                    editor.ModelId ?? string.Empty,
+                    editor.ReasoningEffort ?? string.Empty);
 
                 if (result.Status == ScheduleUpdateStatus.Conflict)
                 {
@@ -966,7 +1001,7 @@ namespace MiaoWu.App.ViewModels
             {
                 _isNewDraft = false;
                 ClearEditor();
-                Selected = Items.Count > 0 ? Items[0] : null;
+                Selected = null;
                 StatusMessage = string.Empty;
                 return;
             }
@@ -1099,6 +1134,12 @@ namespace MiaoWu.App.ViewModels
             StatusMessage = "已载入最新版本。";
         }
 
+        private void NotifySelectionChanged()
+        {
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(IsDetailCollapsed));
+        }
+
         private void ClearEditor()
         {
             if (_editor != null)
@@ -1110,7 +1151,7 @@ namespace MiaoWu.App.ViewModels
             _selected = null;
             OnPropertyChanged(nameof(Editor));
             OnPropertyChanged(nameof(Selected));
-            OnPropertyChanged(nameof(HasSelection));
+            NotifySelectionChanged();
             OnPropertyChanged(nameof(IsEditingExisting));
         }
     }

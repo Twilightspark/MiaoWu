@@ -7,7 +7,7 @@ using MiaoWu.Infrastructure.Json;
 namespace MiaoWu.Infrastructure.Storage
 {
     /// <summary>
-    /// 目标状态的文件实现：<c>&lt;workspace&gt;\.agent\goals\{sessionId}.json</c>，整体原子覆盖写。
+    /// 目标状态的文件实现：<c>&lt;workspace&gt;\.miaowu\goals\{sessionId}.json</c>，整体原子覆盖写。
     /// 文件缺失或损坏时返回 <c>null</c>（损坏文件先备份），不阻断会话。
     /// </summary>
     public sealed class GoalFileStore : IGoalPersistence

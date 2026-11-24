@@ -126,7 +126,7 @@ namespace MiaoWu.Core.Conversations
         }
     }
 
-    /// <summary>每个工作区一份 <c>.agent/sessions/index.json</c>。</summary>
+    /// <summary>每个工作区一份 <c>.miaowu/sessions/index.json</c>。</summary>
     public sealed class ConversationIndex
     {
         public const int CurrentSchemaVersion = 1;

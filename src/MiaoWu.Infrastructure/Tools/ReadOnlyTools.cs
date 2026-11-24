@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Agents.Tools;
+using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Text;
 
 namespace MiaoWu.Infrastructure.Tools
@@ -644,13 +645,13 @@ namespace MiaoWu.Infrastructure.Tools
                 return true;
             }
 
-            if (string.Equals(name, ".agent", StringComparison.OrdinalIgnoreCase))
+            if (AgentWorkspaceLayout.IsDataDirectoryName(name))
             {
                 return false;
             }
 
             string parentName = Path.GetFileName(parentDirectory.TrimEnd('\\', '/'));
-            if (string.Equals(parentName, ".agent", StringComparison.OrdinalIgnoreCase)
+            if (AgentWorkspaceLayout.IsDataDirectoryName(parentName)
                 && ExcludedAgentChildren.Contains(name))
             {
                 return true;
@@ -697,7 +698,7 @@ namespace MiaoWu.Infrastructure.Tools
 
     /// <summary>
     /// glob：按文件名模式查找工作区文件，支持 <c>**</c>、<c>*</c>、<c>?</c>。
-    /// 跳过 .git、bin、obj、node_modules、.agent；返回排序后的相对路径，limit 默认 200。
+    /// 跳过 .git、bin、obj、node_modules 与工作区数据目录；返回排序后的相对路径，limit 默认 200。
     /// </summary>
     public sealed class GlobTool : IAgentTool
     {
@@ -712,7 +713,9 @@ namespace MiaoWu.Infrastructure.Tools
         private static readonly HashSet<string> ExcludedDirectories =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                ".git", "bin", "obj", "node_modules", ".agent"
+                ".git", "bin", "obj", "node_modules",
+                AgentWorkspaceLayout.DirectoryName,
+                AgentWorkspaceLayout.LegacyDirectoryName
             };
 
         public string Name

@@ -37,7 +37,7 @@ namespace MiaoWu.Core.Abstractions
             string sessionId,
             CancellationToken cancellationToken);
 
-        /// <summary>清空工作区的全部会话记录；不触碰工作区文件与 .agent 其它目录。</summary>
+        /// <summary>清空工作区的全部会话记录；不触碰工作区文件与 .miaowu 其它目录。</summary>
         Task ClearAsync(Workspace workspace, CancellationToken cancellationToken);
     }
 }

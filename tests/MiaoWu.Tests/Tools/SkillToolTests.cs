@@ -19,7 +19,7 @@ namespace MiaoWu.Tests.Tools
             string root = Path.Combine(Path.GetTempPath(), "miaowu-skill-" + Guid.NewGuid().ToString("N"));
             _workspace = Path.Combine(root, "ws");
             _userSkills = Path.Combine(root, "user-skills");
-            Directory.CreateDirectory(Path.Combine(_workspace, ".agent", "skills"));
+            Directory.CreateDirectory(Path.Combine(_workspace, ".miaowu", "skills"));
             Directory.CreateDirectory(_userSkills);
             _tool = new SkillTool(_userSkills);
         }
@@ -46,7 +46,7 @@ namespace MiaoWu.Tests.Tools
             File.WriteAllText(Path.Combine(_userSkills, "review.md"), "# Review\n用户级审查技能。");
             File.WriteAllText(Path.Combine(_userSkills, "shared.md"), "# Shared\n用户级版本。");
             File.WriteAllText(
-                Path.Combine(_workspace, ".agent", "skills", "shared.md"),
+                Path.Combine(_workspace, ".miaowu", "skills", "shared.md"),
                 "# Shared\n工作区版本。");
 
             ToolResult result = await ExecuteAsync(null);
@@ -61,7 +61,7 @@ namespace MiaoWu.Tests.Tools
         public async Task LoadsSkillBodyByName()
         {
             File.WriteAllText(
-                Path.Combine(_workspace, ".agent", "skills", "deploy.md"),
+                Path.Combine(_workspace, ".miaowu", "skills", "deploy.md"),
                 "# Deploy\n先跑测试，再打包。");
 
             ToolResult result = await ExecuteAsync("{\"name\":\"deploy\"}");

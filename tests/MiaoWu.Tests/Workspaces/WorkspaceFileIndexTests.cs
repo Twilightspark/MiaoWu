@@ -21,11 +21,15 @@ namespace MiaoWu.Tests.Workspaces
             Directory.CreateDirectory(Path.Combine(_root, "assets"));
             Directory.CreateDirectory(Path.Combine(_root, "bin"));
             Directory.CreateDirectory(Path.Combine(_root, "node_modules"));
+            Directory.CreateDirectory(Path.Combine(_root, ".miaowu", "sessions"));
+            Directory.CreateDirectory(Path.Combine(_root, ".agent", "sessions"));
             File.WriteAllText(Path.Combine(_root, "README.md"), "# demo");
             File.WriteAllText(Path.Combine(_root, "src", "main.cs"), "class P {}");
             File.WriteAllText(Path.Combine(_root, "docs", "notes md 草稿.md"), "# 笔记");
             File.WriteAllText(Path.Combine(_root, "bin", "app.dll"), "binary");
             File.WriteAllText(Path.Combine(_root, "node_modules", "x.js"), "module");
+            File.WriteAllText(Path.Combine(_root, ".miaowu", "sessions", "s.jsonl"), "{}");
+            File.WriteAllText(Path.Combine(_root, ".agent", "sessions", "s.jsonl"), "{}");
             File.WriteAllBytes(Path.Combine(_root, "assets", "logo.png"), OnePixelPng());
         }
 
@@ -56,6 +60,8 @@ namespace MiaoWu.Tests.Workspaces
             Assert.Contains("README.md", paths);
             Assert.DoesNotContain("bin/app.dll", paths);
             Assert.DoesNotContain("node_modules/x.js", paths);
+            Assert.DoesNotContain(paths, path => path.StartsWith(".miaowu", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(paths, path => path.StartsWith(".agent", StringComparison.OrdinalIgnoreCase));
             Assert.True(rows.Where(row => row.IsDirectory).All(row => row.RelativePath != "bin"));
         }
 

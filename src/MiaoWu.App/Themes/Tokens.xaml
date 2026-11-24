@@ -246,8 +246,16 @@
     <!-- 定时任务页面：列表与详情合成一列最宽 1040 并居中；表格化的任务列表与表单同宽 -->
     <sys:Double x:Key="Metric.Schedules.Content.MaxWidth">1040</sys:Double>
     <sys:Double x:Key="Metric.Schedules.Chip.Height">28</sys:Double>
-    <sys:Double x:Key="Metric.Schedules.TextArea.Height">96</sys:Double>
     <sys:Double x:Key="Metric.Schedules.RuleArea.Height">72</sys:Double>
+    <!-- 手动新建 / 编辑表单：分组卡片行高 46、输入框 40、正文区 112，与 DSH 的表单密度对齐 -->
+    <sys:Double x:Key="Metric.Schedules.Form.RowHeight">46</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Form.Field.Height">40</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Form.TextArea.Height">72</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Day.Size">28</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Time.Width">88</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Selector.MinWidth">124</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Number.Width">32</sys:Double>
+    <sys:Double x:Key="Metric.Schedules.Pill.MinWidth">74</sys:Double>
     <sys:Double x:Key="Metric.Notification.Width">384</sys:Double>
     <sys:Double x:Key="Metric.Notification.Right">16</sys:Double>
     <sys:Double x:Key="Metric.Notification.Bottom">172</sys:Double>
@@ -273,6 +281,10 @@
 
     <!-- 圆角 -->
     <CornerRadius x:Key="Radius.Card">8</CornerRadius>
+    <!-- 定时任务表单的分组卡片与星期圆钮：卡片 10，圆钮取 28 的一半 -->
+    <CornerRadius x:Key="Radius.Schedules.Card">10</CornerRadius>
+    <CornerRadius x:Key="Radius.Schedules.Day">14</CornerRadius>
+    <CornerRadius x:Key="Radius.Schedules.Pill">14</CornerRadius>
     <CornerRadius x:Key="Radius.Menu">10</CornerRadius>
     <CornerRadius x:Key="Radius.MenuHairline">10.5</CornerRadius>
     <CornerRadius x:Key="Radius.MenuItem">6</CornerRadius>
@@ -345,7 +357,20 @@
     <Thickness x:Key="Pad.Schedules.Row">10,8,10,8</Thickness>
     <Thickness x:Key="Pad.Schedules.Detail">20,0,0,0</Thickness>
     <Thickness x:Key="Margin.Schedules.Field">0,0,0,12</Thickness>
-    <Thickness x:Key="Margin.Schedules.Preview">0,8,0,0</Thickness>
+    <!-- 表单：分组行内衬、字段内衬、分组标题与底栏间距 -->
+    <Thickness x:Key="Pad.Schedules.FormRow">14,0</Thickness>
+    <Thickness x:Key="Pad.Schedules.Field">2</Thickness>
+    <Thickness x:Key="Pad.Schedules.TextArea">2</Thickness>
+    <Thickness x:Key="Pad.Schedules.Number">8,0</Thickness>
+    <Thickness x:Key="Pad.Schedules.Pill">10,0</Thickness>
+    <Thickness x:Key="Margin.Schedules.FieldLabel">2,0,0,6</Thickness>
+    <Thickness x:Key="Margin.Schedules.NameField">0,0,0,12</Thickness>
+    <Thickness x:Key="Margin.Schedules.ContentField">0,0,0,2</Thickness>
+    <Thickness x:Key="Margin.Schedules.FirstSection">2,4,0,8</Thickness>
+    <Thickness x:Key="Margin.Schedules.Section">2,22,0,8</Thickness>
+    <Thickness x:Key="Margin.Schedules.Day">0,0,6,0</Thickness>
+    <Thickness x:Key="Margin.Schedules.Footer">0,12,0,0</Thickness>
+    <Thickness x:Key="Thickness.Schedules.RowDivider">0,0,0,1</Thickness>
 
     <!-- 会话消息流：内容列与输入卡同宽（`Margin.ContentColumn` 28 + `Metric.Composer.MaxWidth` 720），
          行内不再留左右边距；轮次间距 18，轮内 10 -->

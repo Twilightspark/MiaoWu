@@ -21,6 +21,7 @@ artifacts/
 AGENTS.md
 
 # ---- Agent runtime & local tooling ----
+.miaowu/
 .agent/
 .agents/
 /install-miaowu.ps1

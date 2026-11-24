@@ -16,7 +16,7 @@ namespace MiaoWu.Tests.Storage
             _root = Path.Combine(
                 Path.GetTempPath(),
                 "miaowu-goal-" + Guid.NewGuid().ToString("N"));
-            _path = Path.Combine(_root, ".agent", "goals", "s1.json");
+            _path = Path.Combine(_root, ".miaowu", "goals", "s1.json");
         }
 
         public void Dispose()

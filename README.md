@@ -2,7 +2,7 @@
 
 MiaoWu 是一个本地优先的 Windows 桌面 AI 智能体工作台：把工作区文件、会话与模型调用放进同一个窗口，让智能体在你的目录里读文件、改代码、执行命令，每一步都可审批、可回溯。
 
-当前版本：**v0.7.0**（功能高速开发中，尚不具备使用条件）。变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：**v0.7.1**（功能高速开发中，尚不具备使用条件）。变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 特性
 
@@ -15,7 +15,7 @@ MiaoWu 是一个本地优先的 Windows 桌面 AI 智能体工作台：把工作
 - **设置与关闭行为**：设置收敛为通用 / 模型 / 关于三页；通用页提供外观、语言（预留）、关闭行为与「流程审批（每次询问 / 从不询问）」「任务目标（关闭 / 自动续跑）」，关闭可选“每次询问 / 退出应用 / 后台运行”；托盘不可用（受限权限）时降级为最小化到任务栏并给出提示。
 - **工具调用与审批**：读写文件、搜索、执行命令都经过路径沙箱与风险分级；审批以右下角通知出现（标题带风险级别，可就地展开 diff），允许一次 / 本会话允许 / 拒绝，不打断消息流；写文件自动备份，可撤销。
 - **自主推进**：模型可以把一段任务写成会话目标并自动续跑，开启计划模式后先出计划再执行；需要选择时用右下角提问（选项即动作、可跳过），也能创建定时任务、跑后台命令、搜索与抓取网页。
-- **定时任务**：左栏时钟图标把中/右栏换成任务页——左侧按已开启 / 已暂停 / 已结束 / 全部筛选与搜索，右侧编辑名称、内容、重复（仅一次 / 每天 / 每周 / 每月 / 自定义）、时间、间隔、星期与执行位置，并查看每次投递的运行记录；支持暂停 / 恢复、立即执行与删除。
+- **定时任务**：左栏时钟图标把中/右栏换成任务页——左侧按已开启 / 已暂停 / 已结束 / 全部筛选与搜索，右侧用分组卡片编辑名称、内容、执行位置、关联工作区、执行模型、推理等级、重复（仅一次 / 每天 / 每周 / 每月 / 自定义）、间隔、星期、时间与只读时区，并查看每次投递的运行记录；已有任务的立即执行、暂停 / 恢复与删除收进 `⋯` 菜单。
 - **后台任务看得见**：会话标题行在「⋯」左侧显示「N 个任务」（有任务在跑时只报运行数并带呼吸点），点开是 340 宽下拉，分「运行中 / 已结束」两组，能看到命令、状态与耗时，直接读实时输出、停止任务，或清空已结束记录。
 - **首次启动引导**：主窗口内两栏完成第一个工作区与可选模型供应商；完成前不进入三栏。
 - **本地数据**：配置、会话与审计日志保存在本机（`用户目录\.miaowu`），不依赖云端服务。
@@ -66,13 +66,13 @@ installer/                 # Inno Setup 安装脚本
 
 `scripts\publish.ps1` 执行 Release 构建；检测到 Inno Setup 6 时会一并生成安装包与便携包：
 
-- `.artifacts\installer\MiaoWu-0.7.0-setup.exe`：**管理员安装**（`%ProgramFiles%\MiaoWu`），
+- `.artifacts\installer\MiaoWu-0.7.1-setup.exe`：**管理员安装**（`%ProgramFiles%\MiaoWu`），
   **双击即弹 UAC**（`publish.ps1` 编译后用 `scripts\patch-setup-manifest.ps1` 把 SetupLdr 清单改成
   `requireAdministrator`，Windows 在进程创建时就提权）；.NET Framework 4.8 检测，开始菜单 /
   可选公共桌面与开机启动，卸载时询问是否保留 `%USERPROFILE%\.miaowu`；装完以原用户身份启动，
   运行期不需要管理员。
-- `.artifacts\installer\MiaoWu-0.7.0-portable.zip`：不经过安装器，解压即用，供临时目录不可写时兜底。
-- `.artifacts\installer\MiaoWu-0.7.0-setup-offline.exe`：**全量包**，内嵌 .NET Framework 4.8 离线安装程序
+- `.artifacts\installer\MiaoWu-0.7.1-portable.zip`：不经过安装器，解压即用，供临时目录不可写时兜底。
+- `.artifacts\installer\MiaoWu-0.7.1-setup-offline.exe`：**全量包**，内嵌 .NET Framework 4.8 离线安装程序
   （约 105 MB）。目标机缺 4.8 时，安装器在「准备安装」阶段静默装好 4.8 再继续；已有 4.8 的机器只多背体积，
   不会重复安装。生成方式：
 
@@ -105,7 +105,7 @@ Medium 标记的 Temp。现在 `setup.exe` 的清单是 `requireAdministrator`�
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path src\MiaoWu.App\bin\Release\net48\MiaoWu.exe
-powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path .artifacts\installer\MiaoWu-0.7.0-setup.exe
+powershell -ExecutionPolicy Bypass -File scripts\sign.ps1 -Path .artifacts\installer\MiaoWu-0.7.1-setup.exe
 ```
 
 - **开发自签名**：`powershell -File scripts\sign.ps1 -CreateDevCertificate` 生成
@@ -128,10 +128,10 @@ MiaoWu 运行时**不需要管理员**：安装目录只读，所有可写内容
 |---|---|---|---|
 | `%ProgramFiles%\MiaoWu` | 安装器（提权） | 用户只读 + 执行即可 | 安装器 |
 | `%USERPROFILE%\.miaowu`（含 `logs` / `cache` / `backups` / `exports` / `skills` / `attachments`） | 应用 | 当前用户修改 | 首次启动时应用 |
-| `<工作区>\.agent`（含 `sessions` / `attachments` / `cache` / `skills`） | 应用 | 当前用户修改 | 首次打开工作区时应用 |
+| `<工作区>\.miaowu`（含 `sessions` / `attachments` / `cache` / `skills`，默认隐藏） | 应用 | 当前用户修改 | 首次打开工作区时应用 |
 | `%TEMP%` | 安装器（解包）、命令工具（临时脚本） | 当前用户修改 | 系统 |
 
-- 应用在创建 `.miaowu` 与 `.agent` 时逐个目录做写探针；不可写时先尝试给当前账户补一条可继承的
+- 应用在创建全局 `.miaowu` 与工作区 `.miaowu` 时逐个目录做写探针；不可写时先尝试给当前账户补一条可继承的
   完全控制 ACE，仍失败就以“当前账户无法写入目录：…”失败退出，不再等到写日志 / 写会话时才报错。
 - 判断权限问题先跑目录自检（普通桌面、非提权终端）：
 

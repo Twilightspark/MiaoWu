@@ -274,8 +274,8 @@ namespace MiaoWu.Tests.Tools
         {
             Directory.CreateDirectory(Path.Combine(_workspace, "bin"));
             File.WriteAllText(Path.Combine(_workspace, "bin", "gen.cs"), "needle in bin");
-            Directory.CreateDirectory(Path.Combine(_workspace, ".agent", "sessions"));
-            File.WriteAllText(Path.Combine(_workspace, ".agent", "sessions", "old.jsonl"), "needle in session");
+            Directory.CreateDirectory(Path.Combine(_workspace, ".miaowu", "sessions"));
+            File.WriteAllText(Path.Combine(_workspace, ".miaowu", "sessions", "old.jsonl"), "needle in session");
             File.WriteAllText(Path.Combine(_workspace, "src.cs"), "needle in source");
 
             ToolResult result = Run(new GrepTool(), "{\"pattern\":\"needle\"}");
@@ -355,8 +355,8 @@ namespace MiaoWu.Tests.Tools
             File.WriteAllText(Path.Combine(_workspace, "bin", "gen.cs"), "x");
             Directory.CreateDirectory(Path.Combine(_workspace, "node_modules", "pkg"));
             File.WriteAllText(Path.Combine(_workspace, "node_modules", "pkg", "index.js"), "x");
-            Directory.CreateDirectory(Path.Combine(_workspace, ".agent", "cache"));
-            File.WriteAllText(Path.Combine(_workspace, ".agent", "cache", "x.cs"), "x");
+            Directory.CreateDirectory(Path.Combine(_workspace, ".miaowu", "cache"));
+            File.WriteAllText(Path.Combine(_workspace, ".miaowu", "cache", "x.cs"), "x");
             File.WriteAllText(Path.Combine(_workspace, "keep.cs"), "x");
 
             ToolResult result = Run(new GlobTool(), "{\"pattern\":\"**/*.cs\"}");
@@ -364,7 +364,7 @@ namespace MiaoWu.Tests.Tools
             Assert.Contains("keep.cs", result.Content);
             Assert.DoesNotContain("gen.cs", result.Content);
             Assert.DoesNotContain("index.js", result.Content);
-            Assert.DoesNotContain(".agent", result.Content);
+            Assert.DoesNotContain(".miaowu", result.Content);
         }
 
         [Fact]

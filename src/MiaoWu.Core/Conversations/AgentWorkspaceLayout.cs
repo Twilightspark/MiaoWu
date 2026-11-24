@@ -13,7 +13,7 @@ namespace MiaoWu.Core.Conversations
     /// </summary>
     /// <remarks>
     /// <code>
-    /// &lt;workspace&gt;\.agent\
+    /// &lt;workspace&gt;\.miaowu\
     /// ├─ skills\          # 工作区技能（用户可编辑，可随仓库提交）
     /// ├─ sessions\        # index.json + {sessionId}.jsonl
     /// ├─ goals\           # {sessionId}.json：会话目标状态
@@ -21,10 +21,19 @@ namespace MiaoWu.Core.Conversations
     /// └─ cache\           # 可随时删除的派生缓存
     /// </code>
     /// 本类只计算路径，不创建目录；创建由基础设施层在首次写入时完成。
+    /// 工作区数据目录在磁盘上带 Hidden 属性，也不出现在工作区文件视图中。
     /// </remarks>
     public static class AgentWorkspaceLayout
     {
-        public const string DirectoryName = ".agent";
+        /// <summary>工作区数据目录名；与全局配置目录同名，但位于各工作区根下。</summary>
+        public const string DirectoryName = ".miaowu";
+
+        /// <summary>
+        /// 旧版工作区数据目录名。当前版本不再读取或迁移它，只在文件视图与工具遍历中排除，
+        /// 避免历史目录混入工作区内容。
+        /// </summary>
+        public const string LegacyDirectoryName = ".agent";
+
         public const string SkillsDirectoryName = "skills";
         public const string SessionsDirectoryName = "sessions";
         public const string GoalsDirectoryName = "goals";
@@ -45,6 +54,16 @@ namespace MiaoWu.Core.Conversations
             return !string.IsNullOrEmpty(sessionId)
                 && sessionId.Length <= MaxSessionIdLength
                 && SessionIdPattern.IsMatch(sessionId);
+        }
+
+        /// <summary>
+        /// 判断目录名是否属于工作区数据目录（含旧版 <c>.agent</c>，忽略大小写）。
+        /// 文件视图、文件索引与工具遍历都据此跳过该目录。
+        /// </summary>
+        public static bool IsDataDirectoryName(string name)
+        {
+            return string.Equals(name, DirectoryName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, LegacyDirectoryName, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -83,7 +102,7 @@ namespace MiaoWu.Core.Conversations
 
         /// <summary>
         /// 会话目标状态文件的完整路径。和会话 JSONL 一样校验 ID，防止路径逃出
-        /// <c>.agent\goals</c>。
+        /// <c>.miaowu\goals</c>。
         /// </summary>
         public static string GetGoalFilePath(string workspacePath, string sessionId)
         {
@@ -109,7 +128,7 @@ namespace MiaoWu.Core.Conversations
 
         /// <summary>
         /// 会话 JSONL 的完整路径。非法 ID 抛 <see cref="ArgumentException"/>，
-        /// 防止 <c>..\..\</c> 或绝对路径逃出 <c>.agent\sessions</c>。
+        /// 防止 <c>..\..\</c> 或绝对路径逃出 <c>.miaowu\sessions</c>。
         /// </summary>
         public static string GetSessionFilePath(string workspacePath, string sessionId)
         {
@@ -140,7 +159,9 @@ namespace MiaoWu.Core.Conversations
             };
         }
 
-        /// <summary>判断路径是否位于工作区的 <c>.agent</c> 目录内（忽略大小写）。</summary>
+        /// <summary>
+        /// 判断路径是否位于工作区的数据目录（<c>.miaowu</c>，兼容旧版 <c>.agent</c>）内，忽略大小写。
+        /// </summary>
         public static bool IsInsideAgentDirectory(string workspacePath, string candidatePath)
         {
             if (string.IsNullOrWhiteSpace(workspacePath) || string.IsNullOrWhiteSpace(candidatePath))
@@ -148,12 +169,21 @@ namespace MiaoWu.Core.Conversations
                 return false;
             }
 
-            string agentDirectory = Path.GetFullPath(GetAgentDirectory(workspacePath))
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                + Path.DirectorySeparatorChar;
-
             string candidate = Path.GetFullPath(candidatePath);
-            return candidate.StartsWith(agentDirectory, StringComparison.OrdinalIgnoreCase);
+            foreach (string directoryName in new[] { DirectoryName, LegacyDirectoryName })
+            {
+                string directory = Path.GetFullPath(
+                    Path.Combine(RequirePath(workspacePath), directoryName))
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    + Path.DirectorySeparatorChar;
+
+                if (candidate.StartsWith(directory, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>由工作区模型取路径；工作区为空或路径为空时返回 <c>null</c>。</summary>

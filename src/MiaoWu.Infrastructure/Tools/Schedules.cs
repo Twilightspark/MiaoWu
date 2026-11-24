@@ -146,6 +146,9 @@ namespace MiaoWu.Infrastructure.Tools
                 Target = target,
                 SessionId = GetString(item, "sessionId"),
                 WorkspaceId = GetString(item, "workspaceId"),
+                ProviderId = GetString(item, "providerId"),
+                ModelId = GetString(item, "modelId"),
+                ReasoningEffort = GetString(item, "reasoningEffort"),
                 Active = GetBool(item, "active", true),
                 CreatedAt = created,
                 UpdatedAt = updated,
@@ -206,6 +209,9 @@ namespace MiaoWu.Infrastructure.Tools
             item["target"] = JsonValue.From(schedule.Target.ToString());
             item["sessionId"] = JsonValue.From(schedule.SessionId);
             item["workspaceId"] = JsonValue.From(schedule.WorkspaceId);
+            item["providerId"] = JsonValue.From(schedule.ProviderId);
+            item["modelId"] = JsonValue.From(schedule.ModelId);
+            item["reasoningEffort"] = JsonValue.From(schedule.ReasoningEffort);
             item["active"] = JsonValue.From(schedule.Active);
             item["createdAt"] = JsonValue.From(FormatTime(schedule.CreatedAt));
             item["updatedAt"] = JsonValue.From(FormatTime(schedule.UpdatedAt));

@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:conv="clr-namespace:MiaoWu.App.Converters"
+             xmlns:controls="clr-namespace:MiaoWu.App.Controls"
              xmlns:res="clr-namespace:MiaoWu.App.Resources"
              mc:Ignorable="d"
              d:DesignWidth="1040"
@@ -76,10 +77,12 @@
             </Setter>
         </Style>
 
+        <!-- 规则配置 / 运行记录：与左栏「会话 / 文件」同一套分段样式，
+             外层灰底 + 1px 内衬，选中项是白色卡片。 -->
         <Style x:Key="PageTabItem" TargetType="ListBoxItem">
             <Setter Property="Height" Value="{StaticResource Metric.Segment.Height}" />
-            <Setter Property="Margin" Value="0,0,4,0" />
-            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="{StaticResource Pad.Segment}" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
             <Setter Property="FontSize" Value="{StaticResource Font.Segment.Size}" />
             <Setter Property="Cursor" Value="Hand" />
@@ -116,6 +119,17 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <ContextMenu x:Key="ScheduleTaskMenu" x:Shared="False">
+            <MenuItem Header="立即执行"
+                      Command="{Binding PlacementTarget.DataContext.RunNowCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="{Binding PlacementTarget.DataContext.Editor.ToggleActiveText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      Command="{Binding PlacementTarget.DataContext.ToggleActiveCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Header="删除"
+                      Tag="Danger"
+                      Command="{Binding PlacementTarget.DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
 
         <!-- 列表行：整行可点，图标 + 两行正文；选中用 Brush.Sel，悬停用 Brush.Hover。 -->
         <Style x:Key="PageTaskItem" TargetType="ListBoxItem">
@@ -163,24 +177,241 @@
             <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
         </Style>
 
-        <!-- 重复方式 / 执行位置：单选 pill，高度 28，选中用 1px 描边。 -->
-        <Style x:Key="OptionPill" TargetType="RadioButton">
+        <!-- 表单字段标题：任务名称 / 任务内容，13/22 medium，与 DSH 的表单标题同档。 -->
+        <Style x:Key="FormFieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="Margin" Value="{StaticResource Margin.Schedules.FieldLabel}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+            <Setter Property="FontWeight" Value="{StaticResource Font.Weight.Medium}" />
+        </Style>
+
+        <!-- 分组标题：执行位置 / 运行时间，放在分组卡片上方。 -->
+        <Style x:Key="FormSectionLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="Margin" Value="{StaticResource Margin.Schedules.Section}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+            <Setter Property="FontWeight" Value="{StaticResource Font.Weight.Medium}" />
+        </Style>
+
+        <Style x:Key="FormFirstSectionLabel" TargetType="TextBlock" BasedOn="{StaticResource FormSectionLabel}">
+            <Setter Property="Margin" Value="{StaticResource Margin.Schedules.FirstSection}" />
+        </Style>
+
+        <Style x:Key="FormTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Height" Value="{StaticResource Metric.Schedules.Form.Field.Height}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.Schedules.Field}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="FormTextArea" TargetType="TextBox" BasedOn="{StaticResource FormTextBox}">
+            <Setter Property="Height" Value="{StaticResource Metric.Schedules.Form.TextArea.Height}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.Schedules.TextArea}" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        </Style>
+
+        <!-- 分组卡片的一行：46 高，左标题右值，行间用发丝线分隔。 -->
+        <Style x:Key="FormRow" TargetType="Border">
+            <Setter Property="Height" Value="{StaticResource Metric.Schedules.Form.RowHeight}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.Schedules.FormRow}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Line2}" />
+            <Setter Property="BorderThickness" Value="{StaticResource Thickness.Schedules.RowDivider}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+
+        <Style x:Key="FormRowLast" TargetType="Border" BasedOn="{StaticResource FormRow}">
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style x:Key="FormRowLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+        </Style>
+
+        <Style x:Key="FormRowValue" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- 无边框文本输入：时间、数字这类行内值用。 -->
+        <Style x:Key="FormBareBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Height" Value="{StaticResource Metric.Hit.Min}" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text}" />
+        </Style>
+
+        <!-- 重复间隔的灰色药丸壳；内部只放一个无边框数字框。 -->
+        <Style x:Key="FormNumberShell" TargetType="Border">
             <Setter Property="Height" Value="{StaticResource Metric.Schedules.Chip.Height}" />
-            <Setter Property="Margin" Value="0,0,4,0" />
-            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Padding" Value="{StaticResource Pad.Schedules.Number}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Tab}" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Schedules.Pill}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+
+        <!-- 关联工作区：灰色药丸包裹一个无边框下拉。 -->
+        <Style x:Key="FormPill" TargetType="Border">
+            <Setter Property="Height" Value="{StaticResource Metric.Schedules.Chip.Height}" />
+            <Setter Property="MinWidth" Value="{StaticResource Metric.Schedules.Pill.MinWidth}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.Schedules.Pill}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Tab}" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Schedules.Pill}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+
+        <!-- 行内下拉：无边框、当前值靠右、右侧小箭头；弹出层走菜单卡片。 -->
+        <Style x:Key="FormComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+            <Setter Property="FontSize" Value="{StaticResource Font.List.Size}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+            <Setter Property="Height" Value="{StaticResource Metric.Menu.RowHeight}" />
+            <Setter Property="Padding" Value="{StaticResource Pad.MenuItem}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd"
+                                Height="{StaticResource Metric.Menu.RowHeight}"
+                                Margin="{StaticResource Margin.MenuItem}"
+                                Background="Transparent"
+                                CornerRadius="{StaticResource Radius.MenuItem}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FormInlineComboBox" TargetType="ComboBox">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
             <Setter Property="FontSize" Value="{StaticResource Font.Body.Size}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+            <Setter Property="Height" Value="{StaticResource Metric.Schedules.Chip.Height}" />
+            <Setter Property="MinWidth" Value="{StaticResource Metric.Schedules.Selector.MinWidth}" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource FormComboBoxItem}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
+            <Setter Property="ItemTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Label}"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBoxItem}}" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter Margin="0,0,4,0"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              IsHitTestVisible="False"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                            <Path x:Name="Chevron"
+                                  Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Style="{StaticResource Icon}"
+                                  Data="{StaticResource Ico.ChevronDown}"
+                                  Fill="{DynamicResource Brush.Text3}" />
+                            <ToggleButton x:Name="ToggleButton"
+                                          Focusable="False"
+                                          IsTabStop="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                                   PopupAnimation="{DynamicResource {x:Static SystemParameters.MenuPopupAnimationKey}}"
+                                   StaysOpen="False">
+                                <Border Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.MenuHairline}"
+                                        BorderThickness="{StaticResource Thickness.MenuHairline}"
+                                        CornerRadius="{StaticResource Radius.MenuHairline}"
+                                        SnapsToDevicePixels="False"
+                                        UseLayoutRounding="False">
+                                    <Border Style="{StaticResource Menu.Surface}">
+                                        <ScrollViewer MaxHeight="240"
+                                                      Focusable="False"
+                                                      HorizontalScrollBarVisibility="Disabled"
+                                                      VerticalScrollBarVisibility="Auto">
+                                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chevron" Property="Fill" Value="{DynamicResource Brush.Text2}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Chevron" Property="Fill" Value="{DynamicResource Brush.Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="{StaticResource Opacity.Disabled}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 星期圆钮：单选器里的 28 圆，选中用 Brush.Sel2 填充。 -->
+        <Style x:Key="DayToggle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="{StaticResource Metric.Schedules.Day.Size}" />
+            <Setter Property="Height" Value="{StaticResource Metric.Schedules.Day.Size}" />
+            <Setter Property="Margin" Value="{StaticResource Margin.Schedules.Day}" />
+            <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+            <Setter Property="FontSize" Value="{StaticResource Font.List.Size}" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.Button}" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
+                    <ControlTemplate TargetType="ToggleButton">
                         <Border x:Name="Bd"
                                 Background="Transparent"
                                 BorderBrush="Transparent"
                                 BorderThickness="1"
-                                CornerRadius="{StaticResource Radius.SegmentItem}"
-                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="{StaticResource Radius.Schedules.Day}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
@@ -191,42 +422,21 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Canvas}" />
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.TabBorder}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Sel2}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Sel2}" />
                                 <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                                <Setter Property="FontWeight" Value="{StaticResource Font.Weight.Medium}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="{StaticResource Opacity.Disabled}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-        </Style>
-
-        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Meta}">
-            <Setter Property="Margin" Value="0,0,0,4" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
-        </Style>
-
-        <Style x:Key="FieldBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-            <Setter Property="Height" Value="{StaticResource Metric.Field.Height}" />
-            <Setter Property="Padding" Value="{StaticResource Pad.Field}" />
-        </Style>
-
-        <Style x:Key="FieldBlock" TargetType="TextBox" BasedOn="{StaticResource FieldBox}">
-            <Setter Property="Height" Value="{StaticResource Metric.Schedules.TextArea.Height}" />
-            <Setter Property="AcceptsReturn" Value="True" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-            <Setter Property="VerticalContentAlignment" Value="Top" />
-            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
-        </Style>
-
-        <Style x:Key="MetaValue" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
-            <Setter Property="TextWrapping" Value="Wrap" />
-            <Setter Property="FontSize" Value="{StaticResource Font.List.Size}" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
         </Style>
     </UserControl.Resources>
 
@@ -264,12 +474,13 @@
         </Grid>
 
         <Grid Grid.Row="1"
+              x:Name="SchedulesContent"
+              SizeChanged="OnSchedulesContentSizeChanged"
               MaxWidth="{StaticResource Metric.Schedules.Content.MaxWidth}"
               HorizontalAlignment="Stretch">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="53*" />
+                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="47*" />
             </Grid.ColumnDefinitions>
 
             <!-- 左列：筛选 + 搜索 + 新建 + 任务列表 -->
@@ -302,7 +513,7 @@
                     <Grid>
                         <TextBox x:Name="SearchBox"
                                  Height="{StaticResource Metric.Field.Height}"
-                                 Padding="{StaticResource Pad.Field}"
+                                 Padding="{StaticResource Pad.Schedules.Field}"
                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                                  VerticalContentAlignment="Center"
                                  AutomationProperties.Name="{x:Static res:Strings.SchedulesSearchHint}"
@@ -374,19 +585,16 @@
                            TextWrapping="Wrap" />
             </Grid>
 
-            <Border Grid.Column="1"
-                    Width="1"
-                    Background="{DynamicResource Brush.Line2}" />
-
-            <!-- 右列：详情 / 编辑 / 运行记录 -->
-                    <Grid Grid.Column="2" Margin="{StaticResource Pad.Schedules.Detail}">
-                <TextBlock Text="{Binding EmptyText}"
-                           Style="{StaticResource Text.Empty}"
-                           MaxWidth="300"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
-
+            <!-- 右列：详情 / 编辑 / 运行记录。默认收起（列表占满整页），
+                 选中任务或新建草稿时由 CollapsiblePane 从右侧滑出。 -->
+            <controls:CollapsiblePane x:Name="SchedulesDetailPane"
+                                      Grid.Column="1"
+                                      IsCollapsed="{Binding IsDetailCollapsed}">
+                <Border Width="{Binding ElementName=SchedulesDetailPane, Path=ExpandedWidth}"
+                        HorizontalAlignment="Right"
+                        BorderBrush="{DynamicResource Brush.Line2}"
+                        BorderThickness="1,0,0,0">
+                    <Grid Margin="{StaticResource Pad.Schedules.Detail}">
                 <Grid Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -394,45 +602,54 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- 详情头：标题 / 状态 + 动作 -->
+                    <!-- 详情头：标题 / 状态在左，规则配置 / 运行记录分段与任务菜单在右。 -->
                     <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Editor.HeaderTitle}"
-                                       Style="{StaticResource Text.H2}"
-                                       VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" />
-                            <Border Style="{StaticResource Chip}"
-                                    Margin="8,0,0,0"
-                                    Visibility="{Binding Editor.IsExisting, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{Binding Editor.StatusLabel}"
-                                           Style="{StaticResource Text.Chip}"
-                                           Foreground="{DynamicResource Brush.Text2}" />
-                            </Border>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Right"
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"
+                                   Text="{Binding Editor.HeaderTitle}"
+                                   Style="{StaticResource Text.H2}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
                                     VerticalAlignment="Center">
-                            <Button Style="{StaticResource Button.Ghost}"
-                                    Command="{Binding ToggleActiveCommand}"
-                                    Content="{Binding Editor.ToggleActiveText}"
-                                    AutomationProperties.Name="{Binding Editor.ToggleActiveText}"
+                            <Border Margin="0,0,8,0"
+                                    Padding="1"
+                                    Background="{DynamicResource Brush.Sel}"
+                                    CornerRadius="{StaticResource Radius.Segment}"
+                                    Visibility="{Binding Editor.IsExisting, Converter={StaticResource BoolToVisibility}}">
+                                <ListBox Style="{StaticResource PageChipList}"
+                                         ItemsSource="{Binding Tabs}"
+                                         SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                                         AutomationProperties.Name="{x:Static res:Strings.SchedulesTabsAutomation}"
+                                         KeyboardNavigation.TabIndex="15">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource PageTabItem}" />
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                            <Button x:Name="TaskMenuButton"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource Button.Icon}"
+                                    Click="OnTaskMenuClick"
+                                    ContextMenu="{StaticResource ScheduleTaskMenu}"
+                                    ToolTip="任务操作"
+                                    AutomationProperties.Name="任务操作"
                                     Visibility="{Binding Editor.IsExisting, Converter={StaticResource BoolToVisibility}}"
-                                    KeyboardNavigation.TabIndex="10" />
-                            <Button Style="{StaticResource Button.Ghost}"
-                                    Margin="4,0,0,0"
-                                    Command="{Binding RunNowCommand}"
-                                    Content="{x:Static res:Strings.SchedulesRunNow}"
-                                    AutomationProperties.Name="{x:Static res:Strings.SchedulesRunNow}"
-                                    Visibility="{Binding Editor.IsExisting, Converter={StaticResource BoolToVisibility}}"
-                                    KeyboardNavigation.TabIndex="11" />
-                            <Button Style="{StaticResource Button.Ghost}"
-                                    Margin="4,0,0,0"
-                                    Foreground="{DynamicResource Brush.Danger}"
-                                    Command="{Binding DeleteCommand}"
-                                    Content="{x:Static res:Strings.SchedulesDelete}"
-                                    AutomationProperties.Name="{x:Static res:Strings.SchedulesDelete}"
-                                    Visibility="{Binding Editor.IsExisting, Converter={StaticResource BoolToVisibility}}"
-                                    KeyboardNavigation.TabIndex="12" />
+                                    KeyboardNavigation.TabIndex="10">
+                                <Path Style="{StaticResource Icon.Solid}"
+                                      Data="{StaticResource Ico.More}"
+                                      Fill="{DynamicResource Brush.Text3}" />
+                            </Button>
                         </StackPanel>
                     </Grid>
 
@@ -466,157 +683,255 @@
 
                     <Grid Grid.Row="2">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <ListBox Grid.Row="0"
-                                 Style="{StaticResource PageChipList}"
-                                 ItemsSource="{Binding Tabs}"
-                                 SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
-                                 AutomationProperties.Name="{x:Static res:Strings.SchedulesTabsAutomation}"
-                                 KeyboardNavigation.TabIndex="15">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource PageTabItem}" />
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Label}" />
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-
-                        <!-- 规则页 -->
-                        <ScrollViewer Grid.Row="1"
-                                      Margin="0,10,0,0"
+                        <!-- 规则页：上方是手填字段，下方是执行位置与运行时间两张分组卡片。 -->
+                        <ScrollViewer Grid.Row="0"
                                       Padding="0,0,12,0"
                                       Style="{StaticResource ScrollViewer.Overlay}"
                                       Visibility="{Binding IsHistoryTab, Converter={StaticResource InverseBoolToVisibility}}">
                             <StackPanel>
-                                <StackPanel Margin="{StaticResource Margin.Schedules.Field}"
-                                            Visibility="{Binding Editor.IsExisting, Converter={StaticResource BoolToVisibility}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="下次运行" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" />
-                                        <TextBlock Text="{Binding Editor.NextRunLabel}" Style="{StaticResource MetaValue}" />
-                                        <TextBlock Text="上次" Style="{StaticResource FieldLabel}" Margin="16,0,6,0" />
-                                        <TextBlock Text="{Binding Editor.LastRunLabel}" Style="{StaticResource MetaValue}" />
+                                <TextBlock Text="{x:Static res:Strings.SchedulesNameLabel}" Style="{StaticResource FormFieldLabel}" />
+                                <Grid Margin="{StaticResource Margin.Schedules.NameField}">
+                                    <TextBox x:Name="TitleBox"
+                                             Text="{Binding Editor.Title, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource FormTextBox}"
+                                             MaxLength="120"
+                                             AutomationProperties.Name="{x:Static res:Strings.SchedulesNameLabel}"
+                                             KeyboardNavigation.TabIndex="20" />
+                                    <TextBlock x:Name="TitleHint"
+                                               Margin="10,0,0,0"
+                                               VerticalAlignment="Center"
+                                               IsHitTestVisible="False"
+                                               Text="例如：每日阅读摘要"
+                                               Style="{StaticResource Text.Body}"
+                                               LineHeight="{StaticResource Font.Composer.Line}"
+                                               Foreground="{DynamicResource Brush.Text3}"
+                                               Visibility="{Binding Editor.Title, Converter={StaticResource EmptyStringToVisibility}}" />
+                                </Grid>
+
+                                <TextBlock Text="{x:Static res:Strings.SchedulesContentLabel}" Style="{StaticResource FormFieldLabel}" />
+                                <Grid Margin="{StaticResource Margin.Schedules.ContentField}">
+                                    <TextBox x:Name="PromptBox"
+                                             Text="{Binding Editor.Prompt, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource FormTextArea}"
+                                             AutomationProperties.Name="{x:Static res:Strings.SchedulesContentLabel}"
+                                             KeyboardNavigation.TabIndex="21" />
+                                    <StackPanel x:Name="PromptHint"
+                                                Margin="10,5,10,0"
+                                                VerticalAlignment="Top"
+                                                IsHitTestVisible="False"
+                                                Visibility="{Binding Editor.Prompt, Converter={StaticResource EmptyStringToVisibility}}">
+                                        <TextBlock Text="说明任务内容和预期结果"
+                                                   Style="{StaticResource Text.Body}"
+                                                   LineHeight="{StaticResource Font.Composer.Line}"
+                                                   Foreground="{DynamicResource Brush.Text3}" />
+                                        <TextBlock Text="例如：汇总阅读清单中的新文章，并附原文链接"
+                                                   Style="{StaticResource Text.Body}"
+                                                   LineHeight="{StaticResource Font.Composer.Line}"
+                                                   Foreground="{DynamicResource Brush.Text3}" />
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                        <TextBlock Text="执行位置" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" />
-                                        <TextBlock Text="{Binding Editor.SessionLabel}" Style="{StaticResource MetaValue}" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                        <TextBlock Text="工作区" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" />
-                                        <TextBlock Text="{Binding Editor.WorkspaceLabel}" Style="{StaticResource MetaValue}" />
-                                    </StackPanel>
-                                </StackPanel>
+                                </Grid>
 
-                                <Border Height="1" Background="{DynamicResource Brush.Line2}" Margin="0,0,0,12" />
-
-                                <TextBlock Text="名称" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding Editor.Title, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource FieldBox}"
-                                         Margin="{StaticResource Margin.Schedules.Field}"
-                                         MaxLength="120"
-                                         AutomationProperties.Name="{x:Static res:Strings.SchedulesNameLabel}"
-                                         KeyboardNavigation.TabIndex="20" />
-
-                                <TextBlock Text="内容" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding Editor.Prompt, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource FieldBlock}"
-                                         Margin="{StaticResource Margin.Schedules.Field}"
-                                         AutomationProperties.Name="{x:Static res:Strings.SchedulesContentLabel}"
-                                         KeyboardNavigation.TabIndex="21" />
-
-                                <TextBlock Text="重复" Style="{StaticResource FieldLabel}" />
-                                <WrapPanel Margin="0,0,0,12">
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleRepeatMode"
-                                                 Content="仅一次"
-                                                 IsChecked="{Binding Editor.IsOnce, Mode=TwoWay}"
-                                                 AutomationProperties.Name="仅一次" />
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleRepeatMode"
-                                                 Content="每天"
-                                                 IsChecked="{Binding Editor.IsDaily, Mode=TwoWay}"
-                                                 AutomationProperties.Name="每天" />
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleRepeatMode"
-                                                 Content="每周"
-                                                 IsChecked="{Binding Editor.IsWeekly, Mode=TwoWay}"
-                                                 AutomationProperties.Name="每周" />
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleRepeatMode"
-                                                 Content="每月"
-                                                 IsChecked="{Binding Editor.IsMonthly, Mode=TwoWay}"
-                                                 AutomationProperties.Name="每月" />
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleRepeatMode"
-                                                 Content="自定义"
-                                                 IsChecked="{Binding Editor.IsCustom, Mode=TwoWay}"
-                                                 AutomationProperties.Name="自定义规则" />
-                                </WrapPanel>
-
-                                <StackPanel Orientation="Horizontal"
-                                            Margin="0,0,0,12"
-                                            Visibility="{Binding Editor.IsCustom, Converter={StaticResource InverseBoolToVisibility}}">
+                                <TextBlock Text="执行配置" Style="{StaticResource FormFirstSectionLabel}" />
+                                <Border Background="{DynamicResource Brush.Canvas}"
+                                        BorderBrush="{DynamicResource Brush.Line2}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource Radius.Schedules.Card}"
+                                        SnapsToDevicePixels="True">
                                     <StackPanel>
-                                        <TextBlock Text="时间" Style="{StaticResource FieldLabel}" />
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBox Width="44"
-                                                     Style="{StaticResource FieldBox}"
-                                                     Text="{Binding Editor.HourText, UpdateSourceTrigger=PropertyChanged}"
-                                                     MaxLength="2"
-                                                     HorizontalContentAlignment="Center"
-                                                     AutomationProperties.Name="小时"
-                                                     KeyboardNavigation.TabIndex="22" />
-                                            <TextBlock Text=":" Margin="4,0" VerticalAlignment="Center" Style="{StaticResource Text.Body}" />
-                                            <TextBox Width="44"
-                                                     Style="{StaticResource FieldBox}"
-                                                     Text="{Binding Editor.MinuteText, UpdateSourceTrigger=PropertyChanged}"
-                                                     MaxLength="2"
-                                                     HorizontalContentAlignment="Center"
-                                                     AutomationProperties.Name="分钟"
-                                                     KeyboardNavigation.TabIndex="23" />
-                                        </StackPanel>
+                                        <Border Style="{StaticResource FormRow}">
+                                            <Grid>
+                                                <TextBlock Text="执行位置" Style="{StaticResource FormRowLabel}" />
+                                                <ComboBox ItemsSource="{Binding Editor.TargetOptions}"
+                                                          SelectedItem="{Binding Editor.SelectedTargetOption, Mode=TwoWay}"
+                                                          Style="{StaticResource FormInlineComboBox}"
+                                                          AutomationProperties.Name="执行位置"
+                                                          KeyboardNavigation.TabIndex="22" />
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource FormRow}">
+                                            <Grid>
+                                                <TextBlock Text="关联工作区" Style="{StaticResource FormRowLabel}" />
+                                                <Border Style="{StaticResource FormPill}"
+                                                        Visibility="{Binding Editor.HasWorkspaceOptions, Converter={StaticResource BoolToVisibility}}">
+                                                    <Grid>
+                                                        <ComboBox ItemsSource="{Binding Editor.WorkspaceOptions}"
+                                                                  SelectedItem="{Binding Editor.SelectedWorkspaceOption, Mode=TwoWay}"
+                                                                  Style="{StaticResource FormInlineComboBox}"
+                                                                  MinWidth="0"
+                                                                  AutomationProperties.Name="关联工作区"
+                                                                  KeyboardNavigation.TabIndex="23" />
+                                                        <TextBlock Text="选择工作区"
+                                                                   VerticalAlignment="Center"
+                                                                   HorizontalAlignment="Left"
+                                                                   IsHitTestVisible="False"
+                                                                   Style="{StaticResource Text.Body}"
+                                                                   Foreground="{DynamicResource Brush.Text3}"
+                                                                   Visibility="{Binding Editor.HasSelectedWorkspace, Converter={StaticResource InverseBoolToVisibility}}" />
+                                                    </Grid>
+                                                </Border>
+                                                <TextBlock Text="未关联工作区"
+                                                           Style="{StaticResource FormRowValue}"
+                                                           Visibility="{Binding Editor.HasWorkspaceOptions, Converter={StaticResource InverseBoolToVisibility}}" />
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource FormRow}">
+                                            <Grid>
+                                                <TextBlock Text="执行模型" Style="{StaticResource FormRowLabel}" />
+                                                <ComboBox x:Name="ModelCombo"
+                                                          ItemsSource="{Binding Editor.ModelOptions}"
+                                                          SelectedItem="{Binding Editor.SelectedModelOption, Mode=OneWay}"
+                                                          SelectionChanged="OnModelSelectionChanged"
+                                                          Style="{StaticResource FormInlineComboBox}"
+                                                          MaxWidth="230"
+                                                          ToolTip="{Binding Editor.SelectedModelOption.Label}"
+                                                          AutomationProperties.Name="执行模型"
+                                                          KeyboardNavigation.TabIndex="24" />
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource FormRowLast}">
+                                            <Grid>
+                                                <TextBlock Text="推理等级" Style="{StaticResource FormRowLabel}" />
+                                                <ComboBox ItemsSource="{Binding Editor.ReasoningOptions}"
+                                                          SelectedItem="{Binding Editor.SelectedReasoningOption, Mode=TwoWay}"
+                                                          Style="{StaticResource FormInlineComboBox}"
+                                                          IsEnabled="{Binding Editor.IsReasoningEnabled}"
+                                                          AutomationProperties.Name="推理等级"
+                                                          KeyboardNavigation.TabIndex="25" />
+                                            </Grid>
+                                        </Border>
                                     </StackPanel>
-                                    <StackPanel Margin="16,0,0,0"
+                                </Border>
+
+                                <TextBlock Text="运行时间" Style="{StaticResource FormSectionLabel}" />
+                                <Border Background="{DynamicResource Brush.Canvas}"
+                                        BorderBrush="{DynamicResource Brush.Line2}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource Radius.Schedules.Card}"
+                                        SnapsToDevicePixels="True">
+                                    <StackPanel>
+                                        <Border Style="{StaticResource FormRow}">
+                                            <Grid>
+                                                <TextBlock Text="重复" Style="{StaticResource FormRowLabel}" />
+                                                <ComboBox ItemsSource="{Binding Editor.RepeatOptions}"
+                                                          SelectedItem="{Binding Editor.SelectedRepeatOption, Mode=TwoWay}"
+                                                          Style="{StaticResource FormInlineComboBox}"
+                                                          AutomationProperties.Name="重复"
+                                                          KeyboardNavigation.TabIndex="24" />
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Style="{StaticResource FormRow}"
                                                 Visibility="{Binding Editor.ShowsInterval, Converter={StaticResource BoolToVisibility}}">
-                                        <TextBlock Text="间隔" Style="{StaticResource FieldLabel}" />
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="每" Margin="0,0,6,0" VerticalAlignment="Center" Style="{StaticResource Text.Body}" />
-                                            <TextBox Width="56"
-                                                     Style="{StaticResource FieldBox}"
-                                                     Text="{Binding Editor.IntervalText, UpdateSourceTrigger=PropertyChanged}"
-                                                     MaxLength="3"
-                                                     HorizontalContentAlignment="Center"
-                                                     AutomationProperties.Name="间隔"
-                                                     KeyboardNavigation.TabIndex="24" />
-                                            <TextBlock Text="{Binding Editor.IntervalUnit}" Margin="6,0,0,0" VerticalAlignment="Center" Style="{StaticResource Text.Body}" />
-                                        </StackPanel>
+                                            <Grid>
+                                                <TextBlock Text="重复间隔" Style="{StaticResource FormRowLabel}" />
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="每"
+                                                               VerticalAlignment="Center"
+                                                               Style="{StaticResource Text.Body}"
+                                                               Foreground="{DynamicResource Brush.Text2}"
+                                                               Margin="0,0,6,0" />
+                                                    <Border Style="{StaticResource FormNumberShell}">
+                                                        <TextBox Style="{StaticResource FormBareBox}"
+                                                                 Width="{StaticResource Metric.Schedules.Number.Width}"
+                                                                 TextAlignment="Center"
+                                                                 MaxLength="3"
+                                                                 Text="{Binding Editor.IntervalText, UpdateSourceTrigger=PropertyChanged}"
+                                                                 AutomationProperties.Name="重复间隔"
+                                                                 KeyboardNavigation.TabIndex="25" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Editor.IntervalUnit}"
+                                                               VerticalAlignment="Center"
+                                                               Style="{StaticResource Text.Body}"
+                                                               Foreground="{DynamicResource Brush.Text2}"
+                                                               Margin="6,0,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Style="{StaticResource FormRow}"
+                                                Visibility="{Binding Editor.ShowsWeekdays, Converter={StaticResource BoolToVisibility}}">
+                                            <Grid>
+                                                <TextBlock Text="星期" Style="{StaticResource FormRowLabel}" />
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center">
+                                                    <ToggleButton Style="{StaticResource DayToggle}"
+                                                                  Content="一"
+                                                                  IsChecked="{Binding Editor.Monday, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="周一" />
+                                                    <ToggleButton Style="{StaticResource DayToggle}"
+                                                                  Content="二"
+                                                                  IsChecked="{Binding Editor.Tuesday, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="周二" />
+                                                    <ToggleButton Style="{StaticResource DayToggle}"
+                                                                  Content="三"
+                                                                  IsChecked="{Binding Editor.Wednesday, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="周三" />
+                                                    <ToggleButton Style="{StaticResource DayToggle}"
+                                                                  Content="四"
+                                                                  IsChecked="{Binding Editor.Thursday, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="周四" />
+                                                    <ToggleButton Style="{StaticResource DayToggle}"
+                                                                  Content="五"
+                                                                  IsChecked="{Binding Editor.Friday, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="周五" />
+                                                    <ToggleButton Style="{StaticResource DayToggle}"
+                                                                  Content="六"
+                                                                  IsChecked="{Binding Editor.Saturday, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="周六" />
+                                                    <ToggleButton Style="{StaticResource DayToggle}"
+                                                                  Content="日"
+                                                                  Margin="0"
+                                                                  IsChecked="{Binding Editor.Sunday, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="周日" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Style="{StaticResource FormRow}"
+                                                Visibility="{Binding Editor.ShowsTime, Converter={StaticResource BoolToVisibility}}">
+                                            <Grid>
+                                                <TextBlock Text="时间" Style="{StaticResource FormRowLabel}" />
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center">
+                                                    <TextBox Style="{StaticResource FormBareBox}"
+                                                             Width="{StaticResource Metric.Schedules.Time.Width}"
+                                                             TextAlignment="Right"
+                                                             MaxLength="8"
+                                                             Text="{Binding Editor.TimeText, UpdateSourceTrigger=PropertyChanged}"
+                                                             AutomationProperties.Name="时间，格式 时:分:秒"
+                                                             KeyboardNavigation.TabIndex="26" />
+                                                    <Path Style="{StaticResource Icon.Stroke.Exact}"
+                                                          Data="{StaticResource Ico.Clock}"
+                                                          Stroke="{DynamicResource Brush.Text3}"
+                                                          Margin="6,0,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Style="{StaticResource FormRowLast}">
+                                            <Grid>
+                                                <TextBlock Text="时区" Style="{StaticResource FormRowLabel}" />
+                                                <TextBlock Text="{Binding Editor.TimeZoneLabel}"
+                                                           Style="{StaticResource FormRowValue}" />
+                                            </Grid>
+                                        </Border>
                                     </StackPanel>
-                                </StackPanel>
+                                </Border>
 
-                                <StackPanel Margin="0,0,0,12"
-                                            Visibility="{Binding Editor.ShowsWeekdays, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="星期" Style="{StaticResource FieldLabel}" />
-                                    <WrapPanel>
-                                        <CheckBox Content="一" Margin="0,0,10,0" IsChecked="{Binding Editor.Monday, Mode=TwoWay}" />
-                                        <CheckBox Content="二" Margin="0,0,10,0" IsChecked="{Binding Editor.Tuesday, Mode=TwoWay}" />
-                                        <CheckBox Content="三" Margin="0,0,10,0" IsChecked="{Binding Editor.Wednesday, Mode=TwoWay}" />
-                                        <CheckBox Content="四" Margin="0,0,10,0" IsChecked="{Binding Editor.Thursday, Mode=TwoWay}" />
-                                        <CheckBox Content="五" Margin="0,0,10,0" IsChecked="{Binding Editor.Friday, Mode=TwoWay}" />
-                                        <CheckBox Content="六" Margin="0,0,10,0" IsChecked="{Binding Editor.Saturday, Mode=TwoWay}" />
-                                        <CheckBox Content="日" IsChecked="{Binding Editor.Sunday, Mode=TwoWay}" />
-                                    </WrapPanel>
-                                </StackPanel>
-
-                                <StackPanel Margin="{StaticResource Margin.Schedules.Field}"
+                                <StackPanel Margin="0,14,0,12"
                                             Visibility="{Binding Editor.ShowsCustomRule, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="自定义规则" Style="{StaticResource FieldLabel}" />
+                                    <TextBlock Text="自定义规则" Style="{StaticResource FormFieldLabel}" />
                                     <TextBox Text="{Binding Editor.CustomRule, UpdateSourceTrigger=PropertyChanged}"
                                              Height="{StaticResource Metric.Schedules.RuleArea.Height}"
+                                             Padding="{StaticResource Pad.Schedules.Field}"
                                              AcceptsReturn="True"
                                              TextWrapping="NoWrap"
                                              FontFamily="{StaticResource Font.Family.Code}"
@@ -625,7 +940,7 @@
                                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                                              AutomationProperties.Name="自定义规则"
-                                             KeyboardNavigation.TabIndex="25" />
+                                             KeyboardNavigation.TabIndex="27" />
                                     <TextBlock Margin="0,4,0,0"
                                                Text="两行：DTSTART:20260101T090000 与 RRULE:FREQ=DAILY"
                                                Style="{StaticResource Text.Meta}" />
@@ -638,43 +953,11 @@
                                            Margin="0,0,0,8"
                                            Visibility="{Binding Editor.HasError, Converter={StaticResource BoolToVisibility}}" />
 
-                                <StackPanel Margin="{StaticResource Margin.Schedules.Preview}"
-                                            Visibility="{Binding Editor.ShowsPreview, Converter={StaticResource BoolToVisibility}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="规则预览" Style="{StaticResource Text.Meta}" />
-                                        <TextBlock Text="{Binding Editor.RulePreview}" Style="{StaticResource Text.Meta}" Margin="8,0,0,0" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                        <TextBlock Text="下次预览" Style="{StaticResource Text.Meta}" />
-                                        <TextBlock Text="{Binding Editor.NextRunPreview}" Style="{StaticResource Text.Meta}" Margin="8,0,0,0" />
-                                    </StackPanel>
-                                </StackPanel>
-
-                                <TextBlock Text="执行位置" Style="{StaticResource FieldLabel}" Margin="0,16,0,4" />
-                                <WrapPanel Margin="0,0,0,4">
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleTarget"
-                                                 Content="新建会话并复用"
-                                                 IsChecked="{Binding Editor.IsTargetNewOnce, Mode=TwoWay}"
-                                                 AutomationProperties.Name="新建会话并复用" />
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleTarget"
-                                                 Content="当前会话"
-                                                 IsChecked="{Binding Editor.IsTargetThisSession, Mode=TwoWay}"
-                                                 AutomationProperties.Name="当前会话" />
-                                    <RadioButton Style="{StaticResource OptionPill}"
-                                                 GroupName="ScheduleTarget"
-                                                 Content="每次新建会话"
-                                                 IsChecked="{Binding Editor.IsTargetNew, Mode=TwoWay}"
-                                                 AutomationProperties.Name="每次新建会话" />
-                                </WrapPanel>
-                                <TextBlock Text="{Binding Editor.SessionLabel}" Style="{StaticResource Text.Meta}" />
                             </StackPanel>
                         </ScrollViewer>
 
                         <!-- 运行记录页 -->
-                        <ScrollViewer Grid.Row="1"
-                                      Margin="0,10,0,0"
+                        <ScrollViewer Grid.Row="0"
                                       Padding="0,0,12,0"
                                       Style="{StaticResource ScrollViewer.Overlay}"
                                       Visibility="{Binding IsHistoryTab, Converter={StaticResource BoolToVisibility}}">
@@ -711,11 +994,9 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- 底栏：放弃 / 保存；运行记录页没有可保存的字段，整行收起。 -->
-                        <Border Grid.Row="2"
-                                BorderBrush="{DynamicResource Brush.Line2}"
-                                BorderThickness="0,1,0,0"
-                                Padding="0,10,0,0"
+                        <!-- 底栏：右侧放弃 / 创建（编辑时为保存）。运行记录页整行收起。 -->
+                        <Border Grid.Row="1"
+                                Padding="0,12,0,0"
                                 Visibility="{Binding IsHistoryTab, Converter={StaticResource InverseBoolToVisibility}}">
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Right">
@@ -727,16 +1008,19 @@
                                 <Button Style="{StaticResource Button.Primary}"
                                         Margin="8,0,0,0"
                                         Height="{StaticResource Metric.Field.Height}"
+                                        MinWidth="64"
                                         Command="{Binding SaveCommand}"
                                         IsEnabled="{Binding Editor.CanSave}"
-                                        Content="{x:Static res:Strings.SchedulesSave}"
-                                        AutomationProperties.Name="{x:Static res:Strings.SchedulesSave}"
+                                        Content="{Binding Editor.SaveButtonText}"
+                                        AutomationProperties.Name="{Binding Editor.SaveButtonText}"
                                         KeyboardNavigation.TabIndex="31" />
                             </StackPanel>
                         </Border>
                     </Grid>
                 </Grid>
-            </Grid>
+                    </Grid>
+                </Border>
+            </controls:CollapsiblePane>
         </Grid>
     </Grid>
 </UserControl>

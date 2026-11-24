@@ -73,6 +73,15 @@ namespace MiaoWu.Core.Agents.Schedules
 
         public string WorkspaceId { get; set; }
 
+        /// <summary>执行模型所属 Provider；为空表示跟随默认模型。</summary>
+        public string ProviderId { get; set; }
+
+        /// <summary>执行模型 id；为空表示跟随默认模型。</summary>
+        public string ModelId { get; set; }
+
+        /// <summary>推理等级：空表示默认档，其余为 low / medium / high。</summary>
+        public string ReasoningEffort { get; set; }
+
         public bool Active { get; set; }
 
         public DateTimeOffset CreatedAt { get; set; }
@@ -154,11 +163,15 @@ namespace MiaoWu.Core.Agents.Schedules
             string rule,
             ScheduleTarget target,
             string sessionId,
-            string workspaceId);
+            string workspaceId,
+            string providerId = null,
+            string modelId = null,
+            string reasoningEffort = null);
 
         /// <summary>
-        /// 编辑；传 null 表示不改该字段。带 <paramref name="expectedUpdatedAt"/> 时按 CAS 校验，
-        /// 与当前版本不一致返回 <see cref="ScheduleUpdateStatus.Conflict"/> 且不写入。
+        /// 编辑；传 null 表示不改该字段（模型 / 推理等级传空串表示清回默认）。
+        /// 带 <paramref name="expectedUpdatedAt"/> 时按 CAS 校验，与当前版本不一致返回
+        /// <see cref="ScheduleUpdateStatus.Conflict"/> 且不写入。
         /// </summary>
         ScheduleUpdateResult Update(
             string id,
@@ -169,7 +182,10 @@ namespace MiaoWu.Core.Agents.Schedules
             DateTimeOffset? expectedUpdatedAt = null,
             ScheduleTarget? target = null,
             string sessionId = null,
-            string workspaceId = null);
+            string workspaceId = null,
+            string providerId = null,
+            string modelId = null,
+            string reasoningEffort = null);
 
         /// <summary>删除任务及其投递记录；已排进会话的消息不撤回。</summary>
         bool Delete(string id);

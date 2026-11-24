@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using MiaoWu.Core.Abstractions;
+using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Workspaces;
 
 namespace MiaoWu.Infrastructure.Workspaces
@@ -45,6 +46,12 @@ namespace MiaoWu.Infrastructure.Workspaces
 
                     bool isDirectory = (attributes & FileAttributes.Directory) != 0;
                     bool isReparsePoint = (attributes & FileAttributes.ReparsePoint) != 0;
+
+                    // 工作区数据目录（.miaowu，兼容旧版 .agent）属于应用内部状态，不在文件视图出现。
+                    if (isDirectory && AgentWorkspaceLayout.IsDataDirectoryName(entry.Name))
+                    {
+                        continue;
+                    }
 
                     nodes.Add(new FileNode(entry.Name, entry.FullName, isDirectory, depth)
                     {

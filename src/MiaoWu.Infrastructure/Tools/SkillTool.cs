@@ -5,11 +5,12 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Agents.Tools;
+using MiaoWu.Core.Conversations;
 
 namespace MiaoWu.Infrastructure.Tools
 {
     /// <summary>
-    /// skill：列出或加载技能。扫描「工作区 .agent\skills」与「用户级技能目录」，
+    /// skill：列出或加载技能。扫描「工作区 .miaowu\skills」与「用户级技能目录」，
     /// 同名时工作区优先；不带 name 只返回目录（名称 + 一行描述），带 name 才返回正文。
     /// 对齐 DSH「目录常驻、正文按需加载」的用法。
     /// </summary>
@@ -133,7 +134,7 @@ namespace MiaoWu.Infrastructure.Tools
             string workspaceRoot = context == null ? null : context.WorkspaceRoot;
             if (!string.IsNullOrWhiteSpace(workspaceRoot))
             {
-                AddDirectory(skills, seen, Path.Combine(workspaceRoot, ".agent", "skills"));
+                AddDirectory(skills, seen, AgentWorkspaceLayout.GetSkillsDirectory(workspaceRoot));
             }
 
             AddDirectory(skills, seen, _userSkillsDirectory);
@@ -239,7 +240,7 @@ namespace MiaoWu.Infrastructure.Tools
         {
             if (skills.Count == 0)
             {
-                return "（没有可用技能。把 Markdown 放进 .agent\\skills 或用户级 skills 目录即可。）";
+                return "（没有可用技能。把 Markdown 放进 .miaowu\\skills 或用户级 skills 目录即可。）";
             }
 
             var builder = new StringBuilder();

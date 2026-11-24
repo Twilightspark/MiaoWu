@@ -5,12 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Agents.Tools;
+using MiaoWu.Core.Conversations;
 
 namespace MiaoWu.Infrastructure.Tools
 {
     /// <summary>
     /// 统一工具输出预算：2000 行 / 50 KB；命令取尾部，其余取头部。
-    /// 溢出正文写到 &lt;workspace&gt;\.agent\cache\tool-output。
+    /// 溢出正文写到 &lt;workspace&gt;\.miaowu\cache\tool-output。
     /// </summary>
     public static class ToolOutputBudget
     {
@@ -108,9 +109,7 @@ namespace MiaoWu.Infrastructure.Tools
                 string safeSession = Sanitize(sessionId);
                 string safeCall = Sanitize(callId);
                 string directory = Path.Combine(
-                    workspaceRoot,
-                    ".agent",
-                    "cache",
+                    AgentWorkspaceLayout.GetCacheDirectory(workspaceRoot),
                     "tool-output",
                     safeSession);
 

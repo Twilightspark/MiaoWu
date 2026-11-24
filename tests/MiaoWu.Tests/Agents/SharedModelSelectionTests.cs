@@ -145,6 +145,24 @@ namespace MiaoWu.Tests.Agents
             Assert.Equal("medium", _api.LastRequest.ReasoningEffort);
         }
 
+        [Fact]
+        public async Task ReasoningEffortOnInputOverridesSessionDefault()
+        {
+            _api.EnqueueText("答");
+
+            AgentSessionOptions options = Options("s_reasoning_override", "p", "m");
+            options.ReasoningEffortProvider = () => "low";
+            IAgentSession session = await _runtime.GetOrCreateAsync(options, CancellationToken.None);
+
+            AgentInput input = TextInput("用任务自己的等级");
+            input.ReasoningEffort = "high";
+            AgentRun run = await session.SendAsync(input, AgentSendMode.Queue, CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            Assert.Equal("high", _api.LastRequest.ReasoningEffort);
+        }
+
         private static AgentSessionOptions Options(string id, string providerId, string modelId)
         {
             return new AgentSessionOptions

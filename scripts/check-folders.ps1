@@ -102,7 +102,7 @@ $targets = @(
 )
 
 if (-not [string]::IsNullOrWhiteSpace($Workspace)) {
-    $agent = Join-Path $Workspace '.agent'
+    $agent = Join-Path $Workspace '.miaowu'
     $targets += @(
         $Workspace,
         $agent,

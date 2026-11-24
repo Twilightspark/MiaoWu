@@ -23,6 +23,7 @@ namespace MiaoWu.Infrastructure.Tools
             builder.Append(definition.Id).Append(" · ").Append(definition.Title).Append('\n');
             builder.Append("  规则：").Append(DescribeRule(definition.Rule)).Append('\n');
             builder.Append("  目标：").Append(DescribeTarget(definition.Target)).Append('\n');
+            builder.Append("  执行：").Append(DescribeExecution(definition)).Append('\n');
             builder.Append("  状态：").Append(definition.Active ? "启用" : "已停用").Append('\n');
             builder.Append("  下次：").Append(Format(definition.NextRunAt)).Append('\n');
             builder.Append("  已投递：").Append(definition.RunCount.ToString(CultureInfo.InvariantCulture)).Append(" 次");
@@ -47,6 +48,19 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 return Trim(rule, 80);
             }
+        }
+
+        private static string DescribeExecution(ScheduleDefinition definition)
+        {
+            string model = string.IsNullOrWhiteSpace(definition.ModelId)
+                ? "默认模型"
+                : (string.IsNullOrWhiteSpace(definition.ProviderId)
+                    ? definition.ModelId
+                    : definition.ProviderId + "/" + definition.ModelId);
+            string reasoning = string.IsNullOrWhiteSpace(definition.ReasoningEffort)
+                ? "默认推理"
+                : definition.ReasoningEffort;
+            return model + " · " + reasoning;
         }
 
         private static string DescribeTarget(ScheduleTarget target)

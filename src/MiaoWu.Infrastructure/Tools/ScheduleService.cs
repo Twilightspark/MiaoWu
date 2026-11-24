@@ -98,7 +98,10 @@ namespace MiaoWu.Infrastructure.Tools
             string rule,
             ScheduleTarget target,
             string sessionId,
-            string workspaceId)
+            string workspaceId,
+            string providerId = null,
+            string modelId = null,
+            string reasoningEffort = null)
         {
             ScheduleRecurrence recurrence = ScheduleRecurrence.Parse(rule);
             DateTimeOffset? nextRun = recurrence.FirstOnOrAfter(Now);
@@ -116,6 +119,9 @@ namespace MiaoWu.Infrastructure.Tools
                 Target = target,
                 SessionId = sessionId,
                 WorkspaceId = workspaceId,
+                ProviderId = NormalizeOptional(providerId),
+                ModelId = NormalizeOptional(modelId),
+                ReasoningEffort = NormalizeReasoning(reasoningEffort),
                 Active = true,
                 CreatedAt = Now,
                 UpdatedAt = Now,
@@ -143,7 +149,10 @@ namespace MiaoWu.Infrastructure.Tools
             DateTimeOffset? expectedUpdatedAt = null,
             ScheduleTarget? target = null,
             string sessionId = null,
-            string workspaceId = null)
+            string workspaceId = null,
+            string providerId = null,
+            string modelId = null,
+            string reasoningEffort = null)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
@@ -206,6 +215,21 @@ namespace MiaoWu.Infrastructure.Tools
                 if (workspaceId != null)
                 {
                     definition.WorkspaceId = workspaceId;
+                }
+
+                if (providerId != null)
+                {
+                    definition.ProviderId = NormalizeOptional(providerId);
+                }
+
+                if (modelId != null)
+                {
+                    definition.ModelId = NormalizeOptional(modelId);
+                }
+
+                if (reasoningEffort != null)
+                {
+                    definition.ReasoningEffort = NormalizeReasoning(reasoningEffort);
                 }
 
                 if (active.HasValue)
@@ -517,6 +541,25 @@ namespace MiaoWu.Infrastructure.Tools
             return now <= previous ? previous.AddTicks(1) : now;
         }
 
+        private static string NormalizeOptional(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private static string NormalizeReasoning(string value)
+        {
+            string normalized = NormalizeOptional(value);
+            if (normalized == null)
+            {
+                return null;
+            }
+
+            normalized = normalized.ToLowerInvariant();
+            return normalized == "low" || normalized == "medium" || normalized == "high"
+                ? normalized
+                : null;
+        }
+
         private static DateTimeOffset? SafeNext(string rule, DateTimeOffset now, bool inclusive)
         {
             try
@@ -573,6 +616,9 @@ namespace MiaoWu.Infrastructure.Tools
                 Target = definition.Target,
                 SessionId = definition.SessionId,
                 WorkspaceId = definition.WorkspaceId,
+                ProviderId = definition.ProviderId,
+                ModelId = definition.ModelId,
+                ReasoningEffort = definition.ReasoningEffort,
                 Active = definition.Active,
                 CreatedAt = definition.CreatedAt,
                 UpdatedAt = definition.UpdatedAt,

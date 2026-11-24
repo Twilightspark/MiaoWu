@@ -86,9 +86,9 @@ namespace MiaoWu.Tests.Conversations
             IReadOnlyList<SessionSummary> sessions = catalog.GetSessions(workspace);
 
             Assert.Empty(sessions);
-            Assert.True(Directory.Exists(Path.Combine(_workspaceA, ".agent", "sessions")));
-            Assert.True(File.Exists(Path.Combine(_workspaceA, ".agent", "sessions", "index.json")));
-            Assert.True(Directory.Exists(Path.Combine(_workspaceA, ".agent", "skills")));
+            Assert.True(Directory.Exists(Path.Combine(_workspaceA, ".miaowu", "sessions")));
+            Assert.True(File.Exists(Path.Combine(_workspaceA, ".miaowu", "sessions", "index.json")));
+            Assert.True(Directory.Exists(Path.Combine(_workspaceA, ".miaowu", "skills")));
         }
 
         [Fact]

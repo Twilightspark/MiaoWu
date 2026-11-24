@@ -16,7 +16,7 @@ using MiaoWu.Infrastructure.Storage;
 namespace MiaoWu.Infrastructure.Conversations
 {
     /// <summary>
-    /// 工作区级会话存储：<c>&lt;workspace&gt;\.agent\sessions\index.json</c> +
+    /// 工作区级会话存储：<c>&lt;workspace&gt;\.miaowu\sessions\index.json</c> +
     /// 每会话一个 <c>{sessionId}.jsonl</c> 追加日志。
     /// </summary>
     /// <remarks>
@@ -89,7 +89,8 @@ namespace MiaoWu.Infrastructure.Conversations
         }
 
         /// <summary>
-        /// 创建 <c>.agent</c> 下的全部保留目录，并确认当前账户可写。重复调用幂等；
+        /// 创建 <c>.miaowu</c> 下的全部保留目录，并确认当前账户可写。重复调用幂等；
+        /// 目录不存在时直接初始化新建，并给目录补上 Hidden 属性。
         /// 权限不足时抛出，由调用方（会话目录/左栏）转成内联错误。
         /// </summary>
         public void EnsureCreated()
@@ -105,6 +106,8 @@ namespace MiaoWu.Infrastructure.Conversations
                 // 工作区可能落在只读共享、或由提权进程创建：先补权限再报错。
                 FolderAccess.EnsureWritable(directory);
             }
+
+            FolderAccess.EnsureHidden(AgentWorkspaceLayout.GetAgentDirectory(_workspacePath));
         }
 
         public Task<ConversationIndex> LoadIndexAsync(CancellationToken cancellationToken)

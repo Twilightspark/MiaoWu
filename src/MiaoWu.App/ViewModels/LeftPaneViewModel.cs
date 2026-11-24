@@ -118,7 +118,7 @@ namespace MiaoWu.App.ViewModels
         /// <summary>活动工作区的选中会话变化（含首次加载与新建后选中）。</summary>
         public event EventHandler SessionSelectionChanged;
 
-        /// <summary>用户点击“新建会话”。由主窗口创建真实的 .agent 会话。</summary>
+        /// <summary>用户点击“新建会话”。由主窗口创建真实的 .miaowu 会话。</summary>
         public event EventHandler NewSessionRequested;
 
         /// <summary>左栏重命名会话成功后通知主窗口同步右栏标题。</summary>

@@ -140,6 +140,52 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
+        public void ExecutionModelAndReasoningPersistAndCanResetToDefault()
+        {
+            using (ScheduleService service = CreateService())
+            {
+                ScheduleDefinition created = service.Create(
+                    "模型任务",
+                    "用指定模型执行",
+                    "DTSTART:20261121T090000\nRRULE:FREQ=DAILY",
+                    ScheduleTarget.ThisSession,
+                    "s1",
+                    "w1",
+                    "provider-a",
+                    "model-a",
+                    "high");
+
+                Assert.Equal("provider-a", created.ProviderId);
+                Assert.Equal("model-a", created.ModelId);
+                Assert.Equal("high", created.ReasoningEffort);
+            }
+
+            // 重新装载同一份 schedules.json，三个字段都要保留。
+            using (ScheduleService reloaded = CreateService())
+            {
+                ScheduleDefinition stored = reloaded.List(true)[0];
+                Assert.Equal("provider-a", stored.ProviderId);
+                Assert.Equal("model-a", stored.ModelId);
+                Assert.Equal("high", stored.ReasoningEffort);
+
+                // 空串表示清回默认模型 / 默认推理等级；null 才是“这项不改”。
+                ScheduleUpdateResult reset = reloaded.Update(
+                    stored.Id,
+                    null,
+                    null,
+                    null,
+                    null,
+                    providerId: string.Empty,
+                    modelId: string.Empty,
+                    reasoningEffort: string.Empty);
+                Assert.Equal(ScheduleUpdateStatus.Updated, reset.Status);
+                Assert.Null(reset.Definition.ProviderId);
+                Assert.Null(reset.Definition.ModelId);
+                Assert.Null(reset.Definition.ReasoningEffort);
+            }
+        }
+
+        [Fact]
         public void CountOneDeactivatesAfterDelivery()
         {
             using (ScheduleService service = CreateService())

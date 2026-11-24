@@ -488,7 +488,7 @@ namespace MiaoWu.App.Services
         }
 
         /// <summary>
-        /// 会话目标状态：按会话 ID 缓存，首次访问时从 <c>.agent\goals\{sessionId}.json</c> 载入。
+        /// 会话目标状态：按会话 ID 缓存，首次访问时从 <c>.miaowu\goals\{sessionId}.json</c> 载入。
         /// 工作区路径非法或会话 ID 不合法时退回纯内存状态，不影响会话本身。
         /// </summary>
         public SessionGoalState GetGoalState(Workspace workspace, string sessionId)
@@ -680,7 +680,11 @@ namespace MiaoWu.App.Services
                         }
 
                         session = await Runtime.GetOrCreateAsync(
-                            CreateSessionOptions(workspace, definition.SessionId, null, null),
+                            CreateSessionOptions(
+                                workspace,
+                                definition.SessionId,
+                                definition.ProviderId,
+                                definition.ModelId),
                             CancellationToken.None);
                     }
                 }
@@ -706,7 +710,11 @@ namespace MiaoWu.App.Services
                     }
 
                     session = await Runtime.GetOrCreateAsync(
-                        CreateSessionOptions(workspace, sessionId, null, null),
+                        CreateSessionOptions(
+                            workspace,
+                            sessionId,
+                            definition.ProviderId,
+                            definition.ModelId),
                         CancellationToken.None);
                 }
 
@@ -716,7 +724,10 @@ namespace MiaoWu.App.Services
                     Blocks = new List<AgentContentBlock>
                     {
                         new AgentContentBlock { Type = "text", Text = definition.Prompt }
-                    }
+                    },
+                    ProviderId = definition.ProviderId,
+                    ModelId = definition.ModelId,
+                    ReasoningEffort = definition.ReasoningEffort
                 };
 
                 await session.SendAsync(input, AgentSendMode.Queue, CancellationToken.None);

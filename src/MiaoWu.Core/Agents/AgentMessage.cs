@@ -276,6 +276,9 @@ namespace MiaoWu.Core.Agents
         /// <summary>为空表示使用会话默认模型。</summary>
         public string ModelId { get; set; }
 
+        /// <summary>单条输入的推理等级覆盖；为空表示沿用会话 / 设置的默认档。</summary>
+        public string ReasoningEffort { get; set; }
+
         public string GetText()
         {
             if (Blocks == null)

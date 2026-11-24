@@ -9,7 +9,7 @@ namespace MiaoWu.Infrastructure.Storage
     /// <summary>
     /// 目录可写性检查与权限修复。
     /// <para>
-    /// MiaoWu 的数据目录（<c>用户目录\.miaowu</c>、<c>&lt;工作区&gt;\.agent</c>）都是“当前用户私有”，
+    /// MiaoWu 的数据目录（<c>用户目录\.miaowu</c>、<c>&lt;工作区&gt;\.miaowu</c>）都是“当前用户私有”，
     /// 正常运行不需要管理员权限。但目录可能由别的账户或提权进程创建、也可能被放在只读位置，
     /// 因此每次创建目录后都做一次写探针：探针失败时先尝试给当前用户补一条继承的完全控制 ACE，
     /// 仍然失败就抛出带指引的异常，避免日志 / 会话在后续写入时以更难懂的方式失败。
@@ -81,6 +81,31 @@ namespace MiaoWu.Infrastructure.Storage
             }
 
             throw new UnauthorizedAccessException(BuildMessage(directory));
+        }
+
+        /// <summary>
+        /// 给目录补上 Hidden 属性。工作区数据目录默认不出现在资源管理器与工作区文件视图中；
+        /// 属性设置失败（例如只读盘）不阻断会话，目录仍然可用。
+        /// </summary>
+        public static void EnsureHidden(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            {
+                return;
+            }
+
+            try
+            {
+                FileAttributes attributes = File.GetAttributes(directory);
+                if ((attributes & FileAttributes.Hidden) == 0)
+                {
+                    File.SetAttributes(directory, attributes | FileAttributes.Hidden);
+                }
+            }
+            catch (Exception)
+            {
+                // 属性只是外观约定；不因为无法设置而影响数据读写。
+            }
         }
 
         /// <summary>

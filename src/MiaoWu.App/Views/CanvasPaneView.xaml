@@ -271,7 +271,7 @@
                              Text="{Binding FindQuery, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.AutomationId="FindBox"
                              AutomationProperties.Name="{x:Static res:Strings.FindPlaceholder}" />
-                    <!-- 占位提示比文字起点再内缩 2px：光标落在左侧，不压第一个字。 -->
+                    <!-- 占位提示比光标再内缩 2px：光标落在左侧，不压第一个字。 -->
                     <TextBlock Margin="11,0,0,0"
                                VerticalAlignment="Center"
                                IsHitTestVisible="False"
