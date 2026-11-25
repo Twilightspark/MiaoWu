@@ -150,27 +150,41 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void ReadDecodesGbk()
+        public void ReadRejectsNonUtf8Text()
         {
-            Encoding gbk;
-            try
-            {
-                gbk = Encoding.GetEncoding(936);
-            }
-            catch (ArgumentException)
-            {
-                return;
-            }
-
+            // GBK 的“中文内容\r\n第二行\r\n”；与 DSH 的 read 边界一致。
             File.WriteAllBytes(
                 Path.Combine(_workspace, "gbk.txt"),
-                gbk.GetBytes("中文内容\r\n第二行\r\n"));
+                new byte[]
+                {
+                    0xD6, 0xD0, 0xCE, 0xC4, 0xC4, 0xDA, 0xC8, 0xDD, 0x0D, 0x0A,
+                    0xB5, 0xDA, 0xB6, 0xFE, 0xD0, 0xD0, 0x0D, 0x0A
+                });
 
             ToolResult result = Run(new ReadTool(), "{\"path\":\"gbk.txt\"}");
 
+            Assert.Equal(ToolResultStatus.Failed, result.Status);
+            Assert.Equal("not_text", result.ErrorCode);
+            Assert.Contains("UTF-8", result.ErrorMessage);
+            Assert.True(result.Content.IndexOf('\uFFFD') < 0);
+        }
+
+        [Fact]
+        public void ReadStripsUtf8Bom()
+        {
+            byte[] body = new UTF8Encoding(false).GetBytes("中文内容\r\n");
+            var bytes = new byte[3 + body.Length];
+            bytes[0] = 0xEF;
+            bytes[1] = 0xBB;
+            bytes[2] = 0xBF;
+            Buffer.BlockCopy(body, 0, bytes, 3, body.Length);
+            File.WriteAllBytes(Path.Combine(_workspace, "bom.txt"), bytes);
+
+            ToolResult result = Run(new ReadTool(), "{\"path\":\"bom.txt\"}");
+
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains("中文内容", result.Content);
-            Assert.Contains("GBK", result.Content);
+            Assert.True(result.Content.IndexOf('\uFEFF') < 0);
         }
 
         [Fact]

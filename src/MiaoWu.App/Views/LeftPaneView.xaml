@@ -87,6 +87,53 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 整页入口（定时任务 / 能力市场）：页面打开时用选中底，两个入口用同一套状态。 -->
+        <Style x:Key="Button.NavPage" TargetType="Button" BasedOn="{StaticResource Button.NavItem}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource Radius.Button}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="{StaticResource Opacity.Disabled}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NavMarketIcon" TargetType="Path" BasedOn="{StaticResource Icon}">
+            <Setter Property="Fill" Value="{DynamicResource Brush.Text3}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMarketOpen}" Value="True">
+                    <Setter Property="Fill" Value="{DynamicResource Brush.Text2}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="NavSchedulesIcon" TargetType="Path" BasedOn="{StaticResource Icon.Stroke.Exact}">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.Text3}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSchedulesOpen}" Value="True">
+                    <Setter Property="Stroke" Value="{DynamicResource Brush.Text2}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- 工作区下方的内容随页面一起滚动，不再有独立高度与内部滚动条。 -->
     </UserControl.Resources>
 
@@ -123,26 +170,36 @@
                 </StackPanel>
             </Button>
 
-            <Button Style="{StaticResource Button.NavItem}"
-                    Margin="0,4,0,0"
+            <Button Margin="0,4,0,0"
                     Command="{Binding OpenScheduledTasksCommand}"
                     ToolTip="{x:Static res:Strings.ScheduledTasksHint}"
                     AutomationProperties.AutomationId="ScheduledTasks"
                     AutomationProperties.Name="{x:Static res:Strings.ScheduledTasksHint}"
                     KeyboardNavigation.TabIndex="1">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource Button.NavPage}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSchedulesOpen}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Brush.Sel}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Path Style="{StaticResource Icon.Stroke.Exact}"
-                          Data="{StaticResource Ico.Clock}"
-                          Stroke="{DynamicResource Brush.Text3}" />
+                    <Path Style="{StaticResource NavSchedulesIcon}"
+                          Data="{StaticResource Ico.Clock}" />
                     <TextBlock Grid.Column="1"
                                Margin="8,0,0,0"
                                VerticalAlignment="Center"
                                Text="{x:Static res:Strings.ScheduledTasks}"
-                               Style="{StaticResource Text.ListRow}" />
+                               Style="{StaticResource Text.ListRow}"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                 </Grid>
             </Button>
         </StackPanel>
@@ -686,30 +743,35 @@
                 Padding="{StaticResource Pad.Left.Nav}"
                 Background="{DynamicResource Brush.Side}">
             <StackPanel>
-                <Button Style="{StaticResource Button.NavItem}"
-                        Command="{Binding OpenMarketplaceCommand}"
-                        ToolTip="{x:Static res:Strings.CapabilityMarketPendingBody}"
+                <Button Command="{Binding OpenMarketplaceCommand}"
+                        ToolTip="{x:Static res:Strings.CapabilityMarketHint}"
                         KeyboardNavigation.TabIndex="20"
-                        AutomationProperties.AutomationId="CapabilityMarket">
+                        AutomationProperties.AutomationId="CapabilityMarket"
+                        AutomationProperties.Name="{x:Static res:Strings.CapabilityMarketHint}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource Button.NavPage}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMarketOpen}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Sel}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                    <Setter Property="FontWeight" Value="{StaticResource Font.Weight.SemiBold}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Path Style="{StaticResource Icon}"
-                              Data="{StaticResource Ico.Market}"
-                              Fill="{DynamicResource Brush.Text3}" />
+                        <Path Style="{StaticResource NavMarketIcon}"
+                              Data="{StaticResource Ico.Market}" />
                         <TextBlock Grid.Column="1"
                                    Margin="8,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="{x:Static res:Strings.CapabilityMarket}"
-                                   Style="{StaticResource Text.ListRow}" />
-                        <TextBlock Grid.Column="2"
-                                   VerticalAlignment="Center"
-                                   Text="{x:Static res:Strings.MarketplaceComingSoon}"
-                                   Style="{StaticResource Text.Time}"
-                                   Foreground="{DynamicResource Brush.Text3}" />
+                                   Style="{StaticResource Text.ListRow}"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     </Grid>
                 </Button>
 

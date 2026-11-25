@@ -94,9 +94,9 @@ namespace MiaoWu.Tests.Text
         [Fact]
         public void MetaStringAppendsExtraSuffix()
         {
-            string meta = DocumentMetaFormatter.Format("GBK", TextNewLineStyle.CrLf, 512, 3, "已截断");
+            string meta = DocumentMetaFormatter.Format("非 UTF-8", TextNewLineStyle.CrLf, 512, 3, "已截断");
 
-            Assert.Equal("GBK · CRLF · 512 B · 3 行 · 已截断", meta);
+            Assert.Equal("非 UTF-8 · CRLF · 512 B · 3 行 · 已截断", meta);
         }
 
         [Fact]

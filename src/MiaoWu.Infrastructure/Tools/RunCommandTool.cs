@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Agents.Tools;
+using MiaoWu.Core.Text;
 
 namespace MiaoWu.Infrastructure.Tools
 {
@@ -21,6 +22,14 @@ namespace MiaoWu.Infrastructure.Tools
         private const int DefaultTimeoutMs = 120000;
         private const int MaxTimeoutMs = 600000;
         private const int MaxOutputBytes = 1024 * 1024;
+
+        // 运行期统一 UTF-8：把控制台输出代码页切到 65001，子进程与重定向字节都按 UTF-8 生成。
+        // 与 DSH 的 ENCODING_PREAMBLE 等价；DSH 用 [System.Text.UTF8Encoding]::new($false)，
+        // 这里用 New-Object 以保持 Windows 7 自带 PowerShell 2.0 也能执行。
+        private const string Utf8Prelude =
+            "$ProgressPreference='SilentlyContinue'; "
+            + "[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding -ArgumentList $false; "
+            + "$OutputEncoding=New-Object System.Text.UTF8Encoding -ArgumentList $false; ";
 
         private readonly BackgroundJobRegistry _jobs;
 
@@ -371,7 +380,7 @@ namespace MiaoWu.Infrastructure.Tools
                 // 固定 Windows PowerShell：工具名沿用 DSH 的 pwsh，但不做 shell 方言切换。
                 FileName = "powershell.exe",
                 Arguments = "-NoLogo -NoProfile -NonInteractive -Command "
-                    + QuoteCommandLineArgument(plan.Command),
+                    + QuoteCommandLineArgument(Utf8Prelude + plan.Command),
                 WorkingDirectory = plan.WorkingDirectory,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -550,9 +559,8 @@ namespace MiaoWu.Infrastructure.Tools
             ExitWaitResult wait,
             OutputBudget budget)
         {
-            int oemCodePage = GetOemCodePage();
-            string stdoutText = ConsoleOutputDecoder.Decode(stdoutBytes, oemCodePage);
-            string stderrText = ConsoleOutputDecoder.Decode(stderrBytes, oemCodePage);
+            string stdoutText = ConsoleOutputDecoder.Decode(stdoutBytes);
+            string stderrText = ConsoleOutputDecoder.Decode(stderrBytes);
 
             var builder = new StringBuilder();
             builder.Append("命令：").Append(plan.Command).Append('\n');
@@ -618,18 +626,6 @@ namespace MiaoWu.Infrastructure.Tools
         {
             return "PowerShell · " + plan.WorkingDirectoryDisplay
                 + " · 退出码 " + exitCode.ToString(CultureInfo.InvariantCulture);
-        }
-
-        private static int GetOemCodePage()
-        {
-            try
-            {
-                return CultureInfo.CurrentCulture.TextInfo.OEMCodePage;
-            }
-            catch (Exception)
-            {
-                return 936;
-            }
         }
 
         private static bool TryReadCommand(ToolCall call, out string command)
@@ -734,42 +730,18 @@ namespace MiaoWu.Infrastructure.Tools
         }
     }
 
-    /// <summary>把控制台原始字节解码为文本：优先 BOM，否则按 OEM 代码页。</summary>
+    /// <summary>
+    /// 把控制台原始字节解码为文本：与 DSH 的 <c>subprocess-local</c> 一致，
+    /// 一律按 UTF-8（非严格，坏字节 → U+FFFD），不做 BOM / UTF-16 / OEM 猜测。
+    /// PowerShell 启动前已把输出代码页固定为无 BOM UTF-8。
+    /// </summary>
     public static class ConsoleOutputDecoder
     {
-        public static string Decode(byte[] bytes, int oemCodePage)
+        public static string Decode(byte[] bytes)
         {
-            if (bytes == null || bytes.Length == 0)
-            {
-                return string.Empty;
-            }
-
-            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-            {
-                return new UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3);
-            }
-
-            if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-            {
-                return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
-            }
-
-            if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-            {
-                return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
-            }
-
-            Encoding encoding;
-            try
-            {
-                encoding = Encoding.GetEncoding(oemCodePage);
-            }
-            catch (ArgumentException)
-            {
-                encoding = Encoding.Default;
-            }
-
-            return encoding.GetString(bytes);
+            return bytes == null || bytes.Length == 0
+                ? string.Empty
+                : TextEncodings.Utf8.GetString(bytes);
         }
     }
 

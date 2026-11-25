@@ -232,6 +232,41 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
+        public void RejectsNonUtf8File()
+        {
+            string path = Path.Combine(_workspace, "gbk.txt");
+
+            // GBK 的“中文”；运行期只接受 UTF-8 文本。
+            File.WriteAllBytes(path, new byte[] { 0xD6, 0xD0, 0xCE, 0xC4 });
+
+            ToolResult result = Edit("gbk.txt", "a", "b");
+
+            Assert.Equal(ToolResultStatus.Failed, result.Status);
+            Assert.Equal("not_text", result.ErrorCode);
+            Assert.Equal(new byte[] { 0xD6, 0xD0, 0xCE, 0xC4 }, File.ReadAllBytes(path));
+        }
+
+        [Fact]
+        public void EditDropsUtf8Bom()
+        {
+            string path = Path.Combine(_workspace, "bom.txt");
+            byte[] body = new UTF8Encoding(false).GetBytes("a\nb\n");
+            var bytes = new byte[3 + body.Length];
+            bytes[0] = 0xEF;
+            bytes[1] = 0xBB;
+            bytes[2] = 0xBF;
+            Buffer.BlockCopy(body, 0, bytes, 3, body.Length);
+            File.WriteAllBytes(path, bytes);
+
+            ToolResult result = Edit("bom.txt", "b", "B");
+
+            Assert.True(result.IsSuccess, result.Content);
+            byte[] written = File.ReadAllBytes(path);
+            Assert.False(written.Length >= 3 && written[0] == 0xEF && written[1] == 0xBB && written[2] == 0xBF);
+            Assert.Equal("a\nB\n", new UTF8Encoding(false).GetString(written));
+        }
+
+        [Fact]
         public void AuditArgumentsDoNotContainReplacedText()
         {
             const string Secret = "TOP-SECRET-OLD-TEXT";

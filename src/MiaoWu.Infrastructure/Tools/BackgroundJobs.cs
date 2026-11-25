@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using MiaoWu.Core.Text;
 
 namespace MiaoWu.Infrastructure.Tools
 {
@@ -64,8 +65,8 @@ namespace MiaoWu.Infrastructure.Tools
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
+                StandardOutputEncoding = TextEncodings.Utf8,
+                StandardErrorEncoding = TextEncodings.Utf8,
                 WorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory)
                     ? Environment.CurrentDirectory
                     : workingDirectory
@@ -74,7 +75,12 @@ namespace MiaoWu.Infrastructure.Tools
             // -EncodedCommand 用 Base64(UTF-16LE) 传命令，彻底避开引号转义。
             // 先关掉进度流：stderr 被重定向时 PowerShell 5.1 会把进度记录写成 CLIXML
             // （首行 `#< CLIXML`），后台任务里既没用又会顶掉真正的输出。
-            const string prelude = "$ProgressPreference = 'SilentlyContinue'; ";
+            // 再把控制台输出切到 UTF-8，和 StandardOutputEncoding 保持一致；用无 BOM 变体，
+            // 否则每段后台输出都会以 U+FEFF 开头。
+            const string prelude =
+                "$ProgressPreference = 'SilentlyContinue'; "
+                + "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding -ArgumentList $false; "
+                + "$OutputEncoding = New-Object System.Text.UTF8Encoding -ArgumentList $false; ";
             start.Arguments = "-NoLogo -NoProfile -NonInteractive -EncodedCommand "
                 + Convert.ToBase64String(Encoding.Unicode.GetBytes(prelude + command));
 

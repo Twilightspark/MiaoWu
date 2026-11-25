@@ -14,6 +14,7 @@ namespace MiaoWu.Infrastructure.Providers
     public sealed class ScriptedModelApi : IModelApi
     {
         private readonly Queue<ScriptedTurn> _turns = new Queue<ScriptedTurn>();
+        private readonly List<LlmRequest> _requests = new List<LlmRequest>();
         private readonly object _gate = new object();
         private readonly string _id;
 
@@ -58,6 +59,21 @@ namespace MiaoWu.Infrastructure.Providers
 
         /// <summary>最近一次 <see cref="Open"/> 的完整请求；压缩用例据此断言上下文切点。</summary>
         public LlmRequest LastRequest { get; private set; }
+
+        /// <summary>
+        /// 本次测试里所有 <see cref="Open"/> 收到的请求快照。多步轮次里工具清单可能在
+        /// 步骤之间变化（例如计划模式获批退出），用例需要按步骤比对。
+        /// </summary>
+        public IReadOnlyList<LlmRequest> Requests
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _requests.ToArray();
+                }
+            }
+        }
 
         public void EnqueueText(string text)
         {
@@ -157,6 +173,10 @@ namespace MiaoWu.Infrastructure.Providers
                 LastModel = model;
                 LastSessionId = request == null ? null : request.SessionId;
                 LastRequest = request;
+                if (request != null)
+                {
+                    _requests.Add(request);
+                }
                 turn = _turns.Count > 0
                     ? _turns.Dequeue()
                     : new ScriptedTurn

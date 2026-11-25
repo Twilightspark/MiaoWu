@@ -99,10 +99,13 @@ namespace MiaoWu.Infrastructure.Tools
 
             if (!mode.IsActive)
             {
+                // 普通模式下调用是空操作：必须明确“没有审批、没有改状态”，
+                // 否则模型会把回显当成“用户已批准我的计划”，跳过真正的确认。
                 return Task.FromResult(ToolResult.Success(
                     call,
-                    "当前不在计划模式；计划已记录，可以直接开始执行：\n\n" + plan,
-                    "计划已记录",
+                    "当前不在计划模式，无需退出：这次调用没有提交审批，也没有改变任何状态。"
+                        + "下面是原样回显的计划（仅作备注，不代表获批）：\n\n" + plan,
+                    "已回显计划（未审批）",
                     true,
                     false));
             }
@@ -110,7 +113,7 @@ namespace MiaoWu.Infrastructure.Tools
             mode.ExitPlanMode();
             return Task.FromResult(ToolResult.Success(
                 call,
-                "计划已获批准，已退出计划模式，可以开始执行：\n\n" + plan,
+                "计划已获批准，已退出计划模式；后续步骤可以使用 write / edit / pwsh 等写工具，现在开始执行：\n\n" + plan,
                 "退出计划模式",
                 true,
                 false));

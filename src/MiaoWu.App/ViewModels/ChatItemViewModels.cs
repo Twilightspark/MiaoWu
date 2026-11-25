@@ -1225,7 +1225,7 @@ namespace MiaoWu.App.ViewModels
             FullOutputPath = result.FullOutputPath;
             BackupPath = result.BackupPath;
             CanUndo = !string.IsNullOrEmpty(result.BackupPath) && result.IsSuccess;
-            Output = (result.Content ?? string.Empty).TrimEnd();
+            Output = ToolFailureGuidance.Strip(result.Content).TrimEnd();
             ErrorText = result.ErrorMessage;
             StatusText = StatusToText(result.Status);
             Summary = string.IsNullOrWhiteSpace(result.Summary)
@@ -1251,7 +1251,9 @@ namespace MiaoWu.App.ViewModels
                 {
                     if (block != null && string.Equals(block.Type, "toolResult", StringComparison.Ordinal))
                     {
-                        Output = (block.ResultContent ?? string.Empty).TrimEnd();
+                        // 循环追加的「[下一步建议]」是给模型的；重载历史时它随正文落盘，
+                        // 这里裁掉，保证工具卡实时与回放看到的是同一份工具输出。
+                        Output = ToolFailureGuidance.Strip(block.ResultContent).TrimEnd();
                         IsTruncated = block.Truncated;
                         FullOutputPath = block.FullOutputPath;
                     }

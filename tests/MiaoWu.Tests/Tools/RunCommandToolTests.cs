@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -201,50 +200,49 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void ChineseOutputIsDecodedWithOemCodePage()
+        public void ChineseOutputIsDecodedAsUtf8()
         {
-            try
-            {
-                if (CultureInfo.CurrentCulture.TextInfo.OEMCodePage != 936)
-                {
-                    return;
-                }
-            }
-            catch (Exception)
-            {
-                return;
-            }
-
             ToolResult result = Run("Write-Output '中文'");
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Contains("中文", result.Content);
+            Assert.True(result.Content.IndexOf('\uFEFF') < 0, "输出不应带 BOM");
+            Assert.True(result.Content.IndexOf('\uFFFD') < 0, "输出不应有替换字符");
         }
 
         [Fact]
-        public void DecoderPrefersUtf8Bom()
+        public void NativeCommandChineseOutputIsUtf8()
         {
+            ToolResult result = Run("cmd /c echo 中文");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.Contains("中文", result.Content);
+            Assert.True(result.Content.IndexOf('\uFEFF') < 0, "输出不应带 BOM");
+            Assert.True(result.Content.IndexOf('\uFFFD') < 0, "输出不应有替换字符");
+        }
+
+        [Fact]
+        public void DecoderKeepsBomAsText()
+        {
+            // 与 DSH 的 Buffer.toString('utf8') 一致：解码器不做 BOM 剥离；
+            // PowerShell 启动前已经固定为无 BOM 输出，所以正常命令不会出现这个字符。
             byte[] bytes = new byte[] { 0xEF, 0xBB, 0xBF, (byte)'h', (byte)'i' };
 
-            Assert.Equal("hi", ConsoleOutputDecoder.Decode(bytes, 936));
+            Assert.Equal("\uFEFFhi", ConsoleOutputDecoder.Decode(bytes));
         }
 
         [Fact]
-        public void DecoderUsesOemCodePageWithoutBom()
+        public void DecoderReplacesInvalidUtf8Bytes()
         {
-            Encoding gbk;
-            try
-            {
-                gbk = Encoding.GetEncoding(936);
-            }
-            catch (ArgumentException)
-            {
-                return;
-            }
+            Assert.Contains("\uFFFD", ConsoleOutputDecoder.Decode(new byte[] { 0xD6, 0xD0 }));
+        }
 
-            byte[] bytes = gbk.GetBytes("中文");
+        [Fact]
+        public void DecoderUsesUtf8WithoutBom()
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes("中文");
 
-            Assert.Equal("中文", ConsoleOutputDecoder.Decode(bytes, 936));
+            Assert.Equal("中文", ConsoleOutputDecoder.Decode(bytes));
         }
 
         private ToolResult Run(

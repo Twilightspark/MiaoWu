@@ -256,6 +256,12 @@
     <sys:Double x:Key="Metric.Schedules.Selector.MinWidth">124</sys:Double>
     <sys:Double x:Key="Metric.Schedules.Number.Width">32</sys:Double>
     <sys:Double x:Key="Metric.Schedules.Pill.MinWidth">74</sys:Double>
+    <!-- 能力市场：开关 36×20 / 圆点 16，空态品牌插画 72，包含文件行 36 -->
+    <sys:Double x:Key="Metric.Market.Switch.Width">36</sys:Double>
+    <sys:Double x:Key="Metric.Market.Switch.Height">20</sys:Double>
+    <sys:Double x:Key="Metric.Market.Switch.Knob">16</sys:Double>
+    <sys:Double x:Key="Metric.Market.FileRow.Height">36</sys:Double>
+    <sys:Double x:Key="Metric.Market.Empty.Icon">72</sys:Double>
     <sys:Double x:Key="Metric.Notification.Width">384</sys:Double>
     <sys:Double x:Key="Metric.Notification.Right">16</sys:Double>
     <sys:Double x:Key="Metric.Notification.Bottom">172</sys:Double>
@@ -285,6 +291,7 @@
     <CornerRadius x:Key="Radius.Schedules.Card">10</CornerRadius>
     <CornerRadius x:Key="Radius.Schedules.Day">14</CornerRadius>
     <CornerRadius x:Key="Radius.Schedules.Pill">14</CornerRadius>
+    <CornerRadius x:Key="Radius.Market.Switch">10</CornerRadius>
     <CornerRadius x:Key="Radius.Menu">10</CornerRadius>
     <CornerRadius x:Key="Radius.MenuHairline">10.5</CornerRadius>
     <CornerRadius x:Key="Radius.MenuItem">6</CornerRadius>
@@ -371,6 +378,10 @@
     <Thickness x:Key="Margin.Schedules.Day">0,0,6,0</Thickness>
     <Thickness x:Key="Margin.Schedules.Footer">0,12,0,0</Thickness>
     <Thickness x:Key="Thickness.Schedules.RowDivider">0,0,0,1</Thickness>
+    <!-- 能力市场：概览卡片行内衬、空态内衬与标题上距 -->
+    <Thickness x:Key="Pad.Market.CardRow">14,0</Thickness>
+    <Thickness x:Key="Pad.Market.Empty">24</Thickness>
+    <Thickness x:Key="Margin.Market.Empty">0,18,0,0</Thickness>
 
     <!-- 会话消息流：内容列与输入卡同宽（`Margin.ContentColumn` 28 + `Metric.Composer.MaxWidth` 720），
          行内不再留左右边距；轮次间距 18，轮内 10 -->

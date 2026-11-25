@@ -500,6 +500,133 @@ namespace MiaoWu.Tests.Agents
             Assert.False(events[1].Active);
         }
 
+        [Fact]
+        public async Task SystemPromptCarriesPlanModeState()
+        {
+            IAgentSession session = await CreateSessionAsync(new ImmediateExecutor(), new ReadWriteDefinitions());
+            session.SetPlanMode(true);
+
+            _api.EnqueueText("计划模式回答。");
+            AgentRun run = await session.SendAsync(TextInput("先调研"), AgentSendMode.Queue, CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            string prompt = _api.LastRequest.SystemPrompt;
+            Assert.Contains("当前模式：计划模式（只读）", prompt);
+            Assert.Contains("<plan-mode>", prompt);
+            Assert.Contains("exit_plan_mode", prompt);
+            Assert.Contains("不要声称已经写入", prompt);
+            Assert.Contains("- read:", prompt);
+            Assert.DoesNotContain("- write:", prompt);
+        }
+
+        [Fact]
+        public async Task SystemPromptReportsNormalModeAndToolCount()
+        {
+            IAgentSession session = await CreateSessionAsync(new ImmediateExecutor(), new ReadWriteDefinitions());
+
+            _api.EnqueueText("普通模式回答。");
+            AgentRun run = await session.SendAsync(TextInput("开始"), AgentSendMode.Queue, CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            string prompt = _api.LastRequest.SystemPrompt;
+            Assert.Contains("当前模式：普通模式（可读写）", prompt);
+            Assert.Contains("可用工具：2 个", prompt);
+            Assert.DoesNotContain("<plan-mode>", prompt);
+            Assert.Contains("- write:", prompt);
+        }
+
+        [Fact]
+        public async Task ToolFailureAppendsNextStepGuidance()
+        {
+            IAgentSession session = await CreateSessionAsync(
+                new FailingExecutor("timeout", "抓取超时（20 秒）。"),
+                ReadDefinitions());
+
+            _api.EnqueueToolCalls(new ScriptedModelApi.ToolCallScript
+            {
+                Id = "call_web",
+                Name = "web_search",
+                ArgumentsJson = "{\"query\":\"powershell\"}"
+            });
+            _api.EnqueueText("换个办法继续。");
+
+            AgentRun run = await session.SendAsync(TextInput("搜一下"), AgentSendMode.Queue, CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            AgentMessage tool = session.Snapshot().Messages.First(m => m.Role == AgentMessageRole.ToolResult);
+            string content = tool.GetText();
+            Assert.Contains("[下一步建议]", content);
+            Assert.Contains("web_fetch", content);
+        }
+
+        [Fact]
+        public async Task RepeatedIdenticalFailureIsEscalated()
+        {
+            IAgentSession session = await CreateSessionAsync(
+                new FailingExecutor("timeout", "抓取超时（20 秒）。"),
+                ReadDefinitions());
+
+            // 同一步里原样重试一次：第二次要明确提示“已连续失败 2 次”。
+            _api.EnqueueToolCalls(
+                new ScriptedModelApi.ToolCallScript
+                {
+                    Id = "call_1",
+                    Name = "web_search",
+                    ArgumentsJson = "{\"query\":\"powershell\"}"
+                },
+                new ScriptedModelApi.ToolCallScript
+                {
+                    Id = "call_2",
+                    Name = "web_search",
+                    ArgumentsJson = "{\"query\":\"powershell\"}"
+                });
+            _api.EnqueueText("停止重试。");
+
+            AgentRun run = await session.SendAsync(TextInput("搜两次"), AgentSendMode.Queue, CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            AgentMessage[] tools = session.Snapshot().Messages
+                .Where(m => m.Role == AgentMessageRole.ToolResult)
+                .ToArray();
+            Assert.Equal(2, tools.Length);
+            Assert.DoesNotContain("连续失败 2 次", tools[0].GetText());
+            Assert.Contains("连续失败 2 次", tools[1].GetText());
+        }
+
+        [Fact]
+        public async Task ToolCatalogRefreshesAfterLeavingPlanMode()
+        {
+            var executor = new PlanExitingExecutor();
+            IAgentSession session = await CreateSessionAsync(executor, new ReadWriteDefinitions());
+            executor.Session = session;
+
+            session.SetPlanMode(true);
+            _api.EnqueueToolCalls(new ScriptedModelApi.ToolCallScript
+            {
+                Id = "call_1",
+                Name = "read",
+                ArgumentsJson = "{\"path\":\"a.txt\"}"
+            });
+            _api.EnqueueText("已退出计划模式，继续执行。");
+
+            AgentRun run = await session.SendAsync(TextInput("先调研"), AgentSendMode.Queue, CancellationToken.None);
+            await WaitAsync(run.Completion);
+            await WaitIdleAsync(session);
+
+            LlmRequest[] requests = _api.Requests.ToArray();
+            Assert.Equal(2, requests.Length);
+            Assert.DoesNotContain(
+                requests[0].Tools ?? new List<ToolDeclaration>(),
+                t => t.Name == "write");
+            Assert.Contains(
+                requests[1].Tools ?? new List<ToolDeclaration>(),
+                t => t.Name == "write");
+        }
+
         private async Task<IAgentSession> CreateSessionAsync(
             IToolExecutor executor,
             IToolDefinitionProvider definitions,
@@ -608,6 +735,84 @@ namespace MiaoWu.Tests.Agents
                         ExecutionMode = ToolExecutionMode.Parallel
                     }
                 };
+            }
+        }
+
+        private sealed class ReadWriteDefinitions : IToolDefinitionProvider
+        {
+            public IReadOnlyList<ToolDefinition> GetDefinitions()
+            {
+                return new[]
+                {
+                    new ToolDefinition
+                    {
+                        Name = "read",
+                        Description = "读取文件",
+                        ParametersJson = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}",
+                        PromptSnippet = "读取文件",
+                        Risk = ToolRisk.Low,
+                        ExecutionMode = ToolExecutionMode.Parallel
+                    },
+                    new ToolDefinition
+                    {
+                        Name = "write",
+                        Description = "写入文件",
+                        ParametersJson = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"path\",\"content\"]}",
+                        PromptSnippet = "写入文件",
+                        Risk = ToolRisk.High
+                    }
+                };
+            }
+        }
+
+        private sealed class PlanExitingExecutor : IToolExecutor
+        {
+            public IAgentSession Session { get; set; }
+
+            public Task<ToolExecution> ExecuteAsync(
+                ToolCall call,
+                ToolContext context,
+                CancellationToken cancellationToken)
+            {
+                // 模拟 exit_plan_mode 获批：上一步的工具执行后退出计划模式。
+                if (Session != null)
+                {
+                    Session.SetPlanMode(false);
+                }
+
+                return Task.FromResult(new ToolExecution
+                {
+                    Call = call,
+                    Risk = ToolRisk.Low,
+                    Decision = ToolExecutionDecision.Auto,
+                    Result = ToolResult.Success(call, "读到了", call.Name, true, false)
+                });
+            }
+        }
+
+        private sealed class FailingExecutor : IToolExecutor
+        {
+            private readonly string _code;
+            private readonly string _message;
+
+            public FailingExecutor(string code, string message)
+            {
+                _code = code;
+                _message = message;
+            }
+
+            public Task<ToolExecution> ExecuteAsync(
+                ToolCall call,
+                ToolContext context,
+                CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new ToolExecution
+                {
+                    Call = call,
+                    Risk = ToolRisk.Low,
+                    Decision = ToolExecutionDecision.Auto,
+                    Result = ToolResult.Failure(call, ToolResultStatus.Failed, _code, _message)
+                });
             }
         }
 

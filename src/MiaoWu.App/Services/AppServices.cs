@@ -12,6 +12,7 @@ using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Conversations;
 using MiaoWu.Core.Models;
 using MiaoWu.Core.Settings;
+using MiaoWu.Core.Updates;
 using MiaoWu.Core.Workspaces;
 using MiaoWu.Infrastructure;
 using MiaoWu.Infrastructure.Auditing;
@@ -23,6 +24,7 @@ using MiaoWu.Infrastructure.Providers;
 using MiaoWu.Infrastructure.Sessions;
 using MiaoWu.Infrastructure.Storage;
 using MiaoWu.Infrastructure.Tools;
+using MiaoWu.Infrastructure.Updates;
 using MiaoWu.Infrastructure.Workspaces;
 
 namespace MiaoWu.App.Services
@@ -50,7 +52,7 @@ namespace MiaoWu.App.Services
         /// apis 仅供离屏快照/集成测试注入脚本 Provider；生产路径传 null，使用两种真实协议。
         /// modelCatalog 同样只供离屏探针注入，生产路径传 null，按当前 transport 新建。
         /// </summary>
-        public AppServices(IAppPaths paths, IModelApi[] apis, ModelCatalogClient modelCatalog = null)
+        public AppServices(IAppPaths paths, IModelApi[] apis, ModelCatalogClient modelCatalog = null, IUpdateService updates = null)
         {
             Paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _modelCatalog = modelCatalog;
@@ -94,6 +96,11 @@ namespace MiaoWu.App.Services
                         new OpenAiCompletionsApi(Http),
                         new AnthropicMessagesApi(Http)
                     });
+
+            Updates = updates ?? new GitHubReleaseUpdateService(
+                Http,
+                Settings.Agent.UpdateUrl,
+                MiaoWu.Core.AppInfo.Version);
 
             // 所有会话共用这一份模型选择；它同时是 config.json 里记录的默认模型。
             DefaultModelSelection = new ModelSelection();
@@ -178,6 +185,9 @@ namespace MiaoWu.App.Services
         public HttpTransport Http { get; private set; }
 
         public ModelRegistry Models { get; private set; }
+
+        /// <summary>设置 → 关于的「检查更新」：只读 GitHub Releases，不下载也不替换。</summary>
+        public IUpdateService Updates { get; }
 
         /// <summary>
         /// 全局共享的模型选择（所有会话共用）。在任一会话里换模型都会改到这里，

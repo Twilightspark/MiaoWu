@@ -42,6 +42,40 @@ namespace MiaoWu.App.Resources
 
         public static string CapabilityMarket => Get(nameof(CapabilityMarket));
 
+        public static string CapabilityMarketHint => Get(nameof(CapabilityMarketHint));
+
+        public static string MarketCloseTooltip => Get(nameof(MarketCloseTooltip));
+
+        public static string MarketSearchHint => Get(nameof(MarketSearchHint));
+
+        public static string MarketImport => Get(nameof(MarketImport));
+
+        public static string MarketOverview => Get(nameof(MarketOverview));
+
+        public static string MarketBody => Get(nameof(MarketBody));
+
+        public static string MarketTabsAutomation => Get(nameof(MarketTabsAutomation));
+
+        public static string MarketCollapse => Get(nameof(MarketCollapse));
+
+        public static string MarketActions => Get(nameof(MarketActions));
+
+        public static string MarketOpenFolder => Get(nameof(MarketOpenFolder));
+
+        public static string MarketOpenInEditor => Get(nameof(MarketOpenInEditor));
+
+        public static string MarketCopyPath => Get(nameof(MarketCopyPath));
+
+        public static string MarketRefresh => Get(nameof(MarketRefresh));
+
+        public static string MarketOpenSkillsFolder => Get(nameof(MarketOpenSkillsFolder));
+
+        public static string MarketOpenUserFolder => Get(nameof(MarketOpenUserFolder));
+
+        public static string MarketImportFolder => Get(nameof(MarketImportFolder));
+
+        public static string MarketEmptyImport => Get(nameof(MarketEmptyImport));
+
         public static string Settings => Get(nameof(Settings));
 
         public static string Refresh => Get(nameof(Refresh));

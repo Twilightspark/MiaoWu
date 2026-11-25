@@ -39,7 +39,8 @@ namespace MiaoWu.Infrastructure.Tools
             get
             {
                 return "写入工作区内的文本文件（整文件覆盖）。参数：path（相对路径）、content（完整新内容，UTF-8 文本）。"
-                    + "覆盖前会备份到 backups，文件在审批后被外部修改会拒绝写入；只支持 ≤2 MB 的文本文件。";
+                    + "覆盖前会备份到 backups，文件在审批后被外部修改会拒绝写入；只支持 ≤2 MB 的文本文件；"
+                    + "目标文件必须是 UTF-8，非 UTF-8 会拒绝写入，请先转换。";
             }
         }
 
@@ -134,6 +135,26 @@ namespace MiaoWu.Infrastructure.Tools
                     ToolResultStatus.Failed,
                     "file_changed",
                     "文件在审批后被外部修改，已拒绝覆盖。请重新读取后再试。");
+            }
+
+            // 审批已经通过，才允许产生副作用：先补建缺失的父目录，再走备份 / 原子写入。
+            if (plan.CreatesParent)
+            {
+                try
+                {
+                    Directory.CreateDirectory(plan.ParentPath);
+                }
+                catch (Exception exception) when (
+                    exception is IOException
+                    || exception is UnauthorizedAccessException
+                    || exception is NotSupportedException)
+                {
+                    return ToolResult.Failure(
+                        call,
+                        ToolResultStatus.Failed,
+                        "mkdir_failed",
+                        "创建目标目录失败：" + Shorten(exception.Message, 160));
+                }
             }
 
             string backupPath = null;
@@ -233,12 +254,14 @@ namespace MiaoWu.Infrastructure.Tools
             }
 
             string parent = Path.GetDirectoryName(resolved.NormalizedPath);
-            if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent))
+            if (string.IsNullOrEmpty(parent))
             {
-                throw new ToolPreparationException(
-                    "parent_not_found",
-                    "目标目录不存在，请先在工作区内创建目录。");
+                throw new ToolPreparationException("invalid_path", "无法解析目标文件的父目录。");
             }
+
+            // 父目录不存在不算错误：审批时先记下来，执行时（批准之后）再建。
+            // 自测里 write 因为没建目录失败过一次，模型只好多跑一轮 pwsh mkdir。
+            bool createsParent = !Directory.Exists(parent);
 
             if (Directory.Exists(resolved.NormalizedPath))
             {
@@ -250,7 +273,6 @@ namespace MiaoWu.Infrastructure.Tools
             string oldText = string.Empty;
             string oldHash = string.Empty;
             long lastWriteTicks = 0;
-            TextEncodingDetection detection = null;
 
             if (exists)
             {
@@ -293,33 +315,39 @@ namespace MiaoWu.Infrastructure.Tools
 
                 if (oldBytes.Length > 0)
                 {
-                    detection = TextEncodingDetector.Detect(oldBytes);
-                    oldText = detection.Encoding.GetString(
-                        oldBytes,
-                        detection.BomLength,
-                        Math.Max(0, oldBytes.Length - detection.BomLength));
+                    Utf8TextInfo old = Utf8Text.Read(oldBytes);
+                    if (!old.IsValid)
+                    {
+                        throw new ToolPreparationException(
+                            "not_text",
+                            "目标文件不是 UTF-8 文本（可能是 GBK / ANSI / UTF-16）。请先转换为 UTF-8，再写入。");
+                    }
+
+                    oldText = old.Text;
                 }
 
                 oldHash = ToolHashing.Sha256Hex(oldBytes);
             }
 
-            string newText = NormalizeNewLines(content, oldText, detection);
+            // 与 DSH 的 write 一致：content 原样写入，不按旧文件重排行尾。
+            string newText = content;
             if (newText.Length > MaxContentChars)
             {
                 throw new ToolPreparationException("content_too_large", "新内容超过 2 MB 字符上限。");
             }
 
-            Encoding writeEncoding = CreateWriteEncoding(detection);
+            // 与 DSH 对齐：写入只有 UTF-8，且不写 BOM；原文件的 UTF-8 BOM 在读取时已剥离。
+            const string encodingName = "UTF-8";
             byte[] newBytes;
             try
             {
-                newBytes = EncodeWithPreamble(writeEncoding, detection, newText);
+                newBytes = TextEncodings.Utf8Strict.GetBytes(newText);
             }
             catch (EncoderFallbackException)
             {
                 throw new ToolPreparationException(
                     "encoding_unsupported",
-                    "新内容包含目标编码无法表示的字符，请先把文件改为 UTF-8。");
+                    "新内容包含无法编码为 UTF-8 的字符（孤立代理项），写入已取消。");
             }
 
             if (newBytes.Length > MaxFileBytes)
@@ -331,6 +359,15 @@ namespace MiaoWu.Infrastructure.Tools
 
             string relative = context.Sandbox.ToRelativePath(resolved.NormalizedPath);
             string display = ToolText.ToDisplayPath(relative);
+            string parentDisplay = string.Empty;
+            if (createsParent)
+            {
+                string parentRelative = context.Sandbox.ToRelativePath(parent);
+                parentDisplay = string.IsNullOrWhiteSpace(parentRelative)
+                    ? "."
+                    : ToolText.ToDisplayPath(parentRelative);
+            }
+
             UnifiedDiffResult diff = UnifiedDiffBuilder.Build(
                 oldText,
                 newText,
@@ -340,8 +377,9 @@ namespace MiaoWu.Infrastructure.Tools
             string summary = (exists ? "覆盖 " : "新建 ")
                 + display
                 + " · " + FormatChange(diff.AddedCount, diff.RemovedCount)
-                + " · " + (detection == null ? "UTF-8" : detection.DisplayName)
-                + (exists ? " · 覆盖前自动备份" : string.Empty);
+                + " · " + encodingName
+                + (exists ? " · 覆盖前自动备份" : string.Empty)
+                + (createsParent ? " · 自动创建目录 " + parentDisplay : string.Empty);
 
             var preview = new ToolApprovalPreview
             {
@@ -359,6 +397,9 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 NormalizedPath = resolved.NormalizedPath,
                 RelativeDisplay = display,
+                ParentPath = parent,
+                ParentDisplay = parentDisplay,
+                CreatesParent = createsParent,
                 Exists = exists,
                 OldHash = oldHash,
                 LastWriteTicks = lastWriteTicks,
@@ -367,7 +408,7 @@ namespace MiaoWu.Infrastructure.Tools
                 AddedCount = diff.AddedCount,
                 RemovedCount = diff.RemovedCount,
                 DiffTruncated = diff.Truncated,
-                EncodingName = detection == null ? "UTF-8" : detection.DisplayName,
+                EncodingName = encodingName,
                 Preview = preview
             };
         }
@@ -382,6 +423,11 @@ namespace MiaoWu.Infrastructure.Tools
             if (!string.IsNullOrEmpty(backupPath))
             {
                 builder.Append("\n备份：").Append(backupPath);
+            }
+
+            if (plan.CreatesParent)
+            {
+                builder.Append("\n目录：").Append(plan.ParentDisplay).Append("（已自动创建）");
             }
 
             return builder.ToString();
@@ -449,90 +495,6 @@ namespace MiaoWu.Infrastructure.Tools
             }
         }
 
-        private static string NormalizeNewLines(
-            string content,
-            string oldText,
-            TextEncodingDetection detection)
-        {
-            if (detection == null || string.IsNullOrEmpty(oldText))
-            {
-                return content;
-            }
-
-            TextNewLineStyle style = NewLineDetector.Detect(oldText);
-            if (style != TextNewLineStyle.CrLf
-                && style != TextNewLineStyle.Lf
-                && style != TextNewLineStyle.Cr)
-            {
-                return content;
-            }
-
-            string unified = content.Replace("\r\n", "\n").Replace('\r', '\n');
-            if (style == TextNewLineStyle.CrLf)
-            {
-                return unified.Replace("\n", "\r\n");
-            }
-
-            if (style == TextNewLineStyle.Cr)
-            {
-                return unified.Replace("\n", "\r");
-            }
-
-            return unified;
-        }
-
-        private static Encoding CreateWriteEncoding(TextEncodingDetection detection)
-        {
-            if (detection == null)
-            {
-                return new UTF8Encoding(false, true);
-            }
-
-            Encoding source = detection.Encoding;
-            if (source.CodePage == 65001)
-            {
-                return new UTF8Encoding(detection.HasBom, true);
-            }
-
-            if (source.CodePage == 1200)
-            {
-                return new UnicodeEncoding(false, detection.HasBom, true);
-            }
-
-            if (source.CodePage == 1201)
-            {
-                return new UnicodeEncoding(true, detection.HasBom, true);
-            }
-
-            return Encoding.GetEncoding(
-                source.CodePage,
-                EncoderFallback.ExceptionFallback,
-                DecoderFallback.ExceptionFallback);
-        }
-
-        private static byte[] EncodeWithPreamble(
-            Encoding encoding,
-            TextEncodingDetection detection,
-            string text)
-        {
-            byte[] body = encoding.GetBytes(text);
-            if (detection == null || !detection.HasBom)
-            {
-                return body;
-            }
-
-            byte[] preamble = encoding.GetPreamble();
-            if (preamble == null || preamble.Length == 0)
-            {
-                return body;
-            }
-
-            var bytes = new byte[preamble.Length + body.Length];
-            Buffer.BlockCopy(preamble, 0, bytes, 0, preamble.Length);
-            Buffer.BlockCopy(body, 0, bytes, preamble.Length, body.Length);
-            return bytes;
-        }
-
         private static string BuildStateToken(bool exists, string hash, long ticks)
         {
             return "v1|" + (exists ? "1" : "0")
@@ -586,6 +548,16 @@ namespace MiaoWu.Infrastructure.Tools
         private sealed class WritePlan
         {
             public string NormalizedPath;
+
+            /// <summary>父目录绝对路径；<see cref="CreatesParent"/> 时在执行阶段创建。</summary>
+            public string ParentPath;
+
+            /// <summary>父目录的相对显示路径；不需要建目录时为空串。</summary>
+            public string ParentDisplay;
+
+            /// <summary>审批时父目录还不存在，需要执行时补建。</summary>
+            public bool CreatesParent;
+
             public string RelativeDisplay;
             public bool Exists;
             public string OldHash;

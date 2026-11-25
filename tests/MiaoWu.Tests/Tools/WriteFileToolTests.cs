@@ -65,6 +65,7 @@ namespace MiaoWu.Tests.Tools
 
             Assert.True(result.IsSuccess, result.Content);
             Assert.Equal("hello\nworld\n", File.ReadAllText(Path.Combine(_workspace, "hello.txt")));
+            Assert.False(HasUtf8Bom(File.ReadAllBytes(Path.Combine(_workspace, "hello.txt"))));
             Assert.Null(result.BackupPath);
             Assert.False(result.IsUntrusted);
         }
@@ -173,7 +174,7 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void CrLfStyleIsPreserved()
+        public void WriteWritesContentVerbatim()
         {
             string path = Path.Combine(_workspace, "a.txt");
             File.WriteAllText(path, "a\r\nb\r\n", new UTF8Encoding(false));
@@ -181,52 +182,58 @@ namespace MiaoWu.Tests.Tools
             ToolResult result = Write("a.txt", "a\nc\n");
 
             Assert.True(result.IsSuccess, result.Content);
-            Assert.Equal("a\r\nc\r\n", File.ReadAllText(path));
+            // 与 DSH 的 write 一致：content 原样写入，不按旧文件重排行尾；edit 才恢复原行尾。
+            Assert.Equal("a\nc\n", File.ReadAllText(path));
         }
 
         [Fact]
-        public void GbkEncodingIsPreserved()
+        public void GbkFileIsRejectedUntilConverted()
         {
-            Encoding gbk;
-            try
-            {
-                gbk = Encoding.GetEncoding(936);
-            }
-            catch (ArgumentException)
-            {
-                return;
-            }
-
             string path = Path.Combine(_workspace, "gbk.txt");
-            File.WriteAllBytes(path, gbk.GetBytes("中文\r\n"));
+
+            // GBK 的“中文\r\n”；运行期只接受 UTF-8 文本。
+            byte[] original = new byte[] { 0xD6, 0xD0, 0xCE, 0xC4, 0x0D, 0x0A };
+            File.WriteAllBytes(path, original);
 
             ToolResult result = Write("gbk.txt", "英文\r\n");
 
-            Assert.True(result.IsSuccess, result.Content);
-            byte[] written = File.ReadAllBytes(path);
-            Assert.Equal("英文\r\n", gbk.GetString(written));
+            Assert.Equal(ToolResultStatus.Failed, result.Status);
+            Assert.Equal("not_text", result.ErrorCode);
+            Assert.Equal(original, File.ReadAllBytes(path));
         }
 
         [Fact]
-        public void UnsupportedEncodingIsRejected()
+        public void Utf8BomIsDropped()
         {
-            Encoding gbk;
-            try
-            {
-                gbk = Encoding.GetEncoding(936);
-            }
-            catch (ArgumentException)
-            {
-                return;
-            }
+            string path = Path.Combine(_workspace, "bom.txt");
+            byte[] body = new UTF8Encoding(false).GetBytes("a\r\n");
+            var bytes = new byte[3 + body.Length];
+            bytes[0] = 0xEF;
+            bytes[1] = 0xBB;
+            bytes[2] = 0xBF;
+            Buffer.BlockCopy(body, 0, bytes, 3, body.Length);
+            File.WriteAllBytes(path, bytes);
 
-            File.WriteAllBytes(Path.Combine(_workspace, "gbk.txt"), gbk.GetBytes("中文\r\n"));
+            ToolResult result = Write("bom.txt", "b\r\n");
 
-            ToolResult result = Write("gbk.txt", "表情 😀\r\n");
+            Assert.True(result.IsSuccess, result.Content);
+            byte[] written = File.ReadAllBytes(path);
+            Assert.False(HasUtf8Bom(written));
+            Assert.Equal("b\r\n", new UTF8Encoding(false).GetString(written));
+            Assert.Contains("UTF-8", result.Content);
+            Assert.DoesNotContain("UTF-8 BOM", result.Content);
+        }
 
-            Assert.Equal(ToolResultStatus.Failed, result.Status);
-            Assert.Equal("encoding_unsupported", result.ErrorCode);
-            Assert.Equal("中文\r\n", gbk.GetString(File.ReadAllBytes(Path.Combine(_workspace, "gbk.txt"))));
+        [Fact]
+        public void Utf8SupportsEmoji()
+        {
+            string path = Path.Combine(_workspace, "emoji.txt");
+            File.WriteAllText(path, "中文\r\n", new UTF8Encoding(false));
+
+            ToolResult result = Write("emoji.txt", "表情 😀\r\n");
+
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.Equal("表情 😀\r\n", File.ReadAllText(path));
         }
 
         [Fact]
@@ -241,12 +248,26 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void MissingParentDirectoryIsRejected()
+        public void MissingParentDirectoryIsCreated()
         {
-            ToolResult result = Write(@"missing\a.txt", "content");
+            ToolResult result = Write(@"missing\deeper\a.txt", "content");
 
-            Assert.Equal(ToolResultStatus.Failed, result.Status);
-            Assert.Equal("parent_not_found", result.ErrorCode);
+            Assert.True(result.IsSuccess, result.Content);
+            Assert.Equal(
+                "content",
+                File.ReadAllText(Path.Combine(_workspace, "missing", "deeper", "a.txt")));
+            Assert.Contains("已自动创建", result.Content);
+        }
+
+        [Fact]
+        public void PreviewMentionsDirectoryCreation()
+        {
+            ToolCall call = Call(@"missing\a.txt", "content");
+            ToolApprovalPreview preview = _tool.Describe(call, _context);
+
+            Assert.Contains("自动创建目录", preview.Summary);
+            Assert.False(Directory.Exists(Path.Combine(_workspace, "missing")),
+                "Describe 不能产生写副作用");
         }
 
         [Fact]
@@ -347,6 +368,15 @@ namespace MiaoWu.Tests.Tools
             return _tool.ExecuteAsync(call, actual, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
+        }
+
+        private static bool HasUtf8Bom(byte[] bytes)
+        {
+            return bytes != null
+                && bytes.Length >= 3
+                && bytes[0] == 0xEF
+                && bytes[1] == 0xBB
+                && bytes[2] == 0xBF;
         }
 
         private static ToolCall Call(string path, string content)

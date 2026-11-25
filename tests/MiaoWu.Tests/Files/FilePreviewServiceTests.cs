@@ -37,31 +37,39 @@ namespace MiaoWu.Tests.Files
 
             FilePreview preview = _service.Load(path, default(System.Threading.CancellationToken));
 
-            Assert.Equal("UTF-8 BOM", preview.EncodingName);
+            Assert.Equal("UTF-8", preview.EncodingName);
             Assert.True(preview.HasBom);
             Assert.Equal(TextNewLineStyle.CrLf, preview.NewLine);
             Assert.Equal(2, preview.LineCount);
             Assert.StartsWith("中文第一行", preview.Content);
             Assert.False(preview.IsTruncated);
-            Assert.Contains("UTF-8 BOM", preview.MetaText);
+            Assert.Contains("UTF-8", preview.MetaText);
             Assert.Contains("CRLF", preview.MetaText);
         }
 
         [Fact]
-        public void GbkFallbackKeepsChineseText()
+        public void NonUtf8FileIsRejected()
         {
-            byte[] bytes = Encoding.GetEncoding(936).GetBytes("中文测试\r\n第二行");
+            // GBK 的“中文测试\r\n第二行”；与 DSH 的 workspace-file/not-text 对齐。
+            byte[] bytes = new byte[]
+            {
+                0xD6, 0xD0, 0xCE, 0xC4, 0xB2, 0xE2, 0xCA, 0xD4, 0x0D, 0x0A,
+                0xB5, 0xDA, 0xB6, 0xFE, 0xD0, 0xD0
+            };
             string path = WriteBytes("gbk.txt", new byte[0], bytes);
 
             FilePreview preview = _service.Load(path, default(System.Threading.CancellationToken));
 
-            Assert.Equal("GBK", preview.EncodingName);
-            Assert.Contains("中文测试", preview.Content);
-            Assert.Equal(2, preview.LineCount);
+            Assert.True(preview.Exists);
+            Assert.True(preview.HasError);
+            Assert.False(preview.IsBinary);
+            Assert.Contains("UTF-8", preview.ErrorMessage);
+            Assert.Empty(preview.Content);
+            Assert.Equal(16, preview.ByteLength);
         }
 
         [Fact]
-        public void Utf16LeWithBomIsNotTreatedAsBinary()
+        public void Utf16IsRejected()
         {
             string path = WriteBytes(
                 "utf16.txt",
@@ -70,9 +78,8 @@ namespace MiaoWu.Tests.Files
 
             FilePreview preview = _service.Load(path, default(System.Threading.CancellationToken));
 
-            Assert.False(preview.IsBinary);
-            Assert.Equal("UTF-16 LE", preview.EncodingName);
-            Assert.Contains("宽字符一行", preview.Content);
+            Assert.True(preview.IsBinary || preview.HasError);
+            Assert.Empty(preview.Content);
         }
 
         [Fact]

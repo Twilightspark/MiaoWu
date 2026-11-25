@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using MiaoWu.App.Mvvm;
@@ -11,6 +13,7 @@ using MiaoWu.Core.Agents.Tools;
 using MiaoWu.Core.Abstractions;
 using MiaoWu.Core.Models;
 using MiaoWu.Core.Settings;
+using MiaoWu.Core.Updates;
 using MiaoWu.Infrastructure.Providers;
 
 namespace MiaoWu.App.ViewModels
@@ -174,6 +177,8 @@ namespace MiaoWu.App.ViewModels
         private string _providerStatus;
         private string _providerFormStatus;
         private string _updateStatus;
+        private string _latestReleaseUrl;
+        private bool _isCheckingUpdate;
         private bool _isTesting;
         private bool _isFetchingModels;
         private string _modelFetchStatus;
@@ -247,7 +252,8 @@ namespace MiaoWu.App.ViewModels
             RemoveProviderCommand = new RelayCommand(RemoveEditingProvider);
             TestProviderCommand = new RelayCommand(() => FireAndForget(TestProviderAsync()));
             FetchModelsCommand = new RelayCommand(() => FireAndForget(FetchModelsAsync()));
-            CheckUpdateCommand = new RelayCommand(ShowUpdatePlaceholder);
+            CheckUpdateCommand = new RelayCommand(() => FireAndForget(CheckUpdateAsync()), () => !IsCheckingUpdate);
+            OpenReleasePageCommand = new RelayCommand(OpenReleasePage);
 
             ReloadProviders();
         }
@@ -295,6 +301,8 @@ namespace MiaoWu.App.ViewModels
 
         public RelayCommand CheckUpdateCommand { get; }
 
+        public RelayCommand OpenReleasePageCommand { get; }
+
         public bool IsOpen
         {
             get { return _isOpen; }
@@ -306,6 +314,7 @@ namespace MiaoWu.App.ViewModels
                     StatusText = null;
                     ProviderFormStatus = null;
                     UpdateStatus = null;
+                    _latestReleaseUrl = null;
                 }
             }
         }
@@ -752,6 +761,24 @@ namespace MiaoWu.App.ViewModels
             get { return !string.IsNullOrEmpty(_updateStatus); }
         }
 
+        /// <summary>检查进行中：按钮置灰，避免并发请求。</summary>
+        public bool IsCheckingUpdate
+        {
+            get { return _isCheckingUpdate; }
+            private set
+            {
+                if (SetProperty(ref _isCheckingUpdate, value))
+                {
+                    OnPropertyChanged(nameof(IsNotCheckingUpdate));
+                }
+            }
+        }
+
+        public bool IsNotCheckingUpdate
+        {
+            get { return !_isCheckingUpdate; }
+        }
+
         public string AboutLine
         {
             get { return "MiaoWu " + AppInfo.Version + " · 本地优先的智能体工作台"; }
@@ -1193,9 +1220,70 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        private void ShowUpdatePlaceholder()
+        /// <summary>
+        /// 设置 → 关于的「检查更新」：只读 GitHub Releases 的最新发布并与当前版本比较。
+        /// 结果只落在状态行，不改配置、不下载；失败给出一句可读原因，发布页按钮始终可用。
+        /// </summary>
+        private async Task CheckUpdateAsync()
         {
-            UpdateStatus = "检查更新为预留功能，将在后续版本提供。";
+            if (IsCheckingUpdate)
+            {
+                return;
+            }
+
+            IsCheckingUpdate = true;
+            UpdateStatus = "正在检查更新…";
+            try
+            {
+                UpdateCheckResult result = await _app.Updates.CheckAsync(CancellationToken.None);
+                if (result == null)
+                {
+                    UpdateStatus = "检查更新失败：没有返回结果。";
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(result.ReleaseUrl))
+                {
+                    _latestReleaseUrl = result.ReleaseUrl;
+                }
+
+                UpdateStatus = result.Succeeded
+                    ? result.Message
+                    : result.Message + "可打开 release 页手动查看。";
+            }
+            catch (Exception exception)
+            {
+                UpdateStatus = "检查更新失败：" + exception.Message;
+            }
+            finally
+            {
+                IsCheckingUpdate = false;
+            }
+        }
+
+        /// <summary>打开最新发布页；还没检查过或检查失败时退回配置里的 releases 页。</summary>
+        private void OpenReleasePage()
+        {
+            string url = _latestReleaseUrl;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                url = _app.Settings.Agent.UpdateUrl;
+            }
+
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                UpdateStatus = "没有可打开的发布页地址。";
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception exception)
+            {
+                UpdateStatus = "无法打开发布页：" + exception.Message;
+            }
         }
 
         /// <summary>

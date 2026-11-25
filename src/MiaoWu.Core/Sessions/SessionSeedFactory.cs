@@ -16,7 +16,7 @@ namespace MiaoWu.Core.Sessions
             "三栏工作台布局",
             "文件树懒加载",
             "Markdown 渲染子集",
-            "编码识别与 GBK",
+            "编码识别与 UTF-8",
             "Win7 兼容排查",
             "审批通知时序",
             "diff 备份策略",

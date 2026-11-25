@@ -1050,16 +1050,25 @@
                                                Foreground="{DynamicResource Brush.Text2}"
                                                TextAlignment="Center"
                                                TextWrapping="Wrap" />
-                                    <Button Margin="0,24,0,0"
-                                            MinWidth="120"
-                                            HorizontalAlignment="Center"
-                                            Style="{StaticResource Button.Primary}"
-                                            Command="{Binding CheckUpdateCommand}"
-                                            AutomationProperties.Name="检查更新">
-                                        <!-- 文字显式取“主题色表面上的白字”，不依赖按钮样式的 Foreground 继承。 -->
-                                        <TextBlock Text="检查更新"
-                                                   Foreground="{StaticResource Brush.OnAccent}" />
-                                    </Button>
+                                    <StackPanel Margin="0,24,0,0"
+                                                HorizontalAlignment="Center"
+                                                Orientation="Horizontal">
+                                        <Button MinWidth="120"
+                                                Style="{StaticResource Button.Primary}"
+                                                Command="{Binding CheckUpdateCommand}"
+                                                IsEnabled="{Binding IsNotCheckingUpdate}"
+                                                AutomationProperties.Name="检查更新">
+                                            <!-- 文字显式取“主题色表面上的白字”，不依赖按钮样式的 Foreground 继承。 -->
+                                            <TextBlock Text="检查更新"
+                                                       Foreground="{StaticResource Brush.OnAccent}" />
+                                        </Button>
+                                        <Button Margin="8,0,0,0"
+                                                MinWidth="104"
+                                                Content="打开发布页"
+                                                Style="{StaticResource Button.Ghost}"
+                                                Command="{Binding OpenReleasePageCommand}"
+                                                AutomationProperties.Name="打开发布页" />
+                                    </StackPanel>
                                     <TextBlock Margin="0,8,0,0"
                                                HorizontalAlignment="Center"
                                                Text="{Binding UpdateStatus}"

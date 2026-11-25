@@ -110,7 +110,7 @@ namespace MiaoWu.Core.Settings
             ProxyMode = "system";
             StartMinimized = false;
             CheckUpdatesOnStartup = true;
-            UpdateUrl = "https://github.com/miaowu-app/miaowu/releases";
+            UpdateUrl = "https://github.com/Twilightspark/MiaoWu/releases";
         }
 
         public string SystemPrompt { get; set; }
@@ -280,9 +280,14 @@ namespace MiaoWu.Core.Settings
                 value.ProxyMode = "system";
             }
 
-            if (value.UpdateUrl == null)
+            // 旧版默认值是占位仓库，已经写进 config.json 的也要换成本仓库的 release 页。
+            if (string.IsNullOrWhiteSpace(value.UpdateUrl)
+                || string.Equals(
+                    value.UpdateUrl.Trim(),
+                    "https://github.com/miaowu-app/miaowu/releases",
+                    StringComparison.OrdinalIgnoreCase))
             {
-                value.UpdateUrl = "https://github.com/miaowu-app/miaowu/releases";
+                value.UpdateUrl = "https://github.com/Twilightspark/MiaoWu/releases";
             }
 
             return value;

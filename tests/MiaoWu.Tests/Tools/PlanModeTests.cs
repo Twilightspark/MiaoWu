@@ -82,6 +82,8 @@ namespace MiaoWu.Tests.Tools
             Assert.Equal(ToolResultStatus.Succeeded, result.Status);
             Assert.False(mode.Exited);
             Assert.Contains("当前不在计划模式", result.Content);
+            Assert.Contains("没有提交审批", result.Content);
+            Assert.DoesNotContain("已获批准", result.Content);
         }
 
         [Fact]

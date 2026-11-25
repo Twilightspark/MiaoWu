@@ -150,7 +150,7 @@
                     Margin="{StaticResource Margin.Pane.Right}"
                     Style="{StaticResource Pane.Card}">
                 <Grid>
-                    <Grid Visibility="{Binding Schedules.IsOpen, Converter={StaticResource InverseBoolToVisibility}}">
+                    <Grid Visibility="{Binding IsPageOpen, Converter={StaticResource InverseBoolToVisibility}}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="{StaticResource GridLength.Splitter}" />
@@ -195,6 +195,10 @@
                     <views:SchedulesPageView x:Name="SchedulesPage"
                                              DataContext="{Binding Schedules}"
                                              Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
+
+                    <views:MarketPageView x:Name="MarketPage"
+                                          DataContext="{Binding Market}"
+                                          Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
                 </Grid>
             </Border>
         </Grid>

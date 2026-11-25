@@ -183,11 +183,17 @@ namespace MiaoWu.Infrastructure.Tools
                     "文件包含二进制内容，read 只读取文本。");
             }
 
-            TextEncodingDetection detection = TextEncodingDetector.Detect(bytes);
-            string text = detection.Encoding.GetString(
-                bytes,
-                detection.BomLength,
-                Math.Max(0, bytes.Length - detection.BomLength));
+            Utf8TextInfo original = Utf8Text.Read(bytes);
+            if (!original.IsValid)
+            {
+                return ToolResult.Failure(
+                    call,
+                    ToolResultStatus.Failed,
+                    "not_text",
+                    "文件不是 UTF-8 文本（可能是 GBK / ANSI / UTF-16），read 只读取 UTF-8。");
+            }
+
+            string text = original.Text;
             List<string> lines = ToolText.SplitLines(text);
 
             string display = ToolText.ToDisplayPath(resolved.RelativePath);
@@ -195,7 +201,7 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 return ToolResult.Success(
                     call,
-                    "文件：" + display + "（空文件，" + detection.DisplayName + "）\n",
+                    "文件：" + display + "（空文件，" + Utf8Text.DisplayName + "）\n",
                     display + " · 空文件",
                     true,
                     false);
@@ -223,7 +229,7 @@ namespace MiaoWu.Infrastructure.Tools
                 .Append("（共 ").Append(lines.Count.ToString(CultureInfo.InvariantCulture)).Append(" 行，显示 ")
                 .Append(offset.ToString(CultureInfo.InvariantCulture)).Append('-')
                 .Append(endLine.ToString(CultureInfo.InvariantCulture)).Append(" 行，")
-                .Append(detection.DisplayName).Append("）\n");
+                .Append(Utf8Text.DisplayName).Append("）\n");
 
             for (int i = offset - 1; i < endLine; i++)
             {
@@ -400,6 +406,7 @@ namespace MiaoWu.Infrastructure.Tools
             var stopwatch = Stopwatch.StartNew();
             int scannedFiles = 0;
             int skippedBinary = 0;
+            int skippedNonText = 0;
             int unreadable = 0;
             bool truncated = false;
             bool budgetExceeded = false;
@@ -528,11 +535,14 @@ namespace MiaoWu.Infrastructure.Tools
                         continue;
                     }
 
-                    TextEncodingDetection detection = TextEncodingDetector.Detect(bytes);
-                    string text = detection.Encoding.GetString(
-                        bytes,
-                        detection.BomLength,
-                        Math.Max(0, bytes.Length - detection.BomLength));
+                    Utf8TextInfo original = Utf8Text.Read(bytes);
+                    if (!original.IsValid)
+                    {
+                        skippedNonText++;
+                        continue;
+                    }
+
+                    string text = original.Text;
                     List<string> lines = ToolText.SplitLines(text);
                     string relative = context.Sandbox.ToRelativePath(child);
                     string display = ToolText.ToDisplayPath(relative);
@@ -621,6 +631,12 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 builder.Append("（跳过 ").Append(skippedBinary.ToString(CultureInfo.InvariantCulture))
                     .Append(" 个二进制文件）\n");
+            }
+
+            if (skippedNonText > 0)
+            {
+                builder.Append("（跳过 ").Append(skippedNonText.ToString(CultureInfo.InvariantCulture))
+                    .Append(" 个非 UTF-8 文本文件）\n");
             }
 
             if (unreadable > 0)

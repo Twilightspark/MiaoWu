@@ -60,6 +60,57 @@
   <data name="CapabilityMarket" xml:space="preserve">
     <value>能力市场</value>
   </data>
+  <data name="CapabilityMarketHint" xml:space="preserve">
+    <value>能力市场：管理当前工作区的技能</value>
+  </data>
+  <data name="MarketCloseTooltip" xml:space="preserve">
+    <value>关闭能力市场</value>
+  </data>
+  <data name="MarketSearchHint" xml:space="preserve">
+    <value>搜索技能名称或描述</value>
+  </data>
+  <data name="MarketImport" xml:space="preserve">
+    <value>导入技能</value>
+  </data>
+  <data name="MarketOverview" xml:space="preserve">
+    <value>概览</value>
+  </data>
+  <data name="MarketBody" xml:space="preserve">
+    <value>正文</value>
+  </data>
+  <data name="MarketTabsAutomation" xml:space="preserve">
+    <value>技能详情页签</value>
+  </data>
+  <data name="MarketCollapse" xml:space="preserve">
+    <value>收起详情</value>
+  </data>
+  <data name="MarketActions" xml:space="preserve">
+    <value>技能操作</value>
+  </data>
+  <data name="MarketOpenFolder" xml:space="preserve">
+    <value>打开文件夹</value>
+  </data>
+  <data name="MarketOpenInEditor" xml:space="preserve">
+    <value>在编辑器中打开</value>
+  </data>
+  <data name="MarketCopyPath" xml:space="preserve">
+    <value>复制路径</value>
+  </data>
+  <data name="MarketRefresh" xml:space="preserve">
+    <value>重新扫描</value>
+  </data>
+  <data name="MarketOpenSkillsFolder" xml:space="preserve">
+    <value>打开技能目录</value>
+  </data>
+  <data name="MarketOpenUserFolder" xml:space="preserve">
+    <value>打开用户级技能目录</value>
+  </data>
+  <data name="MarketImportFolder" xml:space="preserve">
+    <value>导入技能文件夹…</value>
+  </data>
+  <data name="MarketEmptyImport" xml:space="preserve">
+    <value>导入技能</value>
+  </data>
   <data name="Settings" xml:space="preserve">
     <value>功能设置</value>
   </data>

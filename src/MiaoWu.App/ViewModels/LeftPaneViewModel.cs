@@ -31,6 +31,8 @@ namespace MiaoWu.App.ViewModels
 
         private WorkspaceItemViewModel _activeWorkspace;
         private string _inlineError;
+        private bool _isSchedulesOpen;
+        private bool _isMarketOpen;
 
         public LeftPaneViewModel(
             ISessionCatalog sessionCatalog,
@@ -112,7 +114,7 @@ namespace MiaoWu.App.ViewModels
 
         public event EventHandler MarketplaceRequested;
 
-        /// <summary>用户点击“定时任务”。与能力市场一致，先给出即将推出的说明。</summary>
+        /// <summary>用户点击“定时任务”。由主壳打开整页任务页。</summary>
         public event EventHandler ScheduledTasksRequested;
 
         /// <summary>活动工作区的选中会话变化（含首次加载与新建后选中）。</summary>
@@ -163,6 +165,34 @@ namespace MiaoWu.App.ViewModels
         public bool HasActiveWorkspace
         {
             get { return _activeWorkspace != null; }
+        }
+
+        /// <summary>定时任务整页是否打开；左栏入口据此显示选中态。</summary>
+        public bool IsSchedulesOpen
+        {
+            get { return _isSchedulesOpen; }
+        }
+
+        /// <summary>能力市场整页是否打开；左栏入口据此显示选中态。</summary>
+        public bool IsMarketOpen
+        {
+            get { return _isMarketOpen; }
+        }
+
+        /// <summary>主壳在页面切换后同步两个整页入口的选中态。</summary>
+        public void SetPageStates(bool schedulesOpen, bool marketOpen)
+        {
+            if (_isSchedulesOpen != schedulesOpen)
+            {
+                _isSchedulesOpen = schedulesOpen;
+                OnPropertyChanged(nameof(IsSchedulesOpen));
+            }
+
+            if (_isMarketOpen != marketOpen)
+            {
+                _isMarketOpen = marketOpen;
+                OnPropertyChanged(nameof(IsMarketOpen));
+            }
         }
 
         public string InlineError

@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using MiaoWu.Core.Text;
 
 namespace MiaoWu.Infrastructure.Tools
 {
@@ -90,7 +91,11 @@ namespace MiaoWu.Infrastructure.Tools
                     string body;
                     using (Stream stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                     {
-                        body = await ReadCappedAsync(stream, cancellationToken).ConfigureAwait(false);
+                        byte[] bytes = await ReadCappedBytesAsync(stream, cancellationToken).ConfigureAwait(false);
+                        string charset = response.Content.Headers.ContentType == null
+                            ? null
+                            : response.Content.Headers.ContentType.CharSet;
+                        body = DecodeBody(bytes, charset);
                     }
 
                     return new WebPageContent
@@ -122,7 +127,51 @@ namespace MiaoWu.Infrastructure.Tools
             _client.Dispose();
         }
 
-        private static async Task<string> ReadCappedAsync(Stream stream, CancellationToken cancellationToken)
+        /// <summary>
+        /// 按响应头声明的 charset 解码正文。与 DSH 的 web-fetch 对齐：未声明时按 UTF-8；
+        /// 声明了就用该编码解码，未知编码返回结构化失败而不是静默乱码。
+        /// </summary>
+        public static string DecodeBody(byte[] bytes, string charset)
+        {
+            if (bytes == null)
+            {
+                throw new ArgumentNullException(nameof(bytes));
+            }
+
+            string label = (charset ?? string.Empty).Trim().Trim('"');
+            Encoding encoding;
+            if (label.Length == 0
+                || string.Equals(label, "utf-8", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(label, "utf8", StringComparison.OrdinalIgnoreCase))
+            {
+                encoding = TextEncodings.Utf8;
+            }
+            else
+            {
+                try
+                {
+                    encoding = Encoding.GetEncoding(label);
+                }
+                catch (ArgumentException exception)
+                {
+                    throw new WebFetchException(
+                        "unsupported_charset",
+                        "网页声明了不支持的编码：" + label,
+                        exception);
+                }
+                catch (NotSupportedException exception)
+                {
+                    throw new WebFetchException(
+                        "unsupported_charset",
+                        "网页声明了不支持的编码：" + label,
+                        exception);
+                }
+            }
+
+            return encoding.GetString(bytes);
+        }
+
+        private static async Task<byte[]> ReadCappedBytesAsync(Stream stream, CancellationToken cancellationToken)
         {
             var buffer = new byte[81920];
             using (var memory = new MemoryStream())
@@ -145,7 +194,7 @@ namespace MiaoWu.Infrastructure.Tools
                     memory.Write(buffer, 0, Math.Min(read, remaining));
                 }
 
-                return Encoding.UTF8.GetString(memory.ToArray());
+                return memory.ToArray();
             }
         }
     }

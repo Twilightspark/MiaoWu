@@ -40,7 +40,7 @@ namespace MiaoWu.Infrastructure.Tools
                         new[]
                         {
                             "write：优先用 edit 做小范围修改；不要用它生成无关的大文件。",
-                            "write：覆盖已有文件前先 read，保留原有编码与行尾。"
+                            "write：覆盖已有文件前先 read，保留行尾；目标文件必须是 UTF-8，非 UTF-8 会拒绝写入。"
                         });
 
                 case ToolNames.Edit:
@@ -178,7 +178,8 @@ namespace MiaoWu.Infrastructure.Tools
                         "新建定时任务；到点把 prompt 作为用户消息投递到会话。",
                         new[]
                         {
-                            "schedule_create：规则是两行文本，例如 DTSTART:20261122T090000 + RRULE:FREQ=DAILY;INTERVAL=1；应用关闭期间不投递。"
+                            "schedule_create：规则是两行文本，例如 DTSTART:20261122T090000 + RRULE:FREQ=DAILY;INTERVAL=1；应用关闭期间不投递。",
+                            "schedule_create：FREQ 只支持 DAILY / WEEKLY / MONTHLY；一次性提醒用 DTSTART:<目标时间> + RRULE:FREQ=DAILY;COUNT=1（不要用 FREQ=ONCE / YEARLY）。"
                         });
 
                 case ToolNames.ScheduleEdit:

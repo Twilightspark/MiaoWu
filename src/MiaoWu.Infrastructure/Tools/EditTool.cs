@@ -38,7 +38,8 @@ namespace MiaoWu.Infrastructure.Tools
             {
                 return "编辑工作区内的文本文件：把 old_string 替换为 new_string。参数：path（相对路径）、"
                     + "old_string（必须唯一匹配）、new_string（可为空）、replace_all（可选，默认 false）。"
-                    + "编辑前自动备份，审批后执行；文件在审批后被外部修改会拒绝写入。";
+                    + "编辑前自动备份，审批后执行；文件在审批后被外部修改会拒绝写入；"
+                    + "目标文件必须是 UTF-8，非 UTF-8 会拒绝编辑，请先转换。";
             }
         }
 
@@ -214,13 +215,15 @@ namespace MiaoWu.Infrastructure.Tools
                     "目标文件包含二进制内容，edit 只处理文本文件。");
             }
 
-            TextEncodingDetection detection = TextEncodingDetector.Detect(bytes);
-            string oldText = bytes.Length == 0
-                ? string.Empty
-                : detection.Encoding.GetString(
-                    bytes,
-                    detection.BomLength,
-                    Math.Max(0, bytes.Length - detection.BomLength));
+            Utf8TextInfo original = Utf8Text.Read(bytes);
+            if (!original.IsValid)
+            {
+                throw new ToolPreparationException(
+                    "not_text",
+                    "目标文件不是 UTF-8 文本（可能是 GBK / ANSI / UTF-16）。请先转换为 UTF-8，再编辑。");
+            }
+
+            string oldText = original.Text;
 
             string haystack = NormalizeNewLines(oldText);
             string needle = NormalizeNewLines(oldString);
@@ -255,6 +258,9 @@ namespace MiaoWu.Infrastructure.Tools
                 ? ReplaceAll(haystack, needle, replacement)
                 : ReplaceFirst(haystack, needle, replacement);
 
+            // 与 DSH 的 edit 一致：匹配用 LF 归一化，写回时恢复原文件的行尾。
+            newText = RestoreNewLines(newText, oldText);
+
             var writeArguments = JsonValue.NewObject();
             writeArguments.Add(ToolArgumentNames.Path, JsonValue.From(requestedPath));
             writeArguments.Add("content", JsonValue.From(newText));
@@ -279,6 +285,22 @@ namespace MiaoWu.Infrastructure.Tools
             }
 
             return text.Replace("\r\n", "\n").Replace('\r', '\n');
+        }
+
+        private static string RestoreNewLines(string text, string original)
+        {
+            TextNewLineStyle style = NewLineDetector.Detect(original);
+            if (style == TextNewLineStyle.CrLf)
+            {
+                return text.Replace("\n", "\r\n");
+            }
+
+            if (style == TextNewLineStyle.Cr)
+            {
+                return text.Replace("\n", "\r");
+            }
+
+            return text;
         }
 
         private static int CountOccurrences(string haystack, string needle)

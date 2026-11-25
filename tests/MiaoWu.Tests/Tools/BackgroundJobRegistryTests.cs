@@ -31,6 +31,22 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
+        public async Task ChineseOutputIsUtf8()
+        {
+            BackgroundJobRegistry.BackgroundJob job = _jobs.Start(
+                "s1",
+                "Write-Output '中文任务'",
+                Environment.CurrentDirectory,
+                "中文输出");
+
+            string output = await ReadUntilAsync(job, "中文任务", TimeSpan.FromSeconds(10));
+
+            Assert.Contains("中文任务", output);
+            Assert.True(output.IndexOf('\uFEFF') < 0, "输出不应带 BOM");
+            Assert.True(output.IndexOf('\uFFFD') < 0, "输出不应有替换字符");
+        }
+
+        [Fact]
         public void ListIsScopedToSession()
         {
             BackgroundJobRegistry.BackgroundJob mine = _jobs.Start(

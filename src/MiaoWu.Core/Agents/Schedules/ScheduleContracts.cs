@@ -329,7 +329,8 @@ namespace MiaoWu.Core.Agents.Schedules
             {
                 throw new ScheduleException(
                     "invalid_rrule",
-                    "只支持 DAILY / WEEKLY / MONTHLY，收到：" + frequency + "。");
+                    "只支持 DAILY / WEEKLY / MONTHLY，收到：" + frequency
+                        + "。一次性提醒请用 FREQ=DAILY;COUNT=1，并把 DTSTART 设为目标时间。");
             }
 
             foreach (string key in parts.Keys)

@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MiaoWu.Core.Abstractions;
@@ -10,9 +9,9 @@ using MiaoWu.Core.Text;
 namespace MiaoWu.Infrastructure.Files
 {
     /// <summary>
-    /// 文本预览实现：
-    /// 1. 先按前 8KB 判断二进制（UTF-16 BOM 除外）；
-    /// 2. 编码顺序 BOM → UTF-8 严格校验 → 系统 ANSI（中文 936）；
+    /// 文本预览实现，与 DSH 的 workspace-file 预览边界一致：
+    /// 1. 先按前 8KB 判断二进制；
+    /// 2. 严格 UTF-8；UTF-8 BOM 剥离，非 UTF-8 直接返回 not-text（不猜 GBK / ANSI / UTF-16）；
     /// 3. 2MB / 5000 行先到为准，截断不抛异常；
     /// 4. 所有错误转成结构化字段。
     /// </summary>
@@ -141,16 +140,6 @@ namespace MiaoWu.Infrastructure.Files
         private static bool IsBinary(byte[] bytes, int count)
         {
             int probe = Math.Min(count, 8192);
-            if (probe >= 2)
-            {
-                // UTF-16 文本天然包含 0x00，先看 BOM 再决定是否按二进制拒绝。
-                if ((bytes[0] == 0xFF && bytes[1] == 0xFE)
-                    || (bytes[0] == 0xFE && bytes[1] == 0xFF))
-                {
-                    return false;
-                }
-            }
-
             for (int index = 0; index < probe; index++)
             {
                 if (bytes[index] == 0)
@@ -169,17 +158,13 @@ namespace MiaoWu.Infrastructure.Files
             int count,
             bool truncatedByBytes)
         {
-            TextEncodingDetection detection = count == 0
-                ? new TextEncodingDetection(new UTF8Encoding(false), "UTF-8", false, 0, false)
-                : TextEncodingDetector.Detect(bytes, count);
-
-            int contentOffset = Math.Min(detection.BomLength, count);
-            string content = detection.Encoding.GetString(bytes, contentOffset, count - contentOffset);
-            if (content.Length > 0 && content[0] == '\uFEFF')
+            Utf8TextInfo original = Utf8Text.Read(bytes, count, truncatedByBytes);
+            if (!original.IsValid)
             {
-                content = content.Substring(1);
+                return FilePreview.NotText(fullPath, byteLength);
             }
 
+            string content = original.Text;
             TextNewLineStyle newLine = NewLineDetector.Detect(content);
             int totalLines = TextLineCounter.Count(content);
             bool truncatedByLines = totalLines > _options.MaxLines;
@@ -206,8 +191,8 @@ namespace MiaoWu.Infrastructure.Files
                 FilePath = fullPath,
                 Exists = true,
                 IsBinary = false,
-                EncodingName = detection.DisplayName,
-                HasBom = detection.HasBom,
+                EncodingName = Utf8Text.DisplayName,
+                HasBom = original.HasBom,
                 NewLine = newLine,
                 ByteLength = byteLength,
                 LineCount = loadedLines,
@@ -216,7 +201,7 @@ namespace MiaoWu.Infrastructure.Files
                 TruncationReason = reason,
                 Content = content,
                 MetaText = DocumentMetaFormatter.Format(
-                    detection.DisplayName,
+                    Utf8Text.DisplayName,
                     newLine,
                     byteLength,
                     loadedLines,

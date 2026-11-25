@@ -20,6 +20,7 @@ using MiaoWu.Core.Markdown;
 using MiaoWu.Core.Sessions;
 using MiaoWu.Core.Settings;
 using MiaoWu.Core.Workspaces;
+using MiaoWu.Infrastructure.Skills;
 
 namespace MiaoWu.App.ViewModels
 {
@@ -40,6 +41,9 @@ namespace MiaoWu.App.ViewModels
 
         /// <summary>上一次真正生效的会话选择；后台刷新重建行时 id 不变，不应当成用户切走。</summary>
         private string _lastSessionSelectionId;
+
+        /// <summary>上一次生效的工作区；用于能力市场在切换工作区后重新扫描。</summary>
+        private string _lastWorkspaceId;
 
         private readonly DispatcherTimer _refreshTimer;
         private PaneLayout _layout;
@@ -179,8 +183,8 @@ namespace MiaoWu.App.ViewModels
             Left.StateChanged += OnChildStateChanged;
             Left.FileOpenRequested += OnFileOpenRequested;
             Left.SettingsRequested += (sender, args) => ShowSettings();
-            Left.MarketplaceRequested += (sender, args) => ShowMarketplacePlaceholder();
             Left.ScheduledTasksRequested += (sender, args) => ToggleSchedules();
+            Left.MarketplaceRequested += (sender, args) => ToggleMarket();
             Left.SessionRenamed += OnLeftSessionRenamed;
             Left.SessionDeleteRequested += OnLeftSessionDeleteRequested;
             Left.SessionExportRequested += OnLeftSessionExportRequested;
@@ -242,7 +246,18 @@ namespace MiaoWu.App.ViewModels
                         ConfirmPrompt.Confirm(title, message, confirmText, cancelText, destructive),
                     () => new DateTimeOffset(now()));
 
+                Market = new MarketViewModel(
+                    new SkillCatalogService(services.Paths.UserSkillsDirectory),
+                    () => Left.ActiveWorkspace == null ? null : Left.ActiveWorkspace.Path,
+                    () => Left.ActiveWorkspace == null ? null : Left.ActiveWorkspace.Name,
+                    folderPicker,
+                    clipboard,
+                    path => Process.Start(path),
+                    folder => Process.Start("explorer.exe", "\"" + folder + "\""));
+
                 Conversation.SessionListChanged += OnConversationSessionListChanged;
+                Schedules.PropertyChanged += OnPagePropertyChanged;
+                Market.PropertyChanged += OnPagePropertyChanged;
                 Conversation.SettingsRequested += (sender, args) => ShowSettings();
                 Conversation.SessionPinRequested += OnConversationSessionPinRequested;
                 Conversation.SessionArchiveRequested += OnConversationSessionArchiveRequested;
@@ -276,9 +291,11 @@ namespace MiaoWu.App.ViewModels
             OnPropertyChanged(nameof(Conversation));
             OnPropertyChanged(nameof(Settings));
             OnPropertyChanged(nameof(Schedules));
+            OnPropertyChanged(nameof(Market));
             OnPropertyChanged(nameof(Onboarding));
             OnPropertyChanged(nameof(IsOnboarding));
             OnPropertyChanged(nameof(Notifications));
+            SyncPageStates();
         }
 
         /// <summary>左栏、中栏或窗口状态变化时触发，由 MainWindow 做防抖保存。</summary>
@@ -313,6 +330,19 @@ namespace MiaoWu.App.ViewModels
 
         /// <summary>定时任务页面：左栏入口打开，占满中/右两张面板的原位置。</summary>
         public SchedulesViewModel Schedules { get; }
+
+        /// <summary>能力市场页面：左栏入口打开，与定时任务页同一宿主位置。</summary>
+        public MarketViewModel Market { get; }
+
+        /// <summary>定时任务或能力市场任一页面打开；中/右栏原内容整体让位。</summary>
+        public bool IsPageOpen
+        {
+            get
+            {
+                return (Schedules != null && Schedules.IsOpen)
+                    || (Market != null && Market.IsOpen);
+            }
+        }
 
         public OnboardingViewModel Onboarding { get; }
 
@@ -631,7 +661,32 @@ namespace MiaoWu.App.ViewModels
 
         public void ShowMarketplacePlaceholder()
         {
-            Overlay.Show(Strings.CapabilityMarketPendingTitle, Strings.CapabilityMarketPendingBody);
+            ToggleMarket();
+        }
+
+        /// <summary>左栏「能力市场」入口：打开 / 收起页面态；与定时任务页互斥。</summary>
+        public void ToggleMarket()
+        {
+            if (Market == null)
+            {
+                Overlay.Show("能力市场不可用", "当前进程没有装载技能服务，无法打开能力市场。");
+                return;
+            }
+
+            if (Market.IsOpen)
+            {
+                Market.Close();
+                return;
+            }
+
+            if (Schedules != null && Schedules.IsOpen)
+            {
+                Schedules.Close();
+            }
+
+            CloseSettings();
+            Overlay.Close();
+            Market.Open();
         }
 
         /// <summary>左栏「定时任务」入口：打开 / 收起页面态，不另外开窗口。</summary>
@@ -647,6 +702,11 @@ namespace MiaoWu.App.ViewModels
             {
                 Schedules.Close();
                 return;
+            }
+
+            if (Market != null && Market.IsOpen)
+            {
+                Market.Close();
             }
 
             CloseSettings();
@@ -769,7 +829,14 @@ namespace MiaoWu.App.ViewModels
 
             if (Schedules != null)
             {
+                Schedules.PropertyChanged -= OnPagePropertyChanged;
                 Schedules.Dispose();
+            }
+
+            if (Market != null)
+            {
+                Market.PropertyChanged -= OnPagePropertyChanged;
+                Market.Dispose();
             }
 
             if (Conversation != null)
@@ -985,6 +1052,22 @@ namespace MiaoWu.App.ViewModels
             RaiseStateChanged();
         }
 
+        private void OnPagePropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e != null && string.Equals(e.PropertyName, "IsOpen", StringComparison.Ordinal))
+            {
+                OnPropertyChanged(nameof(IsPageOpen));
+                SyncPageStates();
+            }
+        }
+
+        private void SyncPageStates()
+        {
+            Left.SetPageStates(
+                Schedules != null && Schedules.IsOpen,
+                Market != null && Market.IsOpen);
+        }
+
         private void OnConversationSessionPinRequested(object sender, EventArgs e)
         {
             ToggleActiveSessionFlag(false);
@@ -1076,7 +1159,7 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            // 用户切到另一个会话意味着离开定时任务页面；后台刷新会重建左栏会话行，
+            // 用户切到另一个会话意味着离开整页（定时任务 / 能力市场）；后台刷新会重建左栏会话行，
             // 即使 id 没变也会触发一次 SelectedSession 变更，不能把它当成用户切走。
             string activeSessionId = Left.ActiveSessionId;
             bool sessionChanged = !string.Equals(
@@ -1084,14 +1167,29 @@ namespace MiaoWu.App.ViewModels
                 activeSessionId,
                 StringComparison.Ordinal);
             _lastSessionSelectionId = activeSessionId;
-            if (sessionChanged && Schedules != null && Schedules.IsOpen)
+            if (sessionChanged)
             {
-                Schedules.Close();
+                if (Schedules != null && Schedules.IsOpen)
+                {
+                    Schedules.Close();
+                }
+
+                if (Market != null && Market.IsOpen)
+                {
+                    Market.Close();
+                }
             }
 
             WorkspaceItemViewModel workspace = Left.ActiveWorkspace;
             Workspace model = workspace == null ? null : workspace.Model;
             string sessionId = Left.ActiveSessionId;
+            string workspaceId = model == null ? null : model.Id;
+            bool workspaceChanged = !string.Equals(_lastWorkspaceId, workspaceId, StringComparison.Ordinal);
+            _lastWorkspaceId = workspaceId;
+            if (workspaceChanged && Market != null && Market.IsOpen)
+            {
+                Market.OnWorkspaceChanged();
+            }
 
             if (model == null)
             {

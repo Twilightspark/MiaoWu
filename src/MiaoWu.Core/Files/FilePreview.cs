@@ -96,5 +96,28 @@ namespace MiaoWu.Core.Files
                     0)
             };
         }
+
+        /// <summary>
+        /// 文件存在但不是严格 UTF-8：与 DSH 的 <c>workspace-file/not-text</c> 对齐，
+        /// 不把坏字节显示成 U+FFFD，也不猜测 GBK / UTF-16。
+        /// </summary>
+        public static FilePreview NotText(string filePath, long byteLength)
+        {
+            return new FilePreview
+            {
+                FilePath = filePath,
+                Exists = true,
+                IsBinary = false,
+                ByteLength = byteLength,
+                ErrorMessage = "文件不是 UTF-8 文本，无法预览；请先转换为 UTF-8。",
+                Content = string.Empty,
+                NewLine = TextNewLineStyle.None,
+                MetaText = MiaoWu.Core.Text.DocumentMetaFormatter.Format(
+                    "非 UTF-8",
+                    TextNewLineStyle.None,
+                    byteLength,
+                    0)
+            };
+        }
     }
 }
