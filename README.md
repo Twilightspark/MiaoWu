@@ -4,6 +4,15 @@ MiaoWu 是一个本地优先的 Windows 桌面 AI 智能体工作台：把工作
 
 当前版本：**v0.8.0**（功能高速开发中，尚不具备使用条件）。变更见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 下载
+
+发布包见 [GitHub Releases](https://github.com/Twilightspark/MiaoWu/releases)，v0.8.0 提供两种：
+
+- `MiaoWu-0.8.0-setup.exe`：管理员安装到 `%ProgramFiles%\MiaoWu`，双击后按提示提权；运行期不需要管理员。
+- `MiaoWu-0.8.0-portable.zip`：解压即用，运行其中的 `MiaoWu.exe`。
+
+两者都只需要 .NET Framework 4.8（Windows 7 SP1 及以上）。安装包默认**未签名**，SmartScreen 可能提示“未知发布者”。应用内「设置 → 关于 → 检查更新」读取的就是这里的 latest release，只做版本比较，不自动下载。
+
 ## 特性
 
 - **工作区为中心**：左栏管理多个工作区与会话，中栏与智能体对话，右栏预览 Markdown、文本、代码、图片与 diff；启动时右栏默认收起，把问答放到最大（`Ctrl+J` 或问答头部按钮展开）。
