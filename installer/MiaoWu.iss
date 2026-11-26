@@ -4,7 +4,7 @@
 ; 运行期不需要管理员：装完以原用户身份启动，配置与会话仍写在当前用户的 .miaowu。
 ;
 ; 构建：
-;   1. scripts\publish.ps1 -Configuration Release（同时产出便携 zip 与 SHA-256）
+;   1. scripts\publish.ps1 -Configuration Release（产出管理员安装包与 SHA-256）
 ;   2. 安装 Inno Setup 6，运行 ISCC.exe installer\MiaoWu.iss
 ; 产物：.artifacts\installer\MiaoWu-0.8.1-setup.exe
 ;

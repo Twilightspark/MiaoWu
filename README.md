@@ -6,12 +6,11 @@ MiaoWu 是一个本地优先的 Windows 桌面 AI 智能体工作台：把工作
 
 ## 下载
 
-发布包见 [GitHub Releases](https://github.com/Twilightspark/MiaoWu/releases)，v0.8.1 提供两种：
+发布包见 [GitHub Releases](https://github.com/Twilightspark/MiaoWu/releases)，v0.8.1 提供管理员安装包：
 
 - `MiaoWu-0.8.1-setup.exe`：管理员安装到 `%ProgramFiles%\MiaoWu`，双击后按提示提权；运行期不需要管理员。
-- `MiaoWu-0.8.1-portable.zip`：解压即用，运行其中的 `MiaoWu.exe`。
 
-两者都只需要 .NET Framework 4.8（Windows 7 SP1 及以上）。安装包默认**未签名**，SmartScreen 可能提示“未知发布者”。应用内「设置 → 关于 → 检查更新」读取这里的 latest release：已是最新时按钮直接显示「已是最新」，发现新版本先确认，再下载并拉起安装程序；通用页的「自动更新」默认开启，运行期间每 4 小时检查一次，静默下载完成后左栏设置按钮右侧出现更新入口。
+安装包只需要 .NET Framework 4.8（Windows 7 SP1 及以上）。安装包默认**未签名**，SmartScreen 可能提示“未知发布者”。应用内「设置 → 关于 → 检查更新」读取这里的 latest release：已是最新时按钮直接显示「已是最新」，发现新版本先确认，再下载并拉起安装程序；通用页的「自动更新」默认开启，运行期间每 4 小时检查一次，静默下载完成后左栏设置按钮右侧出现更新入口。
 
 ## 特性
 
@@ -74,14 +73,13 @@ installer/                 # Inno Setup 安装脚本
 
 ## 安装包
 
-`scripts\publish.ps1` 执行 Release 构建；检测到 Inno Setup 6 时会一并生成安装包与便携包：
+`scripts\publish.ps1` 执行 Release 构建；检测到 Inno Setup 6 时生成管理员安装包：
 
 - `.artifacts\installer\MiaoWu-0.8.1-setup.exe`：**管理员安装**（`%ProgramFiles%\MiaoWu`），
   **双击即弹 UAC**（`publish.ps1` 编译后用 `scripts\patch-setup-manifest.ps1` 把 SetupLdr 清单改成
   `requireAdministrator`，Windows 在进程创建时就提权）；.NET Framework 4.8 检测，开始菜单 /
   可选公共桌面与开机启动，卸载时询问是否保留 `%USERPROFILE%\.miaowu`；装完以原用户身份启动，
   运行期不需要管理员。
-- `.artifacts\installer\MiaoWu-0.8.1-portable.zip`：不经过安装器，解压即用，供临时目录不可写时兜底。
 - `.artifacts\installer\MiaoWu-0.8.1-setup-offline.exe`：**全量包**，内嵌 .NET Framework 4.8 离线安装程序
   （约 105 MB）。目标机缺 4.8 时，安装器在「准备安装」阶段静默装好 4.8 再继续；已有 4.8 的机器只多背体积，
   不会重复安装。生成方式：

@@ -66,8 +66,6 @@ if ($BundleDotNet) {
 }
 
 $setup = Join-Path $installerDir "MiaoWu-$version$setupSuffix.exe"
-$portable = Join-Path $installerDir "MiaoWu-$version-portable.zip"
-$stage = Join-Path $installerDir "_portable"
 
 # 全量包需要 ndp48-x86-x64-allos-enu.exe（约 105 MB）。这里做三件事：
 # 定位文件、确认它是微软签名的原件、保证路径里没有空格（ISCC 的 /D 值不带引号）。
@@ -146,33 +144,6 @@ if ((Test-Path $patchScript) -and (Test-Path $setup)) {
     }
 }
 
-if (Test-Path $portable) {
-    Remove-Item $portable -Force
-}
-
-if (Test-Path $stage) {
-    Remove-Item $stage -Recurse -Force
-}
-
-New-Item -ItemType Directory -Path $stage -Force | Out-Null
-Get-ChildItem $output -Recurse -File |
-    Where-Object { $_.Extension -ne ".pdb" } |
-    ForEach-Object {
-        $relative = $_.FullName.Substring($output.Length + 1)
-        $destination = Join-Path $stage $relative
-        New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
-        Copy-Item $_.FullName $destination -Force
-    }
-
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory(
-    $stage,
-    $portable,
-    [System.IO.Compression.CompressionLevel]::Optimal,
-    $false)
-Remove-Item $stage -Recurse -Force
-Write-Host "PORTABLE=$portable"
-
 Write-Host ("BUNDLE_DOTNET=" + $(if ($BundleDotNet) { "yes" } else { "no" }))
 if (-not $BundleDotNet) {
     # 提醒一句：本地已经有离线安装程序时，加个开关就能顺带出全量包。
@@ -187,6 +158,7 @@ if (-not $BundleDotNet) {
     }
 }
 
+# 只产出管理员安装包；不再生成便携 zip（解压即用会绕开 UAC 与安装目录约定）。
 if (Test-Path $setup) {
     $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
     Write-Host "SETUP=$setup"
