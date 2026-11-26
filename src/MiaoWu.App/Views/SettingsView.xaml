@@ -17,6 +17,36 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
 
+        <!-- 检查更新按钮内的加载图标：主题色表面上的白色缺口圆环，仅检查 / 下载时旋转。 -->
+        <Style x:Key="UpdateSpinner" TargetType="Ellipse">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Stroke" Value="{StaticResource Brush.OnAccent}" />
+            <Setter Property="StrokeThickness" Value="1.6" />
+            <Setter Property="StrokeDashArray" Value="2.4 1.6" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsUpdateBusy}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard x:Name="UpdateSpin">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                 From="0"
+                                                 To="360"
+                                                 Duration="0:0:0.9"
+                                                 RepeatBehavior="Forever" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <StopStoryboard BeginStoryboardName="UpdateSpin" />
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="SettingsNavItem" TargetType="ListBoxItem">
             <Setter Property="Height" Value="32" />
             <Setter Property="Margin" Value="0,1" />
@@ -662,7 +692,9 @@
                                             </Grid>
                                         </Border>
 
-                                        <Border Padding="0,9">
+                                        <Border Padding="0,9"
+                                                BorderBrush="{DynamicResource Brush.Line3}"
+                                                BorderThickness="0,0,0,1">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="76" />
@@ -676,6 +708,23 @@
                                                           ItemsSource="{Binding CloseActionOptions}"
                                                           SelectedItem="{Binding SelectedCloseAction, Mode=TwoWay}"
                                                           AutomationProperties.Name="系统关闭" />
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Padding="0,9">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="76" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="自动更新" Style="{StaticResource SettingsRowLabel}" />
+                                                <ComboBox Grid.Column="1"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Center"
+                                                          Style="{StaticResource SettingsRowComboBox}"
+                                                          ItemsSource="{Binding AutoUpdateOptions}"
+                                                          SelectedItem="{Binding SelectedAutoUpdate, Mode=TwoWay}"
+                                                          AutomationProperties.Name="自动更新" />
                                             </Grid>
                                         </Border>
                                     </StackPanel>
@@ -1056,26 +1105,24 @@
                                         <Button MinWidth="120"
                                                 Style="{StaticResource Button.Primary}"
                                                 Command="{Binding CheckUpdateCommand}"
-                                                IsEnabled="{Binding IsNotCheckingUpdate}"
-                                                AutomationProperties.Name="检查更新">
-                                            <!-- 文字显式取“主题色表面上的白字”，不依赖按钮样式的 Foreground 继承。 -->
-                                            <TextBlock Text="检查更新"
-                                                       Foreground="{StaticResource Brush.OnAccent}" />
+                                                IsEnabled="{Binding CanCheckUpdate}"
+                                                ToolTip="{Binding UpdateButtonToolTip}"
+                                                AutomationProperties.Name="{Binding CheckUpdateText}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <!-- 检查 / 下载期间显示旋转图标；文字显式取主题色表面上的白字。 -->
+                                                <Ellipse Margin="0,0,8,0"
+                                                         Style="{StaticResource UpdateSpinner}">
+                                                    <!-- 本地值而不是样式 Setter：Setter 里的 Freezable 可能被冻结，
+                                                         动画无法再改 Angle。 -->
+                                                    <Ellipse.RenderTransform>
+                                                        <RotateTransform />
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                                <TextBlock Text="{Binding CheckUpdateText}"
+                                                           Foreground="{StaticResource Brush.OnAccent}" />
+                                            </StackPanel>
                                         </Button>
-                                        <Button Margin="8,0,0,0"
-                                                MinWidth="104"
-                                                Content="打开发布页"
-                                                Style="{StaticResource Button.Ghost}"
-                                                Command="{Binding OpenReleasePageCommand}"
-                                                AutomationProperties.Name="打开发布页" />
                                     </StackPanel>
-                                    <TextBlock Margin="0,8,0,0"
-                                               HorizontalAlignment="Center"
-                                               Text="{Binding UpdateStatus}"
-                                               Style="{StaticResource Text.Meta}"
-                                               TextAlignment="Center"
-                                               TextWrapping="Wrap"
-                                               Visibility="{Binding HasUpdateStatus, Converter={StaticResource BoolToVisibility}}" />
                                 </StackPanel>
                             </Grid>
                         </Grid>

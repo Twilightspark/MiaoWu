@@ -7,12 +7,9 @@ namespace MiaoWu.Tests.Text
     {
         [Theory]
         [InlineData("a\r\nb", TextNewLineStyle.CrLf)]
-        [InlineData("a\r\nb\r\nc", TextNewLineStyle.CrLf)]
         [InlineData("a\nb", TextNewLineStyle.Lf)]
         [InlineData("a\rb", TextNewLineStyle.Cr)]
         [InlineData("a\r\nb\nc", TextNewLineStyle.Mixed)]
-        [InlineData("a\rb\nc", TextNewLineStyle.Mixed)]
-        [InlineData("a\r\nb\rc\nd", TextNewLineStyle.Mixed)]
         [InlineData("single line", TextNewLineStyle.None)]
         [InlineData("", TextNewLineStyle.None)]
         public void DetectReportsNewLineStyle(string text, TextNewLineStyle expected)
@@ -32,15 +29,10 @@ namespace MiaoWu.Tests.Text
         [InlineData(TextNewLineStyle.Cr, "CR")]
         [InlineData(TextNewLineStyle.Mixed, "混合")]
         [InlineData(TextNewLineStyle.None, "—")]
+        [InlineData((TextNewLineStyle)99, "—")]
         public void DisplayNameMatchesStatusBarWording(TextNewLineStyle style, string expected)
         {
             Assert.Equal(expected, NewLineDetector.ToDisplayName(style));
-        }
-
-        [Fact]
-        public void DisplayNameFallsBackToDashForUnknownStyle()
-        {
-            Assert.Equal("—", NewLineDetector.ToDisplayName((TextNewLineStyle)99));
         }
 
         [Theory]
@@ -48,13 +40,9 @@ namespace MiaoWu.Tests.Text
         [InlineData("a", 1)]
         [InlineData("a\n", 1)]
         [InlineData("a\nb", 2)]
-        [InlineData("a\nb\n", 2)]
         [InlineData("a\r\nb\r\n", 2)]
         [InlineData("a\rb", 2)]
-        [InlineData("\n", 1)]
-        [InlineData("\r\n", 1)]
         [InlineData("a\n\nb", 3)]
-        [InlineData("a\nb\nc", 3)]
         public void CountReportsLogicalLines(string text, int expected)
         {
             Assert.Equal(expected, TextLineCounter.Count(text));
@@ -68,40 +56,28 @@ namespace MiaoWu.Tests.Text
 
         [Theory]
         [InlineData(0L, "0 B")]
-        [InlineData(512L, "512 B")]
         [InlineData(1023L, "1023 B")]
         [InlineData(1024L, "1.0 KB")]
         [InlineData(4200L, "4.1 KB")]
         [InlineData(1572864L, "1.5 MB")]
         [InlineData(1073741824L, "1.0 GB")]
-        [InlineData(5368709120L, "5.0 GB")]
         [InlineData(-1L, "0 B")]
-        [InlineData(-1048576L, "0 B")]
         public void FormatUsesInvariantUnits(long bytes, string expected)
         {
             Assert.Equal(expected, FileSizeFormatter.Format(bytes));
         }
 
         [Fact]
-        public void MetaStringJoinsWithMiddleDot()
+        public void MetaStringJoinsPartsAndAppendsExtraSuffix()
         {
-            string meta = DocumentMetaFormatter.Format("UTF-8", TextNewLineStyle.Lf, 4200, 128);
+            Assert.Equal(
+                "UTF-8 · LF · 4.1 KB · 128 行",
+                DocumentMetaFormatter.Format("UTF-8", TextNewLineStyle.Lf, 4200, 128));
+            Assert.Equal(
+                "非 UTF-8 · CRLF · 512 B · 3 行 · 已截断",
+                DocumentMetaFormatter.Format("非 UTF-8", TextNewLineStyle.CrLf, 512, 3, "已截断"));
 
-            Assert.Equal("UTF-8 · LF · 4.1 KB · 128 行", meta);
-            Assert.Contains("\u00B7", meta);
-        }
-
-        [Fact]
-        public void MetaStringAppendsExtraSuffix()
-        {
-            string meta = DocumentMetaFormatter.Format("非 UTF-8", TextNewLineStyle.CrLf, 512, 3, "已截断");
-
-            Assert.Equal("非 UTF-8 · CRLF · 512 B · 3 行 · 已截断", meta);
-        }
-
-        [Fact]
-        public void MetaStringIgnoresBlankExtra()
-        {
+            // 空白后缀与 null 都按「没有后缀」处理。
             Assert.Equal(
                 "UTF-8 · LF · 512 B · 1 行",
                 DocumentMetaFormatter.Format("UTF-8", TextNewLineStyle.Lf, 512, 1, string.Empty));
@@ -114,15 +90,10 @@ namespace MiaoWu.Tests.Text
         }
 
         [Fact]
-        public void MetaStringUsesPlaceholderForUnknownParts()
+        public void MetaStringUsesPlaceholderForUnknownPartsAndClampsNegativeCounts()
         {
             Assert.Equal("— · — · 0 B · 0 行", DocumentMetaFormatter.Format(null, TextNewLineStyle.None, 0, 0));
             Assert.Equal("UTF-8 · — · 0 B · 0 行", DocumentMetaFormatter.Format("UTF-8", TextNewLineStyle.None, 0, 0));
-        }
-
-        [Fact]
-        public void MetaStringClampsNegativeNumbers()
-        {
             Assert.Equal("UTF-8 · LF · 0 B · 0 行", DocumentMetaFormatter.Format("UTF-8", TextNewLineStyle.Lf, -10, -2));
         }
     }

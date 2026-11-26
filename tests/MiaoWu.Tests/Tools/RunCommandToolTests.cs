@@ -49,23 +49,22 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void PowerShellWritesToStdout()
+        public void StdoutIsCapturedForScriptsQuotedArgumentsAndMultipleLines()
         {
-            ToolResult result = Run("Write-Output 'hello'");
+            ToolResult single = Run("Write-Output 'hello'");
+            Assert.True(single.IsSuccess, single.Content);
+            Assert.Contains("hello", single.Content);
+            Assert.Contains("退出码：0", single.Content);
+            Assert.True(single.IsUntrusted);
 
-            Assert.True(result.IsSuccess, result.Content);
-            Assert.Contains("hello", result.Content);
-            Assert.Contains("退出码：0", result.Content);
-            Assert.True(result.IsUntrusted);
-        }
+            ToolResult quoted = Run("Write-Output \"hello world\"");
+            Assert.True(quoted.IsSuccess, quoted.Content);
+            Assert.Contains("hello world", quoted.Content);
 
-        [Fact]
-        public void CommandWithDoubleQuotesRuns()
-        {
-            ToolResult result = Run("Write-Output \"hello world\"");
-
-            Assert.True(result.IsSuccess, result.Content);
-            Assert.Contains("hello world", result.Content);
+            ToolResult multiLine = Run("Write-Output 'a'\nWrite-Output 'b'");
+            Assert.True(multiLine.IsSuccess, multiLine.Content);
+            Assert.Contains("a", multiLine.Content);
+            Assert.Contains("b", multiLine.Content);
         }
 
         [Fact]
@@ -190,59 +189,31 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void MultiLinePowerShellRuns()
+        public void ChineseOutputIsUtf8ForScriptsAndNativeCommands()
         {
-            ToolResult result = Run("Write-Output 'a'\nWrite-Output 'b'");
+            ToolResult script = Run("Write-Output '中文'");
+            Assert.True(script.IsSuccess, script.Content);
+            Assert.Contains("中文", script.Content);
+            Assert.True(script.Content.IndexOf('\uFEFF') < 0, "输出不应带 BOM");
+            Assert.True(script.Content.IndexOf('\uFFFD') < 0, "输出不应有替换字符");
 
-            Assert.True(result.IsSuccess, result.Content);
-            Assert.Contains("a", result.Content);
-            Assert.Contains("b", result.Content);
+            ToolResult native = Run("cmd /c echo 中文");
+            Assert.True(native.IsSuccess, native.Content);
+            Assert.Contains("中文", native.Content);
+            Assert.True(native.Content.IndexOf('\uFEFF') < 0, "输出不应带 BOM");
+            Assert.True(native.Content.IndexOf('\uFFFD') < 0, "输出不应有替换字符");
         }
 
         [Fact]
-        public void ChineseOutputIsDecodedAsUtf8()
-        {
-            ToolResult result = Run("Write-Output '中文'");
-
-            Assert.True(result.IsSuccess, result.Content);
-            Assert.Contains("中文", result.Content);
-            Assert.True(result.Content.IndexOf('\uFEFF') < 0, "输出不应带 BOM");
-            Assert.True(result.Content.IndexOf('\uFFFD') < 0, "输出不应有替换字符");
-        }
-
-        [Fact]
-        public void NativeCommandChineseOutputIsUtf8()
-        {
-            ToolResult result = Run("cmd /c echo 中文");
-
-            Assert.True(result.IsSuccess, result.Content);
-            Assert.Contains("中文", result.Content);
-            Assert.True(result.Content.IndexOf('\uFEFF') < 0, "输出不应带 BOM");
-            Assert.True(result.Content.IndexOf('\uFFFD') < 0, "输出不应有替换字符");
-        }
-
-        [Fact]
-        public void DecoderKeepsBomAsText()
+        public void ConsoleOutputDecoderKeepsBomReplacesInvalidBytesAndUsesUtf8()
         {
             // 与 DSH 的 Buffer.toString('utf8') 一致：解码器不做 BOM 剥离；
             // PowerShell 启动前已经固定为无 BOM 输出，所以正常命令不会出现这个字符。
-            byte[] bytes = new byte[] { 0xEF, 0xBB, 0xBF, (byte)'h', (byte)'i' };
+            byte[] withBom = new byte[] { 0xEF, 0xBB, 0xBF, (byte)'h', (byte)'i' };
+            Assert.Equal("\uFEFFhi", ConsoleOutputDecoder.Decode(withBom));
 
-            Assert.Equal("\uFEFFhi", ConsoleOutputDecoder.Decode(bytes));
-        }
-
-        [Fact]
-        public void DecoderReplacesInvalidUtf8Bytes()
-        {
             Assert.Contains("\uFFFD", ConsoleOutputDecoder.Decode(new byte[] { 0xD6, 0xD0 }));
-        }
-
-        [Fact]
-        public void DecoderUsesUtf8WithoutBom()
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes("中文");
-
-            Assert.Equal("中文", ConsoleOutputDecoder.Decode(bytes));
+            Assert.Equal("中文", ConsoleOutputDecoder.Decode(Encoding.UTF8.GetBytes("中文")));
         }
 
         private ToolResult Run(

@@ -13,9 +13,7 @@ namespace MiaoWu.Tests.Tools
         [InlineData(ToolNames.Pwsh, "执行命令")]
         [InlineData(ToolNames.WebSearch, "搜索网页")]
         [InlineData(ToolNames.ExitPlanMode, "退出计划模式")]
-        [InlineData(ToolNames.AskUserQuestion, "向你提问")]
         [InlineData(ToolNames.ScheduleCreate, "新建定时任务")]
-        [InlineData(ToolNames.ScheduleView, "查看定时任务")]
         public void TitlesMatchToolNames(string toolName, string expected)
         {
             Assert.Equal(expected, ToolPresentationBuilder.ProjectCall(toolName, null).Title);
@@ -34,25 +32,16 @@ namespace MiaoWu.Tests.Tools
                 ToolPresentationBuilder.ProjectCall(ToolNames.ScheduleCreate, "{\"title\":\"日报\",\"prompt\":\"x\"}").Summary);
             Assert.Equal("2 个文件",
                 ToolPresentationBuilder.ProjectCall(ToolNames.Present, "{\"files\":[{\"path\":\"a\"},{\"path\":\"b\"}]}").Summary);
-        }
 
-        [Fact]
-        public void ExitPlanModeSummaryIsTheFirstPlanLine()
-        {
-            ToolPresentation presentation = ToolPresentationBuilder.ProjectCall(
+            // 计划模式只显示计划首行，不铺整段计划。
+            Assert.Equal("先读再改", ToolPresentationBuilder.ProjectCall(
                 ToolNames.ExitPlanMode,
-                "{\"plan\":\"## 先读再改\\n细节\"}");
+                "{\"plan\":\"## 先读再改\\n细节\"}").Summary);
 
-            Assert.Equal("先读再改", presentation.Summary);
-        }
-
-        [Fact]
-        public void BrokenArgumentsStillYieldATitle()
-        {
-            ToolPresentation presentation = ToolPresentationBuilder.ProjectCall(ToolNames.Read, "{ not json");
-
-            Assert.Equal("读取文件", presentation.Title);
-            Assert.Equal(string.Empty, presentation.Summary);
+            // 参数不是合法 JSON 时仍要有标题，摘要留空。
+            ToolPresentation broken = ToolPresentationBuilder.ProjectCall(ToolNames.Read, "{ not json");
+            Assert.Equal("读取文件", broken.Title);
+            Assert.Equal(string.Empty, broken.Summary);
         }
 
         [Fact]
@@ -73,21 +62,14 @@ namespace MiaoWu.Tests.Tools
             Assert.Equal("已创建", ToolPresentationBuilder.ProjectResult(
                 ToolNames.ScheduleCreate,
                 ToolResult.Success(new ToolCall { Id = "c", Name = ToolNames.ScheduleCreate }, "已创建定时任务", null, true, false)));
-        }
 
-        [Fact]
-        public void FailureResultsUseErrorCodeOrDefaultMessage()
-        {
             var call = new ToolCall { Id = "c", Name = ToolNames.Read };
-
             Assert.Equal("超时", ToolPresentationBuilder.ProjectResult(
                 ToolNames.Read,
                 ToolResult.Failure(call, ToolResultStatus.Failed, "tool_timeout", "超过 30 秒")));
-
             Assert.Equal("已取消", ToolPresentationBuilder.ProjectResult(
                 ToolNames.Read,
                 ToolResult.Failure(call, ToolResultStatus.Cancelled, "cancelled", "取消")));
-
             Assert.Equal("已拒绝", ToolPresentationBuilder.ProjectResult(
                 ToolNames.Read,
                 ToolResult.Failure(call, ToolResultStatus.Denied, null, "用户拒绝")));

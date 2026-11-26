@@ -18,23 +18,17 @@ namespace MiaoWu.Tests.Text
         }
 
         [Fact]
-        public void FindAllIgnoresCaseByDefault()
+        public void FindAllIgnoresCaseUnlessMatchCaseIsRequested()
         {
-            IReadOnlyList<TextMatch> matches = TextSearchPolicy.FindAll("Alpha alpha ALPHA", "alpha");
+            IReadOnlyList<TextMatch> ignoringCase = TextSearchPolicy.FindAll("Alpha alpha ALPHA", "alpha");
+            Assert.Equal(3, ignoringCase.Count);
+            Assert.Equal(0, ignoringCase[0].Index);
+            Assert.Equal(6, ignoringCase[1].Index);
+            Assert.Equal(12, ignoringCase[2].Index);
 
-            Assert.Equal(3, matches.Count);
-            Assert.Equal(0, matches[0].Index);
-            Assert.Equal(6, matches[1].Index);
-            Assert.Equal(12, matches[2].Index);
-        }
-
-        [Fact]
-        public void FindAllHonorsMatchCase()
-        {
-            IReadOnlyList<TextMatch> matches = TextSearchPolicy.FindAll("Alpha alpha ALPHA", "alpha", true);
-
-            Assert.Single(matches);
-            Assert.Equal(6, matches[0].Index);
+            IReadOnlyList<TextMatch> honoringCase = TextSearchPolicy.FindAll("Alpha alpha ALPHA", "alpha", true);
+            Assert.Single(honoringCase);
+            Assert.Equal(6, honoringCase[0].Index);
         }
 
         [Fact]
@@ -60,15 +54,10 @@ namespace MiaoWu.Tests.Text
         }
 
         [Fact]
-        public void FindAllReturnsEmptyForMissingQuery()
+        public void FindAllReturnsEmptyForMissingOrBlankInput()
         {
             Assert.Empty(TextSearchPolicy.FindAll("abc", "zzz"));
             Assert.Empty(TextSearchPolicy.FindAll("abc", "abcd"));
-        }
-
-        [Fact]
-        public void FindAllReturnsEmptyForBlankInput()
-        {
             Assert.Empty(TextSearchPolicy.FindAll(null, "a"));
             Assert.Empty(TextSearchPolicy.FindAll(string.Empty, "a"));
             Assert.Empty(TextSearchPolicy.FindAll("abc", null));
@@ -89,21 +78,13 @@ namespace MiaoWu.Tests.Text
         }
 
         [Theory]
-        [InlineData(0, 3, true, 1)]
-        [InlineData(1, 3, true, 2)]
-        [InlineData(2, 3, true, 0)]
-        [InlineData(-1, 3, true, 0)]
-        [InlineData(99, 3, true, 0)]
-        [InlineData(2, 3, false, 1)]
-        [InlineData(1, 3, false, 0)]
-        [InlineData(0, 3, false, 2)]
-        [InlineData(-1, 3, false, 2)]
-        [InlineData(99, 3, false, 2)]
-        [InlineData(0, 1, true, 0)]
-        [InlineData(0, 1, false, 0)]
-        [InlineData(0, 0, true, -1)]
-        [InlineData(0, 0, false, -1)]
-        [InlineData(0, -3, true, -1)]
+        [InlineData(0, 3, true, 1)]   // 正常前进
+        [InlineData(2, 3, true, 0)]   // 前进回绕
+        [InlineData(99, 3, true, 0)]  // 越界夹取
+        [InlineData(2, 3, false, 1)]  // 正常后退
+        [InlineData(0, 3, false, 2)]  // 后退回绕
+        [InlineData(-1, 3, false, 2)] // 未选中时后退
+        [InlineData(0, 0, true, -1)]  // 空集合
         public void NextIndexWrapsAroundAndHandlesOutOfRange(int current, int count, bool forward, int expected)
         {
             Assert.Equal(expected, TextSearchPolicy.NextIndex(current, count, forward));

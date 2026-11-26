@@ -40,6 +40,9 @@ namespace MiaoWu.Core.Abstractions
         /// <summary>工具溢出正文缓存目录。</summary>
         string ToolOutputCacheDirectory { get; }
 
+        /// <summary>更新安装包缓存目录（<c>cache\updates</c>）。</summary>
+        string UpdatesCacheDirectory { get; }
+
         /// <summary>创建缺失的应用目录。重复调用应为幂等操作。</summary>
         void EnsureCreated();
     }

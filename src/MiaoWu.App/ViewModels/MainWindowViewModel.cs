@@ -35,6 +35,7 @@ namespace MiaoWu.App.ViewModels
         private readonly AppSettings _settings;
         private readonly AppServices _services;
         private readonly IDialogService _dialogs;
+        private readonly UpdateCoordinator _updates;
         private readonly PaneLayoutPolicy _layoutPolicy;
         private readonly Dictionary<string, bool> _runningSessions =
             new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -125,6 +126,13 @@ namespace MiaoWu.App.ViewModels
             Func<DateTime> now = clock ?? (() => DateTime.Now);
             _services = services;
             _dialogs = dialogs;
+            if (services != null)
+            {
+                Dispatcher dispatcher = Application.Current == null
+                    ? Dispatcher.CurrentDispatcher
+                    : Application.Current.Dispatcher;
+                _updates = new UpdateCoordinator(services, dispatcher);
+            }
 
             _settings = UiSettingsPolicy.Normalize(
                 services != null ? services.Settings : (_settingsStore.Load() ?? new AppSettings()),
@@ -159,7 +167,8 @@ namespace MiaoWu.App.ViewModels
                 filePicker,
                 dialogs,
                 collection,
-                now());
+                now(),
+                _updates);
 
             Canvas = new CanvasViewModel(
                 previewService,
@@ -215,7 +224,7 @@ namespace MiaoWu.App.ViewModels
                     filePicker,
                     now);
 
-                Settings = new SettingsViewModel(services);
+                Settings = new SettingsViewModel(services, _updates, dialogs);
                 Onboarding = new OnboardingViewModel(services, folderPicker);
                 Onboarding.Completed += OnOnboardingCompleted;
                 Onboarding.CloseRequested += OnOnboardingCloseRequested;
@@ -759,12 +768,34 @@ namespace MiaoWu.App.ViewModels
             ExitRequested?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>
+        /// 进入主界面后由 AppHost 调用：自动更新开启时安排第一次后台检查。
+        /// 离屏快照不调用，避免快照触发真实网络请求。
+        /// </summary>
+        public void StartAutoUpdate()
+        {
+            if (_updates != null)
+            {
+                _updates.Start();
+            }
+        }
+
+        /// <summary>退出或窗口关闭时停止自动更新计时器。</summary>
+        public void StopAutoUpdate()
+        {
+            if (_updates != null)
+            {
+                _updates.Stop();
+            }
+        }
+
         /// <summary>由 AppHost.ShutdownAsync 调用：不再弹关闭确认，直接落盘。</summary>
         public void PrepareExit()
         {
             IsExiting = true;
             TrySaveState();
             SuspendConversation();
+            StopAutoUpdate();
         }
 
         public void NotifyHiddenToTray()
@@ -818,6 +849,11 @@ namespace MiaoWu.App.ViewModels
             {
                 _refreshTimer.Stop();
                 _refreshTimer.Tick -= OnRefreshTick;
+            }
+
+            if (_updates != null)
+            {
+                _updates.Dispose();
             }
 
             if (_services != null)

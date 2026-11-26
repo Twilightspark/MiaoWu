@@ -283,6 +283,25 @@ namespace MiaoWu.Tests.Storage
         }
 
         [Fact]
+        public void AutoUpdateDefaultsOnAndRoundTrips()
+        {
+            var store = new SettingsStore(_path);
+            AppSettings settings = store.Load();
+            Assert.True(settings.Agent.AutoUpdate);
+
+            settings.Agent.AutoUpdate = false;
+            store.Save(settings);
+
+            JsonValue root = JsonParser.Parse(File.ReadAllText(_path));
+            Assert.False(root.Get("agent").Get("autoUpdate").AsBoolean(true));
+            Assert.False(new SettingsStore(_path).Load().Agent.AutoUpdate);
+
+            // 旧配置没有 autoUpdate：按默认值开启。
+            File.WriteAllText(_path, "{\"schemaVersion\":1,\"agent\":{}}");
+            Assert.True(new SettingsStore(_path).Load().Agent.AutoUpdate);
+        }
+
+        [Fact]
         public void UnknownCloseActionFallsBackToAsk()
         {
             File.WriteAllText(

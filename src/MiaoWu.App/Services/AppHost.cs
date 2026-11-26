@@ -109,6 +109,9 @@ namespace MiaoWu.App.Services
 
             // 启动后在后台补齐各供应商最新的 /models 列表；不阻塞窗口，失败只写日志。
             _services.RefreshProviderModelsInBackground();
+
+            // 自动更新默认开启：先等两分钟再检查，之后每四小时一次；设置里关掉即停止。
+            MainViewModel.StartAutoUpdate();
         }
 
         public void ShowMainWindow()
@@ -261,7 +264,11 @@ namespace MiaoWu.App.Services
                 if (MainViewModel.Settings != null)
                 {
                     MainViewModel.Settings.SelectPage(SettingsPage.About);
-                    MainViewModel.Settings.CheckUpdateCommand.Execute(null);
+                    if (!MainViewModel.Left.HasUpdateReady)
+                    {
+                        // 已经下载好时只把「安装更新」按钮摆出来，别从托盘菜单直接拉起安装程序。
+                        MainViewModel.Settings.CheckUpdateCommand.Execute(null);
+                    }
                 }
             };
             _tray.ExitRequested += (sender, args) =>

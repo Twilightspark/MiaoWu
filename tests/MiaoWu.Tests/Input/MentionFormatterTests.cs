@@ -10,26 +10,14 @@ namespace MiaoWu.Tests.Input
     public class MentionFormatterTests
     {
         [Fact]
-        public void PlainPath_HasNoQuotes()
+        public void FormatQuotesOnlyWhenNeededAndKeepsDirectoriesOpen()
         {
             Assert.Equal("@src/main.cs", MentionFormatter.Format("src\\main.cs", false, false));
-        }
-
-        [Fact]
-        public void PathWithSpace_IsQuoted()
-        {
             Assert.Equal("@\"my report.md\"", MentionFormatter.Format("my report.md", false, false));
-        }
 
-        [Fact]
-        public void QuotedPath_CanKeepQuoteOpen()
-        {
+            // 正在补全的目录保留开引号，方便继续输入。
             Assert.Equal("@\"my dir/", MentionFormatter.Format("my dir", true, true));
-        }
 
-        [Fact]
-        public void Directory_EndsWithSlash()
-        {
             Assert.Equal("@src/", MentionFormatter.Format("src", true, false));
             Assert.Equal("@src/", MentionFormatter.Format("src/", true, false));
         }

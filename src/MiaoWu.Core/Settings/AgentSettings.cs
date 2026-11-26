@@ -110,6 +110,7 @@ namespace MiaoWu.Core.Settings
             ProxyMode = "system";
             StartMinimized = false;
             CheckUpdatesOnStartup = true;
+            AutoUpdate = true;
             UpdateUrl = "https://github.com/Twilightspark/MiaoWu/releases";
         }
 
@@ -186,6 +187,12 @@ namespace MiaoWu.Core.Settings
 
         public bool CheckUpdatesOnStartup { get; set; }
 
+        /// <summary>
+        /// 自动更新：开启后应用运行期间会定时检查；发现新版本后静默下载安装包，
+        /// 下载完成在左栏设置按钮右侧显示更新入口。默认开启。
+        /// </summary>
+        public bool AutoUpdate { get; set; }
+
         public string UpdateUrl { get; set; }
 
         public AgentSettings Clone()
@@ -228,6 +235,7 @@ namespace MiaoWu.Core.Settings
                 ProxyUrl = ProxyUrl,
                 StartMinimized = StartMinimized,
                 CheckUpdatesOnStartup = CheckUpdatesOnStartup,
+                AutoUpdate = AutoUpdate,
                 UpdateUrl = UpdateUrl
             };
         }

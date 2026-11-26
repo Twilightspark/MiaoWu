@@ -117,5 +117,93 @@ namespace MiaoWu.Tests.Updates
             Assert.False(result.Succeeded);
             Assert.Contains("解析", result.Message);
         }
+
+        [Fact]
+        public void SelectsDailySetupAsset()
+        {
+            const string json = "{\"tag_name\":\"v0.9.1\",\"assets\":["
+                + "{\"name\":\"MiaoWu-0.9.1-portable.zip\",\"browser_download_url\":\"https://example.com/portable.zip\",\"size\":10},"
+                + "{\"name\":\"MiaoWu-0.9.1-setup-offline.exe\",\"browser_download_url\":\"https://example.com/offline.exe\",\"size\":20},"
+                + "{\"name\":\"MiaoWu-0.9.1-setup.exe\",\"browser_download_url\":\"https://example.com/setup.exe\",\"size\":30}"
+                + "]}";
+
+            UpdateCheckResult result = GitHubReleaseUpdateService.ParseLatestRelease(json, "0.8.0", ReleasesPage);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("MiaoWu-0.9.1-setup.exe", result.AssetName);
+            Assert.Equal("https://example.com/setup.exe", result.AssetUrl);
+            Assert.Equal(30, result.AssetSize);
+        }
+
+        [Fact]
+        public void FallsBackToAnyExeAsset()
+        {
+            const string json = "{\"tag_name\":\"v0.9.1\",\"assets\":["
+                + "{\"name\":\"MiaoWu-0.9.1-portable.zip\",\"browser_download_url\":\"https://example.com/portable.zip\"},"
+                + "{\"name\":\"MiaoWu-0.9.1.exe\",\"browser_download_url\":\"https://example.com/app.exe\"}"
+                + "]}";
+
+            UpdateCheckResult result = GitHubReleaseUpdateService.ParseLatestRelease(json, "0.8.0", ReleasesPage);
+
+            Assert.Equal("MiaoWu-0.9.1.exe", result.AssetName);
+            Assert.Equal("https://example.com/app.exe", result.AssetUrl);
+            Assert.Equal(0, result.AssetSize);
+        }
+
+        [Fact]
+        public void IgnoresUninstallerAndNonExeAssets()
+        {
+            const string json = "{\"tag_name\":\"v0.9.1\",\"assets\":["
+                + "{\"name\":\"unins000.exe\",\"browser_download_url\":\"https://example.com/unins.exe\"},"
+                + "{\"name\":\"MiaoWu-0.9.1-portable.zip\",\"browser_download_url\":\"https://example.com/portable.zip\"}"
+                + "]}";
+
+            UpdateCheckResult result = GitHubReleaseUpdateService.ParseLatestRelease(json, "0.8.0", ReleasesPage);
+
+            Assert.True(result.Succeeded);
+            Assert.Null(result.AssetUrl);
+            Assert.Null(result.AssetName);
+        }
+
+        [Fact]
+        public void SkipsAssetsWithoutDownloadUrl()
+        {
+            const string json = "{\"tag_name\":\"v0.9.1\",\"assets\":["
+                + "{\"name\":\"MiaoWu-0.9.1-setup.exe\"}"
+                + "]}";
+
+            UpdateCheckResult result = GitHubReleaseUpdateService.ParseLatestRelease(json, "0.8.0", ReleasesPage);
+
+            Assert.Null(result.AssetUrl);
+        }
+
+        [Fact]
+        public void AssetPrioritiesPreferDailySetup()
+        {
+            Assert.Equal(3, UpdateAssets.InstallerPriority("MiaoWu-1.0.0-setup.exe"));
+            Assert.Equal(2, UpdateAssets.InstallerPriority("MiaoWu-1.0.0-setup-offline.exe"));
+            Assert.Equal(1, UpdateAssets.InstallerPriority("MiaoWu-1.0.0.exe"));
+            Assert.Equal(0, UpdateAssets.InstallerPriority("MiaoWu-1.0.0-portable.zip"));
+            Assert.Equal(0, UpdateAssets.InstallerPriority("unins000.exe"));
+            Assert.Equal(0, UpdateAssets.InstallerPriority(null));
+        }
+
+        [Fact]
+        public void InstallerFileNamesAreSanitized()
+        {
+            Assert.Equal(
+                "MiaoWu-1.2.3-setup.exe",
+                UpdateAssets.SafeInstallerFileName(null, "1.2.3"));
+            // Path.GetFileName 在冒号处按卷分隔处理，目录段与前缀都不会进入本地文件名。
+            Assert.Equal(
+                "setup_.exe",
+                UpdateAssets.SafeInstallerFileName("..\\evil/MiaoWu:setup?.exe", "1.2.3"));
+            Assert.Equal(
+                "_CON.exe",
+                UpdateAssets.SafeInstallerFileName("CON.exe", "1.2.3"));
+            Assert.Equal(
+                "MiaoWu-1.2.3-setup.exe",
+                UpdateAssets.SafeInstallerFileName("MiaoWu-1.2.3-setup", "1.2.3"));
+        }
     }
 }

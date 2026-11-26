@@ -163,6 +163,7 @@ namespace MiaoWu.Infrastructure.Storage
             value.ProxyUrl = GetString(node, "proxyUrl");
             value.StartMinimized = GetBool(node, "startMinimized", value.StartMinimized);
             value.CheckUpdatesOnStartup = GetBool(node, "checkUpdatesOnStartup", value.CheckUpdatesOnStartup);
+            value.AutoUpdate = GetBool(node, "autoUpdate", value.AutoUpdate);
             value.UpdateUrl = GetString(node, "updateUrl") ?? value.UpdateUrl;
 
             JsonValue maxOutput = node.Get("maxOutputTokens");
@@ -328,6 +329,7 @@ namespace MiaoWu.Infrastructure.Storage
             agent["proxyUrl"] = StringValue(agentValue.ProxyUrl);
             agent["startMinimized"] = JsonValue.From(agentValue.StartMinimized);
             agent["checkUpdatesOnStartup"] = JsonValue.From(agentValue.CheckUpdatesOnStartup);
+            agent["autoUpdate"] = JsonValue.From(agentValue.AutoUpdate);
             agent["updateUrl"] = StringValue(agentValue.UpdateUrl);
 
             JsonValue toolOutput = JsonValue.NewObject();

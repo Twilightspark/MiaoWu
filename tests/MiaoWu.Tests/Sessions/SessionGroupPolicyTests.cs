@@ -34,19 +34,19 @@ namespace MiaoWu.Tests.Sessions
         }
 
         [Fact]
-        public void EmptyGroupsDoNotCreateHeaders()
+        public void EmptyGroupsAndEmptyInputDoNotCreateHeaders()
         {
-            var sessions = new List<SessionSummary>
-            {
-                Create("today", Now.AddHours(-1))
-            };
-
-            IReadOnlyList<SessionListRow> rows = SessionGroupPolicy.Build(sessions, Now);
+            IReadOnlyList<SessionListRow> rows = SessionGroupPolicy.Build(
+                new List<SessionSummary> { Create("today", Now.AddHours(-1)) },
+                Now);
 
             Assert.Equal(2, rows.Count);
             Assert.True(rows[0].IsHeader);
             Assert.Equal(SessionGroup.Today, rows[0].Group);
             Assert.Equal("today", rows[1].Session.Id);
+
+            Assert.Empty(SessionGroupPolicy.Build(null, Now));
+            Assert.Empty(SessionGroupPolicy.Build(new SessionSummary[0], Now));
         }
 
         [Fact]
@@ -75,25 +75,12 @@ namespace MiaoWu.Tests.Sessions
         }
 
         [Fact]
-        public void BuildHandlesNullAndEmpty()
-        {
-            Assert.Empty(SessionGroupPolicy.Build(null, Now));
-            Assert.Empty(SessionGroupPolicy.Build(new SessionSummary[0], Now));
-        }
-
-        [Fact]
-        public void PinnedWinsRegardlessOfAge()
+        public void PinnedWinsRegardlessOfAgeAndFutureTimestampsCountAsToday()
         {
             SessionSummary pinned = Create("pinned", new DateTime(2020, 1, 1), pinned: true);
-
             Assert.Equal(SessionGroup.Pinned, SessionGroupPolicy.GetGroup(pinned, Now));
-        }
 
-        [Fact]
-        public void FutureTimestampIsTreatedAsToday()
-        {
             SessionSummary future = Create("future", Now.AddDays(2));
-
             Assert.Equal(SessionGroup.Today, SessionGroupPolicy.GetGroup(future, Now));
         }
 
@@ -110,27 +97,14 @@ namespace MiaoWu.Tests.Sessions
         }
 
         [Fact]
-        public void FormatTimeUsesClockForToday()
+        public void FormatTimePicksTheUnitByDistance()
         {
-            SessionSummary session = Create("s", new DateTime(2026, 11, 11, 10, 38, 0));
-
-            Assert.Equal("10:38", SessionGroupPolicy.FormatTime(session, Now));
-        }
-
-        [Fact]
-        public void FormatTimeUsesMonthDayForSameYear()
-        {
-            SessionSummary session = Create("s", new DateTime(2026, 11, 10, 23, 59, 0));
-
-            Assert.Equal("11-10", SessionGroupPolicy.FormatTime(session, Now));
-        }
-
-        [Fact]
-        public void FormatTimeUsesFullDateForOtherYear()
-        {
-            SessionSummary session = Create("s", new DateTime(2025, 12, 31, 8, 5, 0));
-
-            Assert.Equal("2025-12-31", SessionGroupPolicy.FormatTime(session, Now));
+            Assert.Equal("10:38", SessionGroupPolicy.FormatTime(
+                Create("s", new DateTime(2026, 11, 11, 10, 38, 0)), Now));
+            Assert.Equal("11-10", SessionGroupPolicy.FormatTime(
+                Create("s", new DateTime(2026, 11, 10, 23, 59, 0)), Now));
+            Assert.Equal("2025-12-31", SessionGroupPolicy.FormatTime(
+                Create("s", new DateTime(2025, 12, 31, 8, 5, 0)), Now));
         }
 
         [Fact]

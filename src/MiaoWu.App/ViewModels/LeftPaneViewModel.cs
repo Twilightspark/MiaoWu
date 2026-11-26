@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using MiaoWu.App.Mvvm;
@@ -25,6 +26,7 @@ namespace MiaoWu.App.ViewModels
         private readonly IFolderPicker _folderPicker;
         private readonly IFilePicker _filePicker;
         private readonly IDialogService _dialogs;
+        private readonly UpdateCoordinator _updates;
         private readonly ObservableCollection<WorkspaceItemViewModel> _workspaces;
         private readonly HashSet<string> _openedFiles =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -43,7 +45,8 @@ namespace MiaoWu.App.ViewModels
             IFilePicker filePicker,
             IDialogService dialogs,
             WorkspaceCollection collection,
-            DateTime now)
+            DateTime now,
+            UpdateCoordinator updates = null)
         {
             _sessionCatalog = sessionCatalog ?? throw new ArgumentNullException(nameof(sessionCatalog));
             _fileCatalog = fileCatalog ?? throw new ArgumentNullException(nameof(fileCatalog));
@@ -52,6 +55,7 @@ namespace MiaoWu.App.ViewModels
             _folderPicker = folderPicker ?? throw new ArgumentNullException(nameof(folderPicker));
             _filePicker = filePicker ?? throw new ArgumentNullException(nameof(filePicker));
             _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+            _updates = updates;
             Now = now;
 
             _workspaces = new ObservableCollection<WorkspaceItemViewModel>();
@@ -62,6 +66,7 @@ namespace MiaoWu.App.ViewModels
             OpenSettingsCommand = new RelayCommand(RaiseSettingsRequested);
             OpenMarketplaceCommand = new RelayCommand(RaiseMarketplaceRequested);
             OpenScheduledTasksCommand = new RelayCommand(RaiseScheduledTasksRequested);
+            InstallUpdateCommand = new RelayCommand(InstallReadyUpdate);
             NewSessionCommand = new RelayCommand(RaiseNewSessionRequested, () => _activeWorkspace != null);
             SearchCommand = new RelayCommand(() => { }, () => false);
 
@@ -100,6 +105,11 @@ namespace MiaoWu.App.ViewModels
                     // 会话选中由 UiSettings.ActiveSessionId 恢复；这里先把行建出来。
                     target.EnsureSessionsLoaded();
                 }
+            }
+
+            if (_updates != null)
+            {
+                _updates.PropertyChanged += OnUpdateStateChanged;
             }
 
             OnPropertyChanged(nameof(HasWorkspaces));
@@ -274,6 +284,30 @@ namespace MiaoWu.App.ViewModels
         public RelayCommand OpenMarketplaceCommand { get; }
 
         public RelayCommand OpenScheduledTasksCommand { get; }
+
+        /// <summary>左栏设置按钮右侧的更新入口：拉起已下载的安装程序。</summary>
+        public RelayCommand InstallUpdateCommand { get; }
+
+        /// <summary>后台已下载安装包：在设置按钮右侧显示更新图标。</summary>
+        public bool HasUpdateReady
+        {
+            get { return _updates != null && _updates.IsUpdateReady; }
+        }
+
+        public string UpdateReadyToolTip
+        {
+            get
+            {
+                if (_updates == null || !_updates.IsUpdateReady)
+                {
+                    return "安装更新";
+                }
+
+                return string.IsNullOrWhiteSpace(_updates.ReadyVersion)
+                    ? "更新已下载，点击安装"
+                    : "更新 " + _updates.ReadyVersion + " 已下载，点击安装";
+            }
+        }
 
         public RelayCommand NewSessionCommand { get; }
 
@@ -927,6 +961,35 @@ namespace MiaoWu.App.ViewModels
         private void RaiseNewSessionRequested()
         {
             NewSessionRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>左栏更新按钮：只拉起已下载的安装包；失败原因显示在左栏内联错误行。</summary>
+        private void InstallReadyUpdate()
+        {
+            if (_updates == null)
+            {
+                InlineError = "更新安装服务不可用。";
+                return;
+            }
+
+            string error;
+            if (_updates.TryInstall(out error))
+            {
+                InlineError = null;
+                return;
+            }
+
+            InlineError = error;
+        }
+
+        private void OnUpdateStateChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (string.Equals(e.PropertyName, nameof(UpdateCoordinator.IsUpdateReady), StringComparison.Ordinal)
+                || string.Equals(e.PropertyName, nameof(UpdateCoordinator.ReadyVersion), StringComparison.Ordinal))
+            {
+                OnPropertyChanged(nameof(HasUpdateReady));
+                OnPropertyChanged(nameof(UpdateReadyToolTip));
+            }
         }
 
         private void RaiseSessionSelectionChanged()

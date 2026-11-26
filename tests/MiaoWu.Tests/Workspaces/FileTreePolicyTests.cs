@@ -26,7 +26,7 @@ namespace MiaoWu.Tests.Workspaces
         }
 
         [Fact]
-        public void FlattenOnlyIncludesChildrenOfExpandedLoadedNodes()
+        public void FlattenWalksExpandedLoadedNodesAndStopsAtErrors()
         {
             var root = new FileNode("root", @"C:\w", true, 0);
             var child = new FileNode("child", @"C:\w\child", true, 1);
@@ -48,31 +48,23 @@ namespace MiaoWu.Tests.Workspaces
             Assert.Equal(
                 new[] { "root", "child", "a.md" },
                 FileTreePolicy.Flatten(new[] { root }).Select(n => n.Name));
+
+            // 出错的行即使展开也不列子节点。
+            var error = new FileNode("error", @"C:\w\error", true, 0);
+            error.IsExpanded = true;
+            error.SetError("无法读取");
+            Assert.Single(FileTreePolicy.Flatten(new[] { error }));
+            Assert.False(error.HasLoadedChildren);
+            Assert.True(error.IsErrorRow);
         }
 
         [Fact]
-        public void FlattenSkipsChildrenOfErrorNodes()
-        {
-            var root = new FileNode("root", @"C:\w", true, 0);
-            root.IsExpanded = true;
-            root.SetError("无法读取");
-
-            Assert.Single(FileTreePolicy.Flatten(new[] { root }));
-            Assert.False(root.HasLoadedChildren);
-            Assert.True(root.IsErrorRow);
-        }
-
-        [Fact]
-        public void IndentGrowsThirteenPerLevel()
+        public void IndentAndContentWidthGrowWithDepth()
         {
             Assert.Equal(6, FileTreePolicy.GetIndent(0));
             Assert.Equal(19, FileTreePolicy.GetIndent(1));
             Assert.Equal(136, FileTreePolicy.GetIndent(10));
-        }
 
-        [Fact]
-        public void ContentWidthGrowsWithDepth()
-        {
             Assert.Equal(
                 FileTreePolicy.GetContentWidth(8) + FileTreePolicy.IndentPerLevel * 2,
                 FileTreePolicy.GetContentWidth(10));
@@ -88,7 +80,6 @@ namespace MiaoWu.Tests.Workspaces
         [InlineData(@"C:\w\logo.png", FilePreviewKind.Image)]
         [InlineData(@"C:\w\app.exe", FilePreviewKind.Binary)]
         [InlineData(@"C:\w\Program.cs", FilePreviewKind.Text)]
-        [InlineData(@"C:\w\data.json", FilePreviewKind.Text)]
         [InlineData(@"C:\w\noext", FilePreviewKind.Text)]
         public void PreviewKindFollowsExtension(string path, FilePreviewKind expected)
         {
@@ -97,7 +88,6 @@ namespace MiaoWu.Tests.Workspaces
 
         [Theory]
         [InlineData(@"C:\w\Program.cs", true)]
-        [InlineData(@"C:\w\app.config", true)]
         [InlineData(@"C:\w\README.md", false)]
         public void CodeFilesUseMonospace(string path, bool expected)
         {

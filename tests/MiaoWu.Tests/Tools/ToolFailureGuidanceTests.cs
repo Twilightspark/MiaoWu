@@ -18,91 +18,56 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public void SearchTimeoutPointsAtFetch()
+        public void KnownFailuresPointAtTheNextStep()
         {
-            string hint = ToolFailureGuidance.For(
+            string timeout = ToolFailureGuidance.For(
                 Failure("web_search", "timeout", "抓取超时（20 秒）。"),
                 1);
+            Assert.Contains("web_fetch", timeout);
+            Assert.Contains("不要用相同查询重试", timeout);
 
-            Assert.Contains("web_fetch", hint);
-            Assert.Contains("不要用相同查询重试", hint);
-        }
-
-        [Fact]
-        public void FetchFailureSuggestsAnotherSource()
-        {
-            string hint = ToolFailureGuidance.For(
+            string fetch = ToolFailureGuidance.For(
                 Failure("web_fetch", "http_status", "服务器返回 503。"),
                 1);
+            Assert.Contains("换一个来源", fetch);
 
-            Assert.Contains("换一个来源", hint);
+            string missingPath = ToolFailureGuidance.For(Failure("read", "not_found", "路径不存在：a.txt"), 1);
+            Assert.Contains("glob", missingPath);
+
+            string denied = ToolFailureGuidance.For(
+                ToolResult.Failure(Call("write"), ToolResultStatus.Denied, "approval_denied", "用户拒绝。"),
+                1);
+            Assert.Contains("用户拒绝", denied);
+            Assert.Contains("不要用同样参数重试", denied);
+
+            string invalid = ToolFailureGuidance.For(
+                ToolResult.Failure(Call("write"), ToolResultStatus.InvalidArguments, "missing_argument", "缺少 content。"),
+                1);
+            Assert.Contains("参数", invalid);
         }
 
         [Fact]
-        public void MissingPathSuggestsGlob()
+        public void RepeatedFailureEscalatesOnTheSecondAttempt()
         {
-            string hint = ToolFailureGuidance.For(Failure("read", "not_found", "路径不存在：a.txt"), 1);
-            Assert.Contains("glob", hint);
+            ToolResult timeout = Failure("web_search", "timeout", "抓取超时（20 秒）。");
+            Assert.DoesNotContain("连续失败", ToolFailureGuidance.For(timeout, 1));
+            Assert.Contains("连续失败 2 次", ToolFailureGuidance.For(timeout, 2));
+            Assert.Contains("停止原样重试", ToolFailureGuidance.For(timeout, 2));
+
+            // 没有专门建议的失败也要在第 2 次提醒停手。
+            ToolResult unknown = Failure("read", "mystery", "未知失败。");
+            Assert.Null(ToolFailureGuidance.For(unknown, 1));
+            Assert.Contains("连续失败 2 次", ToolFailureGuidance.For(unknown, 2));
         }
 
         [Fact]
-        public void DeniedCallTellsTheModelNotToRetry()
-        {
-            ToolResult result = ToolResult.Failure(
-                Call("write"),
-                ToolResultStatus.Denied,
-                "approval_denied",
-                "用户拒绝。");
-
-            string hint = ToolFailureGuidance.For(result, 1);
-            Assert.Contains("用户拒绝", hint);
-            Assert.Contains("不要用同样参数重试", hint);
-        }
-
-        [Fact]
-        public void InvalidArgumentsAskForTheDeclaredShape()
-        {
-            ToolResult result = ToolResult.Failure(
-                Call("write"),
-                ToolResultStatus.InvalidArguments,
-                "missing_argument",
-                "缺少 content。");
-
-            Assert.Contains("参数", ToolFailureGuidance.For(result, 1));
-        }
-
-        [Fact]
-        public void RepeatedFailureEscalatesAfterTwoFailures()
-        {
-            ToolResult result = Failure("web_search", "timeout", "抓取超时（20 秒）。");
-
-            Assert.DoesNotContain("连续失败", ToolFailureGuidance.For(result, 1));
-            Assert.Contains("连续失败 2 次", ToolFailureGuidance.For(result, 2));
-            Assert.Contains("停止原样重试", ToolFailureGuidance.For(result, 2));
-        }
-
-        [Fact]
-        public void UnknownErrorStillEscalatesOnRepeat()
-        {
-            ToolResult result = Failure("read", "mystery", "未知失败。");
-
-            Assert.Null(ToolFailureGuidance.For(result, 1));
-            Assert.Contains("连续失败 2 次", ToolFailureGuidance.For(result, 2));
-        }
-
-        [Fact]
-        public void StripRemovesTheGuidanceBlockFromToolOutput()
+        public void StripRemovesTheGuidanceBlockOnly()
         {
             string content = "抓取超时（20 秒）。"
                 + ToolFailureGuidance.Marker
                 + " web_search 后端不可达时改用 web_fetch。";
 
             Assert.Equal("抓取超时（20 秒）。", ToolFailureGuidance.Strip(content));
-        }
-
-        [Fact]
-        public void StripKeepsContentWithoutAMarker()
-        {
             Assert.Equal("已读取 3 行。", ToolFailureGuidance.Strip("已读取 3 行。"));
             Assert.Equal(string.Empty, ToolFailureGuidance.Strip(null));
         }

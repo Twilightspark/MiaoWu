@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using MiaoWu.App.Mvvm;
 using MiaoWu.App.Services;
 using MiaoWu.Core;
@@ -76,6 +77,20 @@ namespace MiaoWu.App.ViewModels
     public sealed class GoalContinuationChoice
     {
         public GoalContinuationChoice(bool enabled, string title)
+        {
+            Enabled = enabled;
+            Title = title;
+        }
+
+        public bool Enabled { get; }
+
+        public string Title { get; }
+    }
+
+    /// <summary>设置页“自动更新”的选项：开时后台定时检查并静默下载，默认开。</summary>
+    public sealed class AutoUpdateChoice
+    {
+        public AutoUpdateChoice(bool enabled, string title)
         {
             Enabled = enabled;
             Title = title;
@@ -164,6 +179,8 @@ namespace MiaoWu.App.ViewModels
     {
         private readonly AppServices _app;
         private readonly System.Windows.Threading.Dispatcher _dispatcher;
+        private readonly UpdateCoordinator _updates;
+        private readonly IDialogService _dialogs;
 
         private SettingsNavItem _selectedPage;
         private ProviderEditorViewModel _draftProvider;
@@ -176,16 +193,24 @@ namespace MiaoWu.App.ViewModels
         private string _statusText;
         private string _providerStatus;
         private string _providerFormStatus;
-        private string _updateStatus;
-        private string _latestReleaseUrl;
+        private string _updateButtonText = "检查更新";
+        private string _updateError;
         private bool _isCheckingUpdate;
+        private bool _isDownloadingUpdate;
+        private bool _isInstallingUpdate;
+        private bool _installFailed;
         private bool _isTesting;
         private bool _isFetchingModels;
         private string _modelFetchStatus;
 
-        public SettingsViewModel(AppServices app)
+        public SettingsViewModel(
+            AppServices app,
+            UpdateCoordinator updates = null,
+            IDialogService dialogs = null)
         {
             _app = app ?? throw new ArgumentNullException(nameof(app));
+            _updates = updates;
+            _dialogs = dialogs;
             _dispatcher = Application.Current == null
                 ? System.Windows.Threading.Dispatcher.CurrentDispatcher
                 : Application.Current.Dispatcher;
@@ -226,6 +251,11 @@ namespace MiaoWu.App.ViewModels
                 new GoalContinuationChoice(false, "关闭"),
                 new GoalContinuationChoice(true, "自动续跑")
             };
+            AutoUpdateOptions = new[]
+            {
+                new AutoUpdateChoice(true, "开"),
+                new AutoUpdateChoice(false, "关")
+            };
             ProviderFormModeOptions = new[]
             {
                 new ProviderFormModeChoice(ProviderFormMode.ThirdParty, "第三方供应商"),
@@ -252,8 +282,12 @@ namespace MiaoWu.App.ViewModels
             RemoveProviderCommand = new RelayCommand(RemoveEditingProvider);
             TestProviderCommand = new RelayCommand(() => FireAndForget(TestProviderAsync()));
             FetchModelsCommand = new RelayCommand(() => FireAndForget(FetchModelsAsync()));
-            CheckUpdateCommand = new RelayCommand(() => FireAndForget(CheckUpdateAsync()), () => !IsCheckingUpdate);
-            OpenReleasePageCommand = new RelayCommand(OpenReleasePage);
+            CheckUpdateCommand = new RelayCommand(() => FireAndForget(CheckUpdateAsync()), () => CanCheckUpdate);
+
+            if (_updates != null)
+            {
+                _updates.PropertyChanged += OnUpdateCoordinatorChanged;
+            }
 
             ReloadProviders();
         }
@@ -271,6 +305,8 @@ namespace MiaoWu.App.ViewModels
         public IReadOnlyList<ApprovalPolicyChoice> ApprovalPolicyOptions { get; }
 
         public IReadOnlyList<GoalContinuationChoice> GoalContinuationOptions { get; }
+
+        public IReadOnlyList<AutoUpdateChoice> AutoUpdateOptions { get; }
 
         public IReadOnlyList<ProviderFormModeChoice> ProviderFormModeOptions { get; }
 
@@ -301,8 +337,6 @@ namespace MiaoWu.App.ViewModels
 
         public RelayCommand CheckUpdateCommand { get; }
 
-        public RelayCommand OpenReleasePageCommand { get; }
-
         public bool IsOpen
         {
             get { return _isOpen; }
@@ -313,8 +347,7 @@ namespace MiaoWu.App.ViewModels
                     ReloadProviders();
                     StatusText = null;
                     ProviderFormStatus = null;
-                    UpdateStatus = null;
-                    _latestReleaseUrl = null;
+                    ResetUpdateState();
                 }
             }
         }
@@ -497,6 +530,42 @@ namespace MiaoWu.App.ViewModels
                 _app.Settings.Agent.GoalAutoContinue = value.Enabled;
                 OnPropertyChanged();
                 SaveSettings();
+            }
+        }
+
+        /// <summary>
+        /// 自动更新的选中项。保存即生效：开启后立即安排下一次后台检查，关闭后停止计时器；
+        /// 不会打断已经在下载的安装包。
+        /// </summary>
+        public AutoUpdateChoice SelectedAutoUpdate
+        {
+            get
+            {
+                bool current = _app.Settings.Agent.AutoUpdate;
+                foreach (AutoUpdateChoice choice in AutoUpdateOptions)
+                {
+                    if (choice.Enabled == current)
+                    {
+                        return choice;
+                    }
+                }
+
+                return AutoUpdateOptions[0];
+            }
+            set
+            {
+                if (value == null || _app.Settings.Agent.AutoUpdate == value.Enabled)
+                {
+                    return;
+                }
+
+                _app.Settings.Agent.AutoUpdate = value.Enabled;
+                OnPropertyChanged();
+                SaveSettings();
+                if (_updates != null)
+                {
+                    _updates.OnAutoUpdateSettingChanged();
+                }
             }
         }
 
@@ -744,24 +813,82 @@ namespace MiaoWu.App.ViewModels
             get { return !string.IsNullOrEmpty(_modelFetchStatus); }
         }
 
-        public string UpdateStatus
+        /// <summary>
+        /// 检查更新按钮的文字：默认「检查更新」；已是最新时「已是最新」；
+        /// 有已下载安装包时「安装更新」；检查 / 下载 / 安装进行中显示对应状态。
+        /// </summary>
+        public string CheckUpdateText
         {
-            get { return _updateStatus; }
-            private set
+            get
             {
-                if (SetProperty(ref _updateStatus, value))
+                if (_isInstallingUpdate)
                 {
-                    OnPropertyChanged(nameof(HasUpdateStatus));
+                    return "正在安装…";
                 }
+
+                if (_isDownloadingUpdate)
+                {
+                    return "下载中…";
+                }
+
+                if (_isCheckingUpdate)
+                {
+                    return "检查更新";
+                }
+
+                if (_installFailed)
+                {
+                    return "安装失败，重试";
+                }
+
+                if (_updates != null && _updates.IsUpdateReady)
+                {
+                    return "安装更新";
+                }
+
+                return _updateButtonText;
             }
         }
 
-        public bool HasUpdateStatus
+        /// <summary>失败原因只放 tooltip，不在按钮下方再占一行提醒文字。</summary>
+        public string UpdateButtonToolTip
         {
-            get { return !string.IsNullOrEmpty(_updateStatus); }
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(_updateError))
+                {
+                    return _updateError;
+                }
+
+                if (_updates != null && _updates.IsUpdateReady)
+                {
+                    return string.IsNullOrWhiteSpace(_updates.ReadyVersion)
+                        ? "安装更新"
+                        : "安装更新 " + _updates.ReadyVersion;
+                }
+
+                return "检查更新";
+            }
         }
 
-        /// <summary>检查进行中：按钮置灰，避免并发请求。</summary>
+        /// <summary>检查 / 下载 / 安装任一进行中：按钮置灰，避免并发请求。</summary>
+        public bool IsUpdateBusy
+        {
+            get
+            {
+                return _isCheckingUpdate
+                    || _isDownloadingUpdate
+                    || _isInstallingUpdate
+                    || (_updates != null && _updates.IsBusy);
+            }
+        }
+
+        public bool CanCheckUpdate
+        {
+            get { return !IsUpdateBusy; }
+        }
+
+        /// <summary>检查进行中：按钮保持禁用，旋转图标由 <see cref="IsUpdateBusy"/> 驱动。</summary>
         public bool IsCheckingUpdate
         {
             get { return _isCheckingUpdate; }
@@ -769,14 +896,35 @@ namespace MiaoWu.App.ViewModels
             {
                 if (SetProperty(ref _isCheckingUpdate, value))
                 {
-                    OnPropertyChanged(nameof(IsNotCheckingUpdate));
+                    RaiseUpdateStateChanged();
                 }
             }
         }
 
-        public bool IsNotCheckingUpdate
+        /// <summary>下载安装包进行中；按钮文字改为「下载中…」。</summary>
+        public bool IsDownloadingUpdate
         {
-            get { return !_isCheckingUpdate; }
+            get { return _isDownloadingUpdate; }
+            private set
+            {
+                if (SetProperty(ref _isDownloadingUpdate, value))
+                {
+                    RaiseUpdateStateChanged();
+                }
+            }
+        }
+
+        /// <summary>已拉起安装程序；按钮保持禁用，等待安装器关闭当前进程。</summary>
+        public bool IsInstallingUpdate
+        {
+            get { return _isInstallingUpdate; }
+            private set
+            {
+                if (SetProperty(ref _isInstallingUpdate, value))
+                {
+                    RaiseUpdateStateChanged();
+                }
+            }
         }
 
         public string AboutLine
@@ -1221,68 +1369,200 @@ namespace MiaoWu.App.ViewModels
         }
 
         /// <summary>
-        /// 设置 → 关于的「检查更新」：只读 GitHub Releases 的最新发布并与当前版本比较。
-        /// 结果只落在状态行，不改配置、不下载；失败给出一句可读原因，发布页按钮始终可用。
+        /// 设置 → 关于的「检查更新」：检查 → 已是最新就停在按钮文案上；发现新版本先弹
+        /// 应用内确认，确认后下载并拉起安装程序。按钮本身承担全部状态，不再显示状态行。
+        /// 已经有下载好的安装包时，按钮表现为「安装更新」。
         /// </summary>
         private async Task CheckUpdateAsync()
         {
-            if (IsCheckingUpdate)
+            if (IsUpdateBusy)
             {
                 return;
             }
 
+            if (_updates != null && _updates.IsUpdateReady)
+            {
+                InstallReadyUpdate();
+                return;
+            }
+
+            _installFailed = false;
+            SetUpdateButtonText("检查更新");
+            SetUpdateError(null);
             IsCheckingUpdate = true;
-            UpdateStatus = "正在检查更新…";
             try
             {
-                UpdateCheckResult result = await _app.Updates.CheckAsync(CancellationToken.None);
-                if (result == null)
+                UpdateCheckResult result = _updates != null
+                    ? await _updates.CheckAsync(CancellationToken.None)
+                    : await _app.Updates.CheckAsync(CancellationToken.None);
+
+                // await 之后可能回到线程池（服务内部 ConfigureAwait(false)）：所有按钮状态
+                // 都切回设置页 Dispatcher 再改，离屏探针与真实 UI 才不会偶发不刷新。
+                bool shouldDownload = await RunOnUiAsync(() => ApplyCheckResult(result));
+                if (!shouldDownload)
                 {
-                    UpdateStatus = "检查更新失败：没有返回结果。";
                     return;
                 }
 
-                if (!string.IsNullOrWhiteSpace(result.ReleaseUrl))
-                {
-                    _latestReleaseUrl = result.ReleaseUrl;
-                }
+                UpdateDownloadResult download = _updates != null
+                    ? await _updates.DownloadAsync(result, null, CancellationToken.None)
+                    : new UpdateDownloadResult
+                    {
+                        Succeeded = false,
+                        Message = "更新下载服务不可用。"
+                    };
 
-                UpdateStatus = result.Succeeded
-                    ? result.Message
-                    : result.Message + "可打开 release 页手动查看。";
+                await RunOnUiAsync(() => ApplyDownloadResult(download));
             }
             catch (Exception exception)
             {
-                UpdateStatus = "检查更新失败：" + exception.Message;
+                await RunOnUiAsync(() =>
+                {
+                    SetUpdateError("检查更新失败：" + exception.Message);
+                    SetUpdateButtonText("检查失败，重试");
+                });
             }
             finally
             {
-                IsCheckingUpdate = false;
+                await RunOnUiAsync(() =>
+                {
+                    IsCheckingUpdate = false;
+                    IsDownloadingUpdate = false;
+                });
             }
         }
 
-        /// <summary>打开最新发布页；还没检查过或检查失败时退回配置里的 releases 页。</summary>
-        private void OpenReleasePage()
+        /// <summary>检查结果落到按钮上；返回 true 表示已确认下载、可以进入下载阶段。</summary>
+        private bool ApplyCheckResult(UpdateCheckResult result)
         {
-            string url = _latestReleaseUrl;
-            if (string.IsNullOrWhiteSpace(url))
+            if (result == null)
             {
-                url = _app.Settings.Agent.UpdateUrl;
+                SetUpdateButtonText("检查更新");
+                return false;
             }
 
-            if (string.IsNullOrWhiteSpace(url))
+            if (!result.Succeeded)
             {
-                UpdateStatus = "没有可打开的发布页地址。";
+                SetUpdateError(result.Message);
+                SetUpdateButtonText("检查失败，重试");
+                return false;
+            }
+
+            if (!result.HasUpdate)
+            {
+                SetUpdateButtonText("已是最新");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(result.AssetUrl))
+            {
+                SetUpdateError("这次发布没有附带可下载的安装包。");
+                SetUpdateButtonText("未找到安装包");
+                return false;
+            }
+
+            // 检查期间用户关掉了设置：不要在设置浮层外突然弹确认。
+            if (!IsOpen)
+            {
+                SetUpdateButtonText("检查更新");
+                return false;
+            }
+
+            bool accepted = _dialogs != null && _dialogs.Confirm(
+                "发现新版本",
+                "新版本 " + result.LatestVersion + " 已发布（当前 " + result.CurrentVersion + "）。\n"
+                    + "是否现在下载并安装？",
+                "下载并安装",
+                "以后再说",
+                false);
+
+            if (!accepted)
+            {
+                SetUpdateButtonText("检查更新");
+                return false;
+            }
+
+            IsCheckingUpdate = false;
+            IsDownloadingUpdate = true;
+            return true;
+        }
+
+        private void ApplyDownloadResult(UpdateDownloadResult download)
+        {
+            if (download == null || !download.Succeeded)
+            {
+                SetUpdateError(download == null ? "下载安装包失败。" : download.Message);
+                SetUpdateButtonText("下载失败，重试");
                 return;
             }
 
-            try
+            InstallReadyUpdate();
+        }
+
+        /// <summary>拉起已下载的安装程序；成功后保持禁用，等安装器关闭当前进程。</summary>
+        private void InstallReadyUpdate()
+        {
+            if (_updates == null)
             {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                SetUpdateError("更新安装服务不可用。");
+                SetUpdateButtonText("安装失败，重试");
+                return;
             }
-            catch (Exception exception)
+
+            string error;
+            if (_updates.TryInstall(out error))
             {
-                UpdateStatus = "无法打开发布页：" + exception.Message;
+                _installFailed = false;
+                SetUpdateError(null);
+                IsInstallingUpdate = true;
+                return;
+            }
+
+            _installFailed = true;
+            SetUpdateError(error);
+            OnPropertyChanged(nameof(CheckUpdateText));
+        }
+
+        private void ResetUpdateState()
+        {
+            IsCheckingUpdate = false;
+            IsDownloadingUpdate = false;
+            IsInstallingUpdate = false;
+            _installFailed = false;
+            SetUpdateButtonText("检查更新");
+            SetUpdateError(null);
+        }
+
+        private void SetUpdateButtonText(string text)
+        {
+            _updateButtonText = text;
+            OnPropertyChanged(nameof(CheckUpdateText));
+        }
+
+        private void SetUpdateError(string message)
+        {
+            _updateError = message;
+            OnPropertyChanged(nameof(UpdateButtonToolTip));
+        }
+
+        private void RaiseUpdateStateChanged()
+        {
+            OnPropertyChanged(nameof(IsUpdateBusy));
+            OnPropertyChanged(nameof(CanCheckUpdate));
+            OnPropertyChanged(nameof(CheckUpdateText));
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        /// <summary>自动检查 / 静默下载也会占用按钮，避免用户同时点手动检查。</summary>
+        private void OnUpdateCoordinatorChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(UpdateCoordinator.IsBusy)
+                || e.PropertyName == nameof(UpdateCoordinator.IsUpdateReady)
+                || e.PropertyName == nameof(UpdateCoordinator.IsChecking)
+                || e.PropertyName == nameof(UpdateCoordinator.IsDownloading))
+            {
+                OnPropertyChanged(nameof(UpdateButtonToolTip));
+                RaiseUpdateStateChanged();
             }
         }
 
@@ -1372,6 +1652,16 @@ namespace MiaoWu.App.ViewModels
             }
 
             return _dispatcher.InvokeAsync(action).Task;
+        }
+
+        private Task<T> RunOnUiAsync<T>(Func<T> func)
+        {
+            if (_dispatcher.CheckAccess())
+            {
+                return Task.FromResult(func());
+            }
+
+            return _dispatcher.InvokeAsync(func).Task;
         }
 
         private async Task TestProviderAsync()

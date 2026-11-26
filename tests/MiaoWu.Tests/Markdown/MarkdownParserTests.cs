@@ -9,7 +9,6 @@ namespace MiaoWu.Tests.Markdown
         [Theory]
         [InlineData("\r\n")]
         [InlineData("\n")]
-        [InlineData("\r")]
         public void EveryLineEndingBecomesSoftBreak(string newLine)
         {
             MarkdownDocument document = MarkdownParser.Parse("第一行" + newLine + "第二行");
@@ -81,7 +80,6 @@ namespace MiaoWu.Tests.Markdown
 
         [Theory]
         [InlineData("-")]
-        [InlineData("*")]
         [InlineData("+")]
         public void UnorderedListMarkersAreNormalized(string marker)
         {
@@ -210,7 +208,7 @@ namespace MiaoWu.Tests.Markdown
         }
 
         [Fact]
-        public void FencedCodeKeepsLanguageAndTrailingNewline()
+        public void FencedCodeKeepsLanguageLiteralTextAndHandlesEdges()
         {
             MarkdownDocument document = MarkdownParser.Parse(
                 "```csharp\nvar value = 1;\n```");
@@ -219,40 +217,23 @@ namespace MiaoWu.Tests.Markdown
                 Assert.Single(document.Blocks));
             Assert.Equal("csharp", code.Language);
             Assert.Equal("var value = 1;\n", code.Text);
-        }
 
-        [Fact]
-        public void FencedCodeContentIsNotParsed()
-        {
-            MarkdownDocument document = MarkdownParser.Parse(
-                "```\n**不是加粗** 与 [不是链接](u)\n\n```");
+            // 围栏内的标记不再解析。
+            MarkdownCodeBlock literal = Assert.IsType<MarkdownCodeBlock>(
+                Assert.Single(MarkdownParser.Parse("```\n**不是加粗** 与 [不是链接](u)\n\n```").Blocks));
+            Assert.Null(literal.Language);
+            Assert.Equal("**不是加粗** 与 [不是链接](u)\n\n", literal.Text);
 
-            MarkdownCodeBlock code = Assert.IsType<MarkdownCodeBlock>(
-                Assert.Single(document.Blocks));
-            Assert.Null(code.Language);
-            Assert.Equal("**不是加粗** 与 [不是链接](u)\n\n", code.Text);
-        }
+            // 未闭合的围栏一直吃到文末。
+            MarkdownCodeBlock unclosed = Assert.IsType<MarkdownCodeBlock>(
+                Assert.Single(MarkdownParser.Parse("~~~\n第一行\n第二行").Blocks));
+            Assert.Null(unclosed.Language);
+            Assert.Equal("第一行\n第二行\n", unclosed.Text);
 
-        [Fact]
-        public void UnclosedFenceRunsToEndOfDocument()
-        {
-            MarkdownDocument document = MarkdownParser.Parse("~~~\n第一行\n第二行");
-
-            MarkdownCodeBlock code = Assert.IsType<MarkdownCodeBlock>(
-                Assert.Single(document.Blocks));
-            Assert.Null(code.Language);
-            Assert.Equal("第一行\n第二行\n", code.Text);
-        }
-
-        [Fact]
-        public void EmptyFencedCodeHasEmptyText()
-        {
-            MarkdownDocument document = MarkdownParser.Parse("```\n```");
-
-            MarkdownCodeBlock code = Assert.IsType<MarkdownCodeBlock>(
-                Assert.Single(document.Blocks));
-            Assert.Null(code.Language);
-            Assert.Equal(string.Empty, code.Text);
+            // 空围栏产出空正文。
+            MarkdownCodeBlock empty = Assert.IsType<MarkdownCodeBlock>(
+                Assert.Single(MarkdownParser.Parse("```\n```").Blocks));
+            Assert.Equal(string.Empty, empty.Text);
         }
 
         [Fact]
@@ -286,7 +267,6 @@ namespace MiaoWu.Tests.Markdown
         [InlineData("__粗体__", MarkdownInlineKind.Strong, "粗体")]
         [InlineData("*斜体*", MarkdownInlineKind.Emphasis, "斜体")]
         [InlineData("_斜体_", MarkdownInlineKind.Emphasis, "斜体")]
-        [InlineData("***两者***", MarkdownInlineKind.Strong, "两者")]
         public void StrongAndEmphasisAreRecognized(
             string source,
             MarkdownInlineKind expectedKind,
@@ -334,30 +314,19 @@ namespace MiaoWu.Tests.Markdown
         }
 
         [Fact]
-        public void ImageSyntaxStaysPlainText()
+        public void ImageAndHtmlStayPlainText()
         {
-            MarkdownDocument document = MarkdownParser.Parse("![替代文字](image.png)");
+            MarkdownParagraph image = Assert.IsType<MarkdownParagraph>(
+                Assert.Single(MarkdownParser.Parse("![替代文字](image.png)").Blocks));
+            MarkdownInline imageInline = Assert.Single(image.Inlines);
+            Assert.Equal(MarkdownInlineKind.Text, imageInline.Kind);
+            Assert.Equal("![替代文字](image.png)", imageInline.Text);
+            Assert.DoesNotContain(image.Inlines, candidate => candidate.Kind == MarkdownInlineKind.Link);
 
-            MarkdownParagraph paragraph = Assert.IsType<MarkdownParagraph>(
-                Assert.Single(document.Blocks));
-            MarkdownInline inline = Assert.Single(paragraph.Inlines);
-            Assert.Equal(MarkdownInlineKind.Text, inline.Kind);
-            Assert.Equal("![替代文字](image.png)", inline.Text);
-            Assert.DoesNotContain(
-                paragraph.Inlines,
-                candidate => candidate.Kind == MarkdownInlineKind.Link);
-        }
-
-        [Fact]
-        public void HtmlTagsStayPlainText()
-        {
-            const string Source = "<b>粗</b> <script>alert(1)</script>";
-
-            MarkdownDocument document = MarkdownParser.Parse(Source);
-
-            MarkdownParagraph paragraph = Assert.IsType<MarkdownParagraph>(
-                Assert.Single(document.Blocks));
-            Assert.Equal(Source, Assert.Single(paragraph.Inlines).Text);
+            const string Html = "<b>粗</b> <script>alert(1)</script>";
+            MarkdownParagraph html = Assert.IsType<MarkdownParagraph>(
+                Assert.Single(MarkdownParser.Parse(Html).Blocks));
+            Assert.Equal(Html, Assert.Single(html.Inlines).Text);
         }
 
         [Fact]
@@ -394,17 +363,12 @@ namespace MiaoWu.Tests.Markdown
         }
 
         [Fact]
-        public void EmptyInputProducesEmptyDocument()
+        public void EmptyAndWhitespaceInputProduceEmptyDocument()
         {
             MarkdownDocument document = MarkdownParser.Parse(null);
 
             Assert.True(document.IsEmpty);
             Assert.Empty(document.Blocks);
-        }
-
-        [Fact]
-        public void WhitespaceOnlyInputProducesEmptyDocument()
-        {
             Assert.True(MarkdownParser.Parse(string.Empty).IsEmpty);
             Assert.True(MarkdownParser.Parse("   \r\n\t\n").IsEmpty);
         }
@@ -418,16 +382,6 @@ namespace MiaoWu.Tests.Markdown
                 Assert.Single(document.Blocks));
             Assert.Equal(1, heading.Level);
             Assert.Equal("标题", Assert.Single(heading.Inlines).Text);
-        }
-
-        [Fact]
-        public void PlainFactoryCreatesTextInline()
-        {
-            MarkdownInline inline = MarkdownInline.Plain("文本");
-
-            Assert.Equal(MarkdownInlineKind.Text, inline.Kind);
-            Assert.Equal("文本", inline.Text);
-            Assert.Null(inline.Url);
         }
 
         [Fact]

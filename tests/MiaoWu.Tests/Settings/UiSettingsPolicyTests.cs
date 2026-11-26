@@ -19,6 +19,8 @@ namespace MiaoWu.Tests.Settings
             Assert.Equal(900, settings.Ui.WindowHeight);
             Assert.Equal(262, settings.Ui.LeftPaneWidth);
             Assert.Equal(580, settings.Ui.RightPaneWidth);
+            Assert.Equal("light", settings.Ui.Theme);
+            Assert.Equal("zh-CN", settings.Ui.Language);
             Assert.Equal(AppSettings.CurrentSchemaVersion, settings.SchemaVersion);
         }
 
@@ -52,36 +54,28 @@ namespace MiaoWu.Tests.Settings
         }
 
         [Fact]
-        public void WindowSizeRespectsLimitsAndWorkArea()
+        public void WindowSizeHonorsWorkAreaAndContentMinimum()
         {
-            var settings = new AppSettings();
-            settings.Ui.WindowWidth = 4000;
-            settings.Ui.WindowHeight = 2000;
+            var large = new AppSettings();
+            large.Ui.WindowWidth = 4000;
+            large.Ui.WindowHeight = 2000;
+            UiSettingsPolicy.Normalize(large, Limits, 1366, 728);
+            Assert.Equal(1366, large.Ui.WindowWidth);
+            Assert.Equal(760, large.Ui.WindowHeight);
 
-            UiSettingsPolicy.Normalize(settings, Limits, 1366, 728);
-
-            Assert.Equal(1366, settings.Ui.WindowWidth);
-            Assert.Equal(760, settings.Ui.WindowHeight);
+            var small = new AppSettings();
+            small.Ui.WindowWidth = 900;
+            small.Ui.WindowHeight = 600;
+            UiSettingsPolicy.Normalize(small, Limits);
+            Assert.Equal(1080, small.Ui.WindowWidth);
+            Assert.Equal(760, small.Ui.WindowHeight);
         }
 
         [Fact]
-        public void WindowSizeClampsToContentMinimum()
+        public void TabsAreDeduplicatedCappedAndSelectionFollowsTheList()
         {
-            var settings = new AppSettings();
-            settings.Ui.WindowWidth = 900;
-            settings.Ui.WindowHeight = 600;
-
-            UiSettingsPolicy.Normalize(settings, Limits);
-
-            Assert.Equal(1080, settings.Ui.WindowWidth);
-            Assert.Equal(760, settings.Ui.WindowHeight);
-        }
-
-        [Fact]
-        public void DuplicateFileTabsAreRemovedAndTitlesFallback()
-        {
-            var settings = new AppSettings();
-            settings.Ui.OpenTabs = new List<DocumentTab>
+            var dedupe = new AppSettings();
+            dedupe.Ui.OpenTabs = new List<DocumentTab>
             {
                 new DocumentTab { Kind = DocumentTabKind.File, FilePath = @"C:\w\a.md" },
                 new DocumentTab { Kind = DocumentTabKind.File, FilePath = @"c:\W\A.MD" },
@@ -90,82 +84,35 @@ namespace MiaoWu.Tests.Settings
                 new DocumentTab { Kind = DocumentTabKind.File, FilePath = " " }
             };
 
-            UiSettingsPolicy.Normalize(settings, Limits);
+            UiSettingsPolicy.Normalize(dedupe, Limits);
 
-            Assert.Equal(2, settings.Ui.OpenTabs.Count);
-            Assert.Equal("a.md", settings.Ui.OpenTabs[0].Title);
-            Assert.False(string.IsNullOrEmpty(settings.Ui.OpenTabs[0].Id));
-            Assert.Equal("diff", settings.Ui.OpenTabs[1].Title);
-        }
+            Assert.Equal(2, dedupe.Ui.OpenTabs.Count);
+            Assert.Equal("a.md", dedupe.Ui.OpenTabs[0].Title);
+            Assert.False(string.IsNullOrEmpty(dedupe.Ui.OpenTabs[0].Id));
+            Assert.Equal("diff", dedupe.Ui.OpenTabs[1].Title);
 
-        [Fact]
-        public void SelectedTabFallsBackToFirst()
-        {
-            var settings = new AppSettings();
-            settings.Ui.OpenTabs = new List<DocumentTab>
-            {
-                DocumentTab.CreateFile(@"C:\w\a.md", "a.md"),
-                DocumentTab.CreateFile(@"C:\w\b.md", "b.md")
-            };
-            settings.Ui.SelectedTabId = "missing";
-
-            UiSettingsPolicy.Normalize(settings, Limits);
-
-            Assert.Equal(settings.Ui.OpenTabs[0].Id, settings.Ui.SelectedTabId);
-        }
-
-        [Fact]
-        public void SelectedTabIsClearedWhenNoTabsRemain()
-        {
-            var settings = new AppSettings();
-            settings.Ui.SelectedTabId = "x";
-
-            UiSettingsPolicy.Normalize(settings, Limits);
-
-            Assert.Null(settings.Ui.SelectedTabId);
-        }
-
-        [Fact]
-        public void TabCountIsCapped()
-        {
-            var settings = new AppSettings();
-            settings.Ui.OpenTabs = new List<DocumentTab>();
+            var many = new AppSettings();
+            many.Ui.OpenTabs = new List<DocumentTab>();
             for (int index = 0; index < 40; index++)
             {
-                settings.Ui.OpenTabs.Add(DocumentTab.CreateFile(
+                many.Ui.OpenTabs.Add(DocumentTab.CreateFile(
                     @"C:\w\file" + index + ".md",
                     "file" + index + ".md"));
             }
 
-            UiSettingsPolicy.Normalize(settings, Limits);
+            many.Ui.SelectedTabId = "missing";
+            many.Ui.DocumentScrollOffset = -50;
+            UiSettingsPolicy.Normalize(many, Limits);
 
-            Assert.Equal(TabStripPolicy.MaxTabs, settings.Ui.OpenTabs.Count);
-        }
+            Assert.Equal(TabStripPolicy.MaxTabs, many.Ui.OpenTabs.Count);
+            Assert.Equal(many.Ui.OpenTabs[0].Id, many.Ui.SelectedTabId);
+            Assert.Equal(0, many.Ui.DocumentScrollOffset);
 
-        [Fact]
-        public void ScrollOffsetsAreNonNegative()
-        {
-            var settings = new AppSettings();
-            settings.Ui.DocumentScrollOffset = -50;
-            settings.Ui.OpenTabs = new List<DocumentTab>
-            {
-                DocumentTab.CreateFile(@"C:\a.md", "a.md")
-            };
-            settings.Ui.OpenTabs[0].ScrollOffset = -1;
-
-            UiSettingsPolicy.Normalize(settings, Limits);
-
-            Assert.Equal(0, settings.Ui.DocumentScrollOffset);
-            Assert.Equal(0, settings.Ui.OpenTabs[0].ScrollOffset);
-        }
-
-        [Fact]
-        public void ReservedThemeAndLanguageDefaultToLightAndChinese()
-        {
-            AppSettings settings = UiSettingsPolicy.Normalize(null, Limits);
-
-            Assert.Equal("light", settings.Ui.Theme);
-            Assert.Equal("zh-CN", settings.Ui.Language);
+            var empty = new AppSettings();
+            empty.Ui.SelectedTabId = "x";
+            empty.Ui.OpenTabs = new List<DocumentTab>();
+            UiSettingsPolicy.Normalize(empty, Limits);
+            Assert.Null(empty.Ui.SelectedTabId);
         }
 
         [Theory]

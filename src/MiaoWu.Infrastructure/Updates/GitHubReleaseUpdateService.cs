@@ -19,7 +19,7 @@ namespace MiaoWu.Infrastructure.Updates
         private const string GitHubAccept = "application/vnd.github+json";
         private const int TimeoutSeconds = 15;
 
-        private readonly HttpTransport _transport;
+        private readonly Func<HttpTransport> _transport;
         private readonly string _releasesUrl;
         private readonly string _currentVersion;
 
@@ -29,6 +29,18 @@ namespace MiaoWu.Infrastructure.Updates
         /// </summary>
         public GitHubReleaseUpdateService(
             HttpTransport transport,
+            string releasesUrl,
+            string currentVersion)
+            : this(() => transport, releasesUrl, currentVersion)
+        {
+        }
+
+        /// <summary>
+        /// 每次检查都通过 <paramref name="transport"/> 取当前 transport：设置里切换代理会重建
+        /// <c>HttpTransport</c>，更新服务不能继续握着已释放的旧实例。
+        /// </summary>
+        public GitHubReleaseUpdateService(
+            Func<HttpTransport> transport,
             string releasesUrl,
             string currentVersion)
         {
@@ -45,6 +57,12 @@ namespace MiaoWu.Infrastructure.Updates
                 return Failure("未配置更新地址。");
             }
 
+            HttpTransport transport = _transport();
+            if (transport == null)
+            {
+                return Failure("网络服务尚未就绪。");
+            }
+
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
                 timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
@@ -55,7 +73,7 @@ namespace MiaoWu.Infrastructure.Updates
                     using (var request = new HttpRequestMessage(HttpMethod.Get, apiUrl))
                     {
                         request.Headers.TryAddWithoutValidation("Accept", GitHubAccept);
-                        response = await _transport
+                        response = await transport
                             .SendAsync(request, timeout.Token)
                             .ConfigureAwait(false);
                     }
@@ -138,6 +156,7 @@ namespace MiaoWu.Infrastructure.Updates
 
             string current = string.IsNullOrWhiteSpace(currentVersion) ? "0.0.0" : currentVersion;
             bool newer = UpdateVersions.Compare(latest, current) > 0;
+            UpdateAsset asset = SelectInstallerAsset(root.Get("assets"));
 
             return new UpdateCheckResult
             {
@@ -146,10 +165,64 @@ namespace MiaoWu.Infrastructure.Updates
                 CurrentVersion = current,
                 LatestVersion = latest,
                 ReleaseUrl = releaseUrl,
+                AssetName = asset == null ? null : asset.Name,
+                AssetUrl = asset == null ? null : asset.Url,
+                AssetSize = asset == null ? 0 : asset.Size,
                 Message = newer
                     ? "发现新版本 " + latest + "（当前 " + current + "）。"
                     : "当前已是最新版本 " + current + "。"
             };
+        }
+
+        /// <summary>
+        /// 从 release 的 <c>assets</c> 里挑一个安装包：日常 setup 优先，其次离线全量包，
+        /// 再次任意 exe；没有 <c>browser_download_url</c> 的资产跳过。
+        /// </summary>
+        private static UpdateAsset SelectInstallerAsset(JsonValue assets)
+        {
+            if (assets == null || assets.Kind != JsonKind.Array)
+            {
+                return null;
+            }
+
+            UpdateAsset best = null;
+            int bestPriority = 0;
+            foreach (JsonValue item in assets.Items)
+            {
+                if (item == null || item.Kind != JsonKind.Object)
+                {
+                    continue;
+                }
+
+                string name = item.Get("name") == null ? null : item.Get("name").AsString();
+                string url = item.Get("browser_download_url") == null
+                    ? null
+                    : item.Get("browser_download_url").AsString();
+                int priority = UpdateAssets.InstallerPriority(name);
+                if (priority <= bestPriority || priority == 0 || string.IsNullOrWhiteSpace(url))
+                {
+                    continue;
+                }
+
+                bestPriority = priority;
+                best = new UpdateAsset
+                {
+                    Name = name,
+                    Url = url,
+                    Size = item.Get("size") == null ? 0 : item.Get("size").AsLong()
+                };
+            }
+
+            return best;
+        }
+
+        private sealed class UpdateAsset
+        {
+            public string Name { get; set; }
+
+            public string Url { get; set; }
+
+            public long Size { get; set; }
         }
 
         private static async Task<string> ReadBodyAsync(HttpResponseMessage response)

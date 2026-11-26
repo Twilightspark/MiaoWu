@@ -17,6 +17,7 @@
              AutomationProperties.Name="{x:Static res:Strings.LeftPaneAutomation}">
 
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
 
         <!-- 行菜单同时供 hover 按钮左键与整行右键使用；x:Shared=False 让每个宿主拿到独立实例。 -->
@@ -775,25 +776,49 @@
                     </Grid>
                 </Button>
 
-                <Button Style="{StaticResource Button.NavItem}"
-                        Command="{Binding OpenSettingsCommand}"
-                        KeyboardNavigation.TabIndex="21"
-                        AutomationProperties.AutomationId="OpenSettings">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0"
+                            Style="{StaticResource Button.NavItem}"
+                            Command="{Binding OpenSettingsCommand}"
+                            KeyboardNavigation.TabIndex="21"
+                            AutomationProperties.AutomationId="OpenSettings">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Path Style="{StaticResource Icon}"
+                                  Data="{StaticResource Ico.Settings}"
+                                  Fill="{DynamicResource Brush.Text3}" />
+                            <TextBlock Grid.Column="1"
+                                       Margin="8,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Text="{x:Static res:Strings.Settings}"
+                                       Style="{StaticResource Text.ListRow}" />
+                        </Grid>
+                    </Button>
+
+                    <!-- 后台静默下载完成后出现：点击拉起安装程序。 -->
+                    <Button Grid.Column="1"
+                            Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource Button.Icon}"
+                            Command="{Binding InstallUpdateCommand}"
+                            ToolTip="{Binding UpdateReadyToolTip}"
+                            KeyboardNavigation.TabIndex="22"
+                            Visibility="{Binding HasUpdateReady, Converter={StaticResource BoolToVisibility}}"
+                            AutomationProperties.AutomationId="InstallUpdate"
+                            AutomationProperties.Name="安装更新">
                         <Path Style="{StaticResource Icon}"
-                              Data="{StaticResource Ico.Settings}"
-                              Fill="{DynamicResource Brush.Text3}" />
-                        <TextBlock Grid.Column="1"
-                                   Margin="8,0,0,0"
-                                   VerticalAlignment="Center"
-                                   Text="{x:Static res:Strings.Settings}"
-                                   Style="{StaticResource Text.ListRow}" />
-                    </Grid>
-                </Button>
+                              Data="{StaticResource Ico.Download}"
+                              Fill="{DynamicResource Brush.Accent}" />
+                    </Button>
+                </Grid>
             </StackPanel>
         </Border>
     </Grid>

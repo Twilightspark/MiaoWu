@@ -39,6 +39,7 @@ namespace MiaoWu.Infrastructure
             UserSkillsDirectory = Path.Combine(RootDirectory, "skills");
             UserInstructionsFilePath = Path.Combine(RootDirectory, "AGENTS.md");
             ToolOutputCacheDirectory = Path.Combine(CacheDirectory, "tool-output");
+            UpdatesCacheDirectory = Path.Combine(CacheDirectory, "updates");
         }
 
         public string RootDirectory { get; }
@@ -68,6 +69,8 @@ namespace MiaoWu.Infrastructure
         public string UserInstructionsFilePath { get; }
 
         public string ToolOutputCacheDirectory { get; }
+
+        public string UpdatesCacheDirectory { get; }
 
         public static AppPaths CreateDefault()
         {
@@ -102,6 +105,7 @@ namespace MiaoWu.Infrastructure
             FolderAccess.EnsureWritable(ExportsDirectory);
             FolderAccess.EnsureWritable(UserSkillsDirectory);
             FolderAccess.EnsureWritable(ToolOutputCacheDirectory);
+            FolderAccess.EnsureWritable(UpdatesCacheDirectory);
         }
     }
 }

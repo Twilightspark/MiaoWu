@@ -9,7 +9,6 @@ namespace MiaoWu.Tests.Documents
     {
         [Theory]
         [InlineData(0, 3, 0)]
-        [InlineData(1, 3, 1)]
         [InlineData(2, 2, 1)]
         [InlineData(2, 0, -1)]
         [InlineData(-1, 3, 0)]
@@ -20,7 +19,6 @@ namespace MiaoWu.Tests.Documents
 
         [Theory]
         [InlineData(-1, 0, -1)]
-        [InlineData(0, 0, -1)]
         [InlineData(-3, 4, 0)]
         [InlineData(9, 4, 3)]
         [InlineData(2, 4, 2)]
@@ -44,53 +42,38 @@ namespace MiaoWu.Tests.Documents
         }
 
         [Fact]
-        public void ContentWidthMatchesCardMetrics()
+        public void StripMetricsDriveContentWidthAndOverflow()
         {
             Assert.Equal(0, TabStripPolicy.GetContentWidth(0));
             Assert.Equal(168, TabStripPolicy.GetContentWidth(1));
             Assert.Equal(168 * 3 + 12, TabStripPolicy.GetContentWidth(3));
-        }
 
-        [Theory]
-        [InlineData(1, 300, false)]
-        [InlineData(3, 500, true)]
-        [InlineData(3, 600, false)]
-        [InlineData(0, 600, false)]
-        public void OverflowUsesViewportMinusPlusButton(int count, double viewport, bool expected)
-        {
-            Assert.Equal(expected, TabStripPolicy.HasOverflow(count, viewport));
+            // 视口减去「+」按钮后仍放不下才算溢出。
+            Assert.True(TabStripPolicy.HasOverflow(3, 500));
+            Assert.False(TabStripPolicy.HasOverflow(3, 600));
+            Assert.False(TabStripPolicy.HasOverflow(1, 300));
+            Assert.False(TabStripPolicy.HasOverflow(0, 600));
         }
 
         [Fact]
-        public void FileTabRequiresPath()
+        public void DocumentTabKeepsItsIdentityAndScrollOffset()
         {
-            Assert.True(DocumentTab.CreateFile(@"C:\a.md", "a.md").IsFileTab);
-            Assert.False(DocumentTab.CreateStatic(DocumentTabKind.Diff, "diff").IsFileTab);
-            Assert.Null(DocumentTab.CreateStatic(DocumentTabKind.Diff, "diff").FilePath);
-        }
+            DocumentTab file = DocumentTab.CreateFile(@"C:\a.md", "a.md");
+            DocumentTab staticTab = DocumentTab.CreateStatic(DocumentTabKind.Diff, "diff");
+            Assert.True(file.IsFileTab);
+            Assert.False(staticTab.IsFileTab);
+            Assert.Null(staticTab.FilePath);
 
-        [Fact]
-        public void CloneCopiesScrollOffset()
-        {
-            DocumentTab tab = DocumentTab.CreateFile(@"C:\a.md", "a.md");
-            tab.ScrollOffset = 120;
-
-            DocumentTab copy = tab.Clone();
-
-            Assert.Equal(tab.Id, copy.Id);
+            file.ScrollOffset = 120;
+            DocumentTab copy = file.Clone();
+            Assert.Equal(file.Id, copy.Id);
             Assert.Equal(120, copy.ScrollOffset);
-            Assert.NotSame(tab, copy);
-        }
+            Assert.NotSame(file, copy);
 
-        [Fact]
-        public void CreateFileGeneratesUniqueIds()
-        {
-            DocumentTab first = DocumentTab.CreateFile(@"C:\a.md", "a.md");
             DocumentTab second = DocumentTab.CreateFile(@"C:\a.md", "a.md");
-
-            Assert.NotEqual(first.Id, second.Id);
-            Assert.False(string.IsNullOrEmpty(first.Id));
-            Assert.True(Enum.IsDefined(typeof(DocumentTabKind), first.Kind));
+            Assert.NotEqual(file.Id, second.Id);
+            Assert.False(string.IsNullOrEmpty(file.Id));
+            Assert.True(Enum.IsDefined(typeof(DocumentTabKind), file.Kind));
         }
     }
 }

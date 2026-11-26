@@ -13,48 +13,16 @@ namespace MiaoWu.Tests.Providers
     public sealed class ReasoningEffortRequestTests
     {
         [Fact]
-        public void OpenAiBodyCarriesReasoningEffortForReasoningModel()
+        public void OpenAiBodyOnlyCarriesReasoningEffortWhenTheModelSupportsIt()
         {
-            string body = LlmRequestJson.BuildOpenAiBody(
-                Model(),
-                new LlmRequest
-                {
-                    Messages = new List<LlmMessage>(),
-                    ReasoningEffort = "high"
-                });
+            JsonValue reasoning = ParseBody(Model(), "high");
+            Assert.Equal("high", reasoning.Get("reasoning_effort").AsString());
 
-            JsonValue root = JsonParser.Parse(body);
-            Assert.Equal("high", root.Get("reasoning_effort").AsString());
-        }
+            JsonValue plain = ParseBody(Model(supportsReasoning: false), "high");
+            Assert.Null(plain.Get("reasoning_effort"));
 
-        [Fact]
-        public void OpenAiBodyDropsReasoningEffortForPlainModel()
-        {
-            string body = LlmRequestJson.BuildOpenAiBody(
-                Model(supportsReasoning: false),
-                new LlmRequest
-                {
-                    Messages = new List<LlmMessage>(),
-                    ReasoningEffort = "high"
-                });
-
-            JsonValue root = JsonParser.Parse(body);
-            Assert.Null(root.Get("reasoning_effort"));
-        }
-
-        [Fact]
-        public void OpenAiBodyOmitsDefaultReasoningLevel()
-        {
-            string body = LlmRequestJson.BuildOpenAiBody(
-                Model(),
-                new LlmRequest
-                {
-                    Messages = new List<LlmMessage>(),
-                    ReasoningEffort = null
-                });
-
-            JsonValue root = JsonParser.Parse(body);
-            Assert.Null(root.Get("reasoning_effort"));
+            JsonValue defaultLevel = ParseBody(Model(), null);
+            Assert.Null(defaultLevel.Get("reasoning_effort"));
         }
 
         [Theory]
@@ -66,6 +34,19 @@ namespace MiaoWu.Tests.Providers
         public void NormalizeKeepsOnlyKnownLevels(string input, string expected)
         {
             Assert.Equal(expected, MiaoWu.Core.Settings.AgentSettings.NormalizeReasoningEffort(input));
+        }
+
+        private static JsonValue ParseBody(ModelDescriptor model, string effort)
+        {
+            string body = LlmRequestJson.BuildOpenAiBody(
+                model,
+                new LlmRequest
+                {
+                    Messages = new List<LlmMessage>(),
+                    ReasoningEffort = effort
+                });
+
+            return JsonParser.Parse(body);
         }
 
         private static ModelDescriptor Model(bool supportsReasoning = true)
