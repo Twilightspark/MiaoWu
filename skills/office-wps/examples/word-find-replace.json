@@ -1,0 +1,9 @@
+{
+  "operations": [
+    { "op": "replace_text", "find": "2025 年", "replace": "2026 年", "all": true },
+    { "op": "replace_text", "find": "百分之", "replace": "%", "all": true },
+    { "op": "replace_text", "index": 4, "find": "待定", "replace": "已确认", "all": false },
+    { "op": "insert_toc", "index": 2, "levels": 3 },
+    { "op": "update_toc" }
+  ]
+}

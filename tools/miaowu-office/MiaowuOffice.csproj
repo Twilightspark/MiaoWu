@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    miaowu_office.exe：MiaoWu 的 Office 编辑桥。
+    只依赖 BCL（无 NuGet、无 Node、无 WebView），net48 + x64，可在 Windows 7 SP1 上运行。
+    通过 WPS 的 KWPS / KET / KWPP COM 接口读写 Office 文档。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <AssemblyName>miaowu_office</AssemblyName>
+    <RootNamespace>MiaowuOffice</RootNamespace>
+    <LangVersion>7.3</LangVersion>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>MiaoWu Office Bridge</Product>
+    <Company>MiaoWu</Company>
+    <Copyright>Copyright (c) 2026 MiaoWu</Copyright>
+    <NeutralLanguage>zh-CN</NeutralLanguage>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>false</GenerateBindingRedirectsOutputType>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CS0168;CS0219;CS0649;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- dynamic 绑定到 WPS 的 IDispatch 接口 -->
+    <Reference Include="Microsoft.CSharp" />
+    <!-- 框架自带 JSON 解析（JavaScriptSerializer），避免引入 NuGet -->
+    <Reference Include="System.Web.Extensions" />
+    <!-- PDF → PNG 需要 System.Drawing -->
+    <Reference Include="System.Drawing" />
+    <!-- OOXML 完整性校验（zip） -->
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+
+</Project>

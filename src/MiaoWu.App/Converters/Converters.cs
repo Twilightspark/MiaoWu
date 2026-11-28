@@ -14,6 +14,11 @@ namespace MiaoWu.App.Converters
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             double width = value is double ? (double)value : 0;
+            if (double.IsNaN(width) || double.IsInfinity(width) || width < 0)
+            {
+                width = 0;
+            }
+
             return new GridLength(width);
         }
 

@@ -410,6 +410,9 @@ namespace MiaoWu.Infrastructure.Skills
                 BodyPath = bodyPath,
                 DirectoryPath = directory,
                 IsLegacy = legacy,
+                IsPreset = !legacy
+                    && !string.IsNullOrWhiteSpace(directory)
+                    && File.Exists(Path.Combine(directory, SkillDescriptor.PresetMarkerFileName)),
                 IsValid = false,
                 Diagnostics = new List<SkillDiagnostic>()
             };

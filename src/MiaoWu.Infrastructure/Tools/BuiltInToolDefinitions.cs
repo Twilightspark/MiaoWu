@@ -251,13 +251,13 @@ namespace MiaoWu.Infrastructure.Tools
                     return Build(
                         tool,
                         "向用户提选择题（需要决策或澄清时）。",
-                        "{\"type\":\"object\",\"properties\":{\"questions\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"description\":\"要问用户的问题，一句话\"},\"header\":{\"type\":\"string\",\"description\":\"通知标题里的短标签\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":6,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"选项标题\"},\"description\":{\"type\":\"string\",\"description\":\"可选的补充说明\"}},\"required\":[\"label\"]}},\"multi_select\":{\"type\":\"boolean\",\"description\":\"允许多选，默认 false\"},\"allow_free_text\":{\"type\":\"boolean\",\"description\":\"允许用户输入自由文本作答，默认 false\"}},\"required\":[\"question\",\"options\"]}}},\"required\":[\"questions\"]}",
-                        "向用户提一道或多道选择题并等待答复；每题 1–6 个选项，可选允许自由文本回答。",
+                        "{\"type\":\"object\",\"properties\":{\"questions\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"description\":\"要问用户的问题，一句话\"},\"header\":{\"type\":\"string\",\"description\":\"弹窗标题里的短标签\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":6,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"选项标题\"},\"description\":{\"type\":\"string\",\"description\":\"可选的补充说明\"}},\"required\":[\"label\"]}},\"multi_select\":{\"type\":\"boolean\",\"description\":\"允许多选，默认 false\"}},\"required\":[\"question\",\"options\"]}}},\"required\":[\"questions\"]}",
+                        "向用户提一道或多道选择题并等待答复；每题 1–6 个选项，用户也可以自己输入答案。",
                         new[]
                         {
                             "ask_user_question：能自己判断的不要问；问题写成一句话，选项写成可执行的动作。",
                             "ask_user_question：一次只问一个决定；用户跳过时按取消处理，不要重复追问同一个问题。",
-                            "ask_user_question：选项覆盖不了答案时设 allow_free_text，让用户自己写。"
+                            "ask_user_question：选项是快捷项，不是唯一答案——用户始终可以自己写一句，不要因为凑不出选项就不问。"
                         });
 
                 default:

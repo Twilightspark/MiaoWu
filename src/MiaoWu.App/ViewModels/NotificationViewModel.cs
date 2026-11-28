@@ -2,47 +2,41 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
-using System.Windows.Threading;
 using MiaoWu.App.Mvvm;
 using MiaoWu.Core.Agents.Tools;
 
 namespace MiaoWu.App.ViewModels
 {
     /// <summary>
-    /// 右下角通知。审批与提问通知不自动消失、不提供关闭按钮（必须显式处理）；
-    /// 完成通知 4 秒后自动消失。最多 3 条由 MainWindowViewModel 维护。
+    /// 待处理弹窗（覆盖输入卡）：只有审批与提问，不会自动消失、也没有关闭按钮——
+    /// 必须显式允许 / 拒绝，或选择 / 手动输入 / 跳过。最多 3 条由 MainWindowViewModel 维护。
+    /// 普通提示（回答完成等）不再进应用内通知，改走系统通知。
     /// </summary>
     public sealed class NotificationViewModel : ObservableObject
     {
-        private readonly Action<NotificationViewModel> _dismiss;
         private readonly Action<string, ToolApprovalOutcome> _resolveApproval;
         private readonly Action<string, IReadOnlyList<string>> _answerQuestion;
         private readonly Action<string, string> _answerQuestionText;
         private readonly Action<string> _skipQuestion;
         private readonly HashSet<string> _selectedOptionIds =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly DispatcherTimer _timer;
         private bool _isResolved;
-        private string _resolutionText;
         private bool _isDiffVisible;
 
         public NotificationViewModel(
             string title,
             string body,
             bool isApproval,
-            Action<NotificationViewModel> dismiss,
             Action<string, ToolApprovalOutcome> resolveApproval = null,
             string sessionId = null,
             string requestId = null,
             bool canApproveForSession = false,
-            TimeSpan? autoDismissAfter = null,
             string diff = null,
             bool canShowDiff = false,
             IReadOnlyList<UserQuestionOption> questionOptions = null,
             bool questionMultiSelect = false,
             Action<string, IReadOnlyList<string>> answerQuestion = null,
             Action<string> skipQuestion = null,
-            bool questionAllowFreeText = false,
             Action<string, string> answerQuestionText = null)
         {
             Id = Guid.NewGuid().ToString("N");
@@ -51,14 +45,13 @@ namespace MiaoWu.App.ViewModels
             IsApproval = isApproval;
             IsQuestion = !isApproval && answerQuestion != null;
             QuestionMultiSelect = IsQuestion && questionMultiSelect;
-            AllowFreeText = IsQuestion && questionAllowFreeText && answerQuestionText != null;
+            ShowsManualInput = IsQuestion;
             _answerQuestionText = answerQuestionText;
             SessionId = sessionId;
             RequestId = requestId;
             CanApproveForSession = canApproveForSession;
             Diff = diff;
             HasDiff = canShowDiff && !string.IsNullOrWhiteSpace(diff);
-            _dismiss = dismiss;
             _resolveApproval = resolveApproval;
             _answerQuestion = answerQuestion;
             _skipQuestion = skipQuestion;
@@ -81,7 +74,6 @@ namespace MiaoWu.App.ViewModels
                 }
             }
 
-            DismissCommand = new RelayCommand(() => _dismiss(this));
             AllowOnceCommand = new RelayCommand(
                 () => Resolve(ToolApprovalOutcome.ApproveOnce),
                 () => IsApproval && !_isResolved);
@@ -100,23 +92,12 @@ namespace MiaoWu.App.ViewModels
                 () => IsQuestion && !_isResolved);
             SubmitFreeTextCommand = new RelayCommand(
                 SubmitFreeText,
-                () => AllowFreeText && !_isResolved && !string.IsNullOrWhiteSpace(FreeText));
-
-            if (!isApproval && !IsQuestion)
-            {
-                _timer = new DispatcherTimer(DispatcherPriority.Background)
-                {
-                    Interval = autoDismissAfter ?? TimeSpan.FromSeconds(4)
-                };
-                _timer.Tick += OnTimerTick;
-                _timer.Start();
-            }
+                () => ShowsManualInput && !_isResolved && !string.IsNullOrWhiteSpace(FreeText));
         }
 
-        /// <summary>从一条提问构造通知：标题带 header，正文是问题，动作是选项按钮。</summary>
+        /// <summary>从一条提问构造弹窗：标题带 header，正文是问题，动作是选项按钮 + 手动输入。</summary>
         public static NotificationViewModel CreateQuestion(
             UserQuestionRequest request,
-            Action<NotificationViewModel> dismiss,
             Action<string, IReadOnlyList<string>> answerQuestion,
             Action<string> skipQuestion,
             Action<string, string> answerQuestionText = null)
@@ -134,19 +115,16 @@ namespace MiaoWu.App.ViewModels
                 title,
                 request.Question,
                 false,
-                dismiss,
                 null,
                 request.SessionId,
                 request.RequestId,
                 false,
-                null,
                 null,
                 false,
                 request.Options,
                 request.MultiSelect,
                 answerQuestion,
                 skipQuestion,
-                request.AllowFreeText,
                 answerQuestionText);
         }
 
@@ -158,15 +136,15 @@ namespace MiaoWu.App.ViewModels
 
         public bool IsApproval { get; }
 
-        /// <summary>提问通知：必须选一个选项或跳过。</summary>
+        /// <summary>提问弹窗：必须选一个选项、自己写一句或跳过。</summary>
         public bool IsQuestion { get; }
 
-        /// <summary>提问允许用户输入自由文本作答。</summary>
-        public bool AllowFreeText { get; }
+        /// <summary>提问始终提供手动输入：选项是快捷项，不是唯一答案。</summary>
+        public bool ShowsManualInput { get; }
 
         private string _freeText;
 
-        /// <summary>自由文本回答的草稿；“提交”可用性跟着它走。</summary>
+        /// <summary>手动输入的回答草稿；“提交”可用性跟着它走。</summary>
         public string FreeText
         {
             get { return _freeText; }
@@ -181,14 +159,8 @@ namespace MiaoWu.App.ViewModels
 
         public bool QuestionMultiSelect { get; }
 
-        /// <summary>问题选项；非提问通知为空集合。</summary>
+        /// <summary>问题选项；非提问弹窗为空集合。</summary>
         public ObservableCollection<QuestionOptionViewModel> Options { get; }
-
-        /// <summary>非审批、非提问的普通通知可以手动关闭。</summary>
-        public bool IsNotice
-        {
-            get { return !IsApproval && !IsQuestion; }
-        }
 
         public string SessionId { get; }
 
@@ -225,7 +197,6 @@ namespace MiaoWu.App.ViewModels
             {
                 if (SetProperty(ref _isResolved, value))
                 {
-                    OnPropertyChanged(nameof(IsPending));
                     OnPropertyChanged(nameof(ShowApprovalActions));
                     OnPropertyChanged(nameof(ShowQuestionActions));
                     InvalidateOptionState();
@@ -234,12 +205,7 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        public bool IsPending
-        {
-            get { return !_isResolved; }
-        }
-
-        /// <summary>只给尚未答复的审批显示动作按钮；答复后只留一句结果。</summary>
+        /// <summary>只给尚未答复的审批显示动作按钮；答复后弹窗会被移除。</summary>
         public bool ShowApprovalActions
         {
             get { return IsApproval && !_isResolved; }
@@ -250,14 +216,6 @@ namespace MiaoWu.App.ViewModels
         {
             get { return IsQuestion && !_isResolved; }
         }
-
-        public string ResolutionText
-        {
-            get { return _resolutionText; }
-            private set { SetProperty(ref _resolutionText, value); }
-        }
-
-        public RelayCommand DismissCommand { get; }
 
         public RelayCommand AllowOnceCommand { get; }
 
@@ -273,20 +231,9 @@ namespace MiaoWu.App.ViewModels
 
         public RelayCommand SubmitFreeTextCommand { get; }
 
-        public void MarkResolved(string text)
+        public void MarkResolved()
         {
             IsResolved = true;
-            ResolutionText = text;
-            StopTimer();
-        }
-
-        public void StopTimer()
-        {
-            if (_timer != null)
-            {
-                _timer.Stop();
-                _timer.Tick -= OnTimerTick;
-            }
         }
 
         private void OnOptionChosen(QuestionOptionViewModel option)
@@ -334,7 +281,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             _answerQuestion(RequestId, optionIds);
-            MarkResolved("已回答");
+            MarkResolved();
         }
 
         private void SkipQuestion()
@@ -344,13 +291,13 @@ namespace MiaoWu.App.ViewModels
                 _skipQuestion(RequestId);
             }
 
-            MarkResolved("已跳过");
+            MarkResolved();
         }
 
-        /// <summary>自由文本回答：空白与超长都不提交；提交后按钮禁用。</summary>
+        /// <summary>手动输入的回答：空白与超长都不提交；提交后按钮禁用。</summary>
         private void SubmitFreeText()
         {
-            if (!AllowFreeText || _isResolved || RequestId == null || _answerQuestionText == null)
+            if (!ShowsManualInput || _isResolved || RequestId == null || _answerQuestionText == null)
             {
                 return;
             }
@@ -362,7 +309,7 @@ namespace MiaoWu.App.ViewModels
             }
 
             _answerQuestionText(RequestId, text);
-            MarkResolved("已回答");
+            MarkResolved();
         }
 
         private void InvalidateOptionState()
@@ -381,20 +328,11 @@ namespace MiaoWu.App.ViewModels
             }
 
             _resolveApproval(RequestId, outcome);
-            MarkResolved(outcome == ToolApprovalOutcome.Deny ? "已拒绝" : "已允许");
-        }
-
-        private void OnTimerTick(object sender, EventArgs e)
-        {
-            StopTimer();
-            if (_dismiss != null)
-            {
-                _dismiss(this);
-            }
+            MarkResolved();
         }
     }
 
-    /// <summary>提问通知里的一个选项。多选时点击只切换选中，单选时点击即回答。</summary>
+    /// <summary>提问弹窗里的一个选项。多选时点击只切换选中，单选时点击即回答。</summary>
     public sealed class QuestionOptionViewModel : ObservableObject
     {
         private readonly Action<QuestionOptionViewModel> _choose;
@@ -449,7 +387,7 @@ namespace MiaoWu.App.ViewModels
             }
         }
 
-        /// <summary>通知被答复后禁用按钮，避免重复点击。</summary>
+        /// <summary>弹窗被答复后禁用按钮，避免重复点击。</summary>
         public void SetActive(bool active)
         {
             if (_isActive == active)

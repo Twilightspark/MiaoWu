@@ -20,4 +20,18 @@
     <ProjectReference Include="..\MiaoWu.Core\MiaoWu.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 程序预设技能：技能正文、示例与 WPS 桥 exe 都嵌进程序集，
+         启动时由 PresetSkillInstaller 释放到用户级技能目录，能力市场默认可见。 -->
+    <EmbeddedResource Include="..\..\skills\office-wps\SKILL.md">
+      <LogicalName>MiaoWu.Presets.office-wps.SKILL.md</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\skills\office-wps\bin\miaowu_office.exe">
+      <LogicalName>MiaoWu.Presets.office-wps.bin.miaowu_office.exe</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\skills\office-wps\examples\*.json">
+      <LogicalName>MiaoWu.Presets.office-wps.examples.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

@@ -157,10 +157,21 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- 中栏：问答。折叠按钮在会话头「更多」右侧，由右栏的展开状态驱动。 -->
+                        <!-- 中栏：问答。折叠按钮在会话头「更多」右侧，由右栏的展开状态驱动。
+                             审批 / 提问的弹窗也挂在这一栏里：与输入卡同一套内容列算法，
+                             左右边缘与输入卡对齐；底边贴输入卡底边，内容高时向上压住消息流。 -->
                         <Grid x:Name="MiddlePane" Grid.Column="0">
                             <views:ConversationPaneView x:Name="ConversationPane"
                                                         DataContext="{Binding Conversation}" />
+
+                            <views:NotificationHost x:Name="PendingPromptHost"
+                                                    Panel.ZIndex="60"
+                                                    MaxWidth="{StaticResource Metric.Composer.MaxWidth}"
+                                                    Margin="{StaticResource Margin.ContentColumn}"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Stretch"
+                                                    AutomationProperties.AutomationId="PendingPromptHost"
+                                                    DataContext="{Binding}" />
                         </Grid>
 
                         <!-- 中/右之间唯一的分割线：静止 1px，悬停 / 拖动转 accent。 -->
@@ -199,22 +210,27 @@
                     <views:MarketPageView x:Name="MarketPage"
                                           DataContext="{Binding Market}"
                                           Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
+
+                    <!-- 任务页 / 能力市场页打开时中栏整块被换掉，审批与提问仍要能处理：
+                         同一份弹窗栈在内容列里再来一份，只在页面打开时显示。 -->
+                    <views:NotificationHost x:Name="PendingPromptPageHost"
+                                            Panel.ZIndex="60"
+                                            MaxWidth="{StaticResource Metric.Composer.MaxWidth}"
+                                            Margin="{StaticResource Margin.ContentColumn}"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            Visibility="{Binding IsPageOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"
+                                            AutomationProperties.AutomationId="PendingPromptPageHost"
+                                            DataContext="{Binding}" />
                 </Grid>
             </Border>
         </Grid>
 
-        <!-- 浮层：设置 / 应用内通知 -->
+        <!-- 浮层：设置 / 通用二次确认 / 关闭确认（审批与提问覆盖在内容面板里的输入卡上） -->
         <views:SettingsView Grid.RowSpan="2"
                             Panel.ZIndex="200"
                             DataContext="{Binding Settings}"
                             Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
-
-        <views:NotificationHost Grid.Row="1"
-                                Panel.ZIndex="130"
-                                Width="{StaticResource Metric.Notification.Width}"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Bottom"
-                                DataContext="{Binding}" />
 
         <views:OverlayView Grid.RowSpan="2"
                            Panel.ZIndex="220"

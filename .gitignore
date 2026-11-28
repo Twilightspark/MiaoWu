@@ -5,6 +5,13 @@ artifacts/
 .artifacts/
 *.binlog
 
+# ---- 技能自带的可执行文件（tools\miaowu-office\build.ps1 生成）----
+!/skills/office-wps/bin/
+!/skills/office-wps/bin/**
+
+# ---- 技能打包产物 ----
+/dist/
+
 # ---- 第三方运行时安装程序（.NET Framework 4.8 离线包，105 MB，不进仓库）----
 /redist/
 

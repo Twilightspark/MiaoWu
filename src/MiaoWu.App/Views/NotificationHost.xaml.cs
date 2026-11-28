@@ -8,8 +8,8 @@ using MiaoWu.App.ViewModels;
 namespace MiaoWu.App.Views
 {
     /// <summary>
-    /// 右下角通知栈：审批不自动消失，完成通知 4 秒后自动关闭。
-    /// 新通知从下往上堆；高度超过上限时整栈滚动，并把最新一条滚进视野。
+    /// 待处理弹窗栈（覆盖输入卡）：审批与提问都必须显式处理，不会自动消失。
+    /// 新弹窗从下往上堆，底边贴输入卡底边；高度超过上限时整栈滚动，并把最新一条滚进视野。
     /// </summary>
     public partial class NotificationHost : UserControl
     {

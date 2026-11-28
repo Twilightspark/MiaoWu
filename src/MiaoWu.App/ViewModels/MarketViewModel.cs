@@ -43,7 +43,15 @@ namespace MiaoWu.App.ViewModels
 
         public string SourceLabel
         {
-            get { return Model.Source == SkillSource.Workspace ? "工作区" : "用户级"; }
+            get
+            {
+                if (Model.IsPreset)
+                {
+                    return "预设";
+                }
+
+                return Model.Source == SkillSource.Workspace ? "工作区" : "用户级";
+            }
         }
 
         public bool IsEnabled
@@ -188,7 +196,15 @@ namespace MiaoWu.App.ViewModels
 
         public string SourceLabel
         {
-            get { return Model.Source == SkillSource.Workspace ? "工作区技能" : "用户级技能"; }
+            get
+            {
+                if (Model.IsPreset)
+                {
+                    return "预设技能";
+                }
+
+                return Model.Source == SkillSource.Workspace ? "工作区技能" : "用户级技能";
+            }
         }
 
         public string LocationText
@@ -214,7 +230,12 @@ namespace MiaoWu.App.ViewModels
 
         public string EnabledHint
         {
-            get { return "停用后模型看不到这个技能，文件不会被删除。"; }
+            get
+            {
+                return Model.IsPreset
+                    ? "预设技能随应用提供，不需要时在这里停用即可；停用不会删除文件。"
+                    : "停用后模型看不到这个技能，文件不会被删除。";
+            }
         }
 
         public bool IsEnabled

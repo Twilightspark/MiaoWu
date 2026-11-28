@@ -83,23 +83,17 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public async Task FreeTextAnswerIsReturnedWhenAllowed()
+        public async Task FreeTextAnswerIsReturnedWithoutAnyFlag()
         {
             var service = new UserQuestionService();
             var tool = new AskUserQuestionTool(service);
             Task<ToolResult> task = tool.ExecuteAsync(
-                new ToolCall
-                {
-                    Id = "c1",
-                    Name = ToolNames.AskUserQuestion,
-                    ArgumentsJson = "{\"questions\":[{\"question\":\"叫什么名字？\",\"allow_free_text\":true,"
-                        + "\"options\":[{\"label\":\"默认\"}]}]}"
-                },
+                Call(Questions(Question("叫什么名字？", false, "默认"))),
                 Context(),
                 CancellationToken.None);
 
+            // 选项是快捷项：用户不点选项、直接写一句，也算回答。
             UserQuestionRequest pending = WaitForPending(service);
-            Assert.True(pending.AllowFreeText);
             Assert.True(service.TryAnswerText(pending.RequestId, "阿喵"));
 
             ToolResult result = await task;

@@ -36,6 +36,7 @@ namespace MiaoWu.App.ViewModels
         private readonly AppServices _services;
         private readonly IDialogService _dialogs;
         private readonly UpdateCoordinator _updates;
+        private readonly ISystemNotificationService _systemNotifications;
         private readonly PaneLayoutPolicy _layoutPolicy;
         private readonly Dictionary<string, bool> _runningSessions =
             new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -74,7 +75,8 @@ namespace MiaoWu.App.ViewModels
             IClipboardService clipboard,
             Func<DateTime> clock = null,
             AppServices services = null,
-            ConfirmPromptViewModel confirmPrompt = null)
+            ConfirmPromptViewModel confirmPrompt = null,
+            ISystemNotificationService systemNotifications = null)
         {
             _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
             _workspaceStore = workspaceStore ?? throw new ArgumentNullException(nameof(workspaceStore));
@@ -126,6 +128,7 @@ namespace MiaoWu.App.ViewModels
             Func<DateTime> now = clock ?? (() => DateTime.Now);
             _services = services;
             _dialogs = dialogs;
+            _systemNotifications = systemNotifications;
             if (services != null)
             {
                 Dispatcher dispatcher = Application.Current == null
@@ -884,7 +887,7 @@ namespace MiaoWu.App.ViewModels
 
             foreach (NotificationViewModel notification in Notifications)
             {
-                notification.StopTimer();
+                notification.MarkResolved();
             }
 
             Notifications.Clear();
@@ -1355,11 +1358,14 @@ namespace MiaoWu.App.ViewModels
                 && Conversation != null
                 && !string.Equals(args.SessionId, Conversation.SessionId, StringComparison.Ordinal))
             {
-                AddNotification(new NotificationViewModel(
-                    "回答完成",
-                    string.IsNullOrWhiteSpace(args.Title) ? "后台会话已完成" : args.Title,
-                    false,
-                    RemoveNotification));
+                // 普通提示不再进应用内通知（输入卡只留给审批与提问），改走系统通知；
+                // 窗口在前台时由通知服务自己压掉，避免在用户眼前弹气泡。
+                if (_systemNotifications != null)
+                {
+                    _systemNotifications.Notify(
+                        "回答完成",
+                        string.IsNullOrWhiteSpace(args.Title) ? "后台会话已完成" : args.Title);
+                }
             }
 
             if (_refreshTimer != null)
@@ -1401,12 +1407,10 @@ namespace MiaoWu.App.ViewModels
                     BuildApprovalTitle(request),
                     request.Target + (string.IsNullOrWhiteSpace(request.Summary) ? string.Empty : "\n" + request.Summary),
                     true,
-                    RemoveNotification,
                     ResolveApproval,
                     request.SessionId,
                     request.RequestId,
                     request.CanApproveForSession,
-                    null,
                     request.Diff,
                     request.CanShowDiff));
                 return;
@@ -1426,8 +1430,8 @@ namespace MiaoWu.App.ViewModels
         }
 
         /// <summary>
-        /// 提问与审批共用右下角通知栈：提问是选择题，必须选一个选项或跳过；
-        /// 通知本身承担答复入口，消息流里只留工具结果。
+        /// 提问与审批共用覆盖输入卡的弹窗：提问是选择题，也可以自己写一句或跳过；
+        /// 弹窗本身承担答复入口，消息流里只留工具结果。
         /// </summary>
         private void OnQuestionChanged(object sender, UserQuestionEventArgs args)
         {
@@ -1448,7 +1452,6 @@ namespace MiaoWu.App.ViewModels
             {
                 AddNotification(NotificationViewModel.CreateQuestion(
                     request,
-                    RemoveNotification,
                     AnswerQuestion,
                     SkipQuestion,
                     AnswerQuestionText));
@@ -1515,29 +1518,8 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
+            // 审批与提问都必须显式处理，不能因为栈满被挤掉；多了就整栈滚动。
             Notifications.Add(notification);
-            OnPropertyChanged(nameof(HasNotifications));
-
-            while (Notifications.Count > 3)
-            {
-                NotificationViewModel oldest = null;
-                foreach (NotificationViewModel item in Notifications)
-                {
-                    // 审批与提问都必须显式处理，不能因为栈满被挤掉；只淘汰会自动消失的普通通知。
-                    if (item.IsNotice)
-                    {
-                        oldest = item;
-                        break;
-                    }
-                }
-
-                if (oldest == null)
-                {
-                    break;
-                }
-
-                RemoveNotification(oldest);
-            }
         }
 
         private void RemoveNotification(NotificationViewModel notification)
@@ -1547,9 +1529,8 @@ namespace MiaoWu.App.ViewModels
                 return;
             }
 
-            notification.StopTimer();
+            notification.MarkResolved();
             Notifications.Remove(notification);
-            OnPropertyChanged(nameof(HasNotifications));
         }
 
         private void ResolveApproval(string requestId, ToolApprovalOutcome outcome)
@@ -1564,11 +1545,6 @@ namespace MiaoWu.App.ViewModels
                 outcome,
                 outcome == ToolApprovalOutcome.Deny ? "用户拒绝。" : null);
             HasPendingApproval = _services.Approvals.GetPendingCount() > 0;
-        }
-
-        public bool HasNotifications
-        {
-            get { return Notifications.Count > 0; }
         }
 
         private void ConversationCommand(string command)

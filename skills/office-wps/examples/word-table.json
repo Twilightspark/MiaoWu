@@ -1,0 +1,14 @@
+{
+  "operations": [
+    { "op": "insert_table", "index": 12, "header": true,
+      "rows": [
+        ["区域", "营收（万元）", "同比"],
+        ["华东", "1200", "+18%"],
+        ["华南", "860", "+9%"],
+        ["华北", "740", "+4%"]
+      ] },
+    { "op": "append_paragraph", "text": "附：分区域数据见上表。", "style": "正文" },
+    { "op": "set_property", "name": "Title", "value": "2026 年三季度经营报告" },
+    { "op": "export_pdf", "path": "报告-预览.pdf" }
+  ]
+}

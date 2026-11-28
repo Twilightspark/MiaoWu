@@ -22,6 +22,7 @@ using MiaoWu.Infrastructure.Files;
 using MiaoWu.Infrastructure.Logging;
 using MiaoWu.Infrastructure.Providers;
 using MiaoWu.Infrastructure.Sessions;
+using MiaoWu.Infrastructure.Skills;
 using MiaoWu.Infrastructure.Storage;
 using MiaoWu.Infrastructure.Tools;
 using MiaoWu.Infrastructure.Updates;
@@ -124,6 +125,14 @@ namespace MiaoWu.App.Services
                 SystemClock.Instance,
                 DeliverScheduleAsync,
                 message => Logger.Warn("schedule.deliver", message));
+            // 程序预设技能：释放到用户级技能目录，能力市场默认可见；只在内容变化或缺失时写盘。
+            // 失败（权限、资源缺失）只记日志，不影响启动，也不影响用户自己的技能。
+            PresetSkillInstall = new PresetSkillInstaller(paths.UserSkillsDirectory).Install();
+            if (PresetSkillInstall.Changed || PresetSkillInstall.HasFailures)
+            {
+                Logger.Info("skill.preset", "预设技能：" + PresetSkillInstall.Describe());
+            }
+
             Tools = BuiltInToolset.CreateRegistry(
                 paths,
                 SystemClock.Instance,
@@ -213,6 +222,9 @@ namespace MiaoWu.App.Services
         public ModelSelection DefaultModelSelection { get; }
 
         public ToolRegistry Tools { get; }
+
+        /// <summary>本次启动的预设技能释放结果；能力市场与技能工具读的是同一份目录。</summary>
+        public PresetSkillInstallReport PresetSkillInstall { get; }
 
         /// <summary>后台任务注册表：pwsh 的 run_in_background 与 job_* 工具共用；退出时统一终止。</summary>
         public BackgroundJobRegistry BackgroundJobs { get; }

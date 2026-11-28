@@ -262,12 +262,9 @@
     <sys:Double x:Key="Metric.Market.Switch.Knob">16</sys:Double>
     <sys:Double x:Key="Metric.Market.FileRow.Height">36</sys:Double>
     <sys:Double x:Key="Metric.Market.Empty.Icon">72</sys:Double>
-    <sys:Double x:Key="Metric.Notification.Width">384</sys:Double>
-    <sys:Double x:Key="Metric.Notification.Right">16</sys:Double>
-    <sys:Double x:Key="Metric.Notification.Bottom">172</sys:Double>
-    <sys:Double x:Key="Metric.Notification.BottomCollapsed">18</sys:Double>
     <sys:Double x:Key="Metric.Notification.Gap">9</sys:Double>
-    <!-- 通知栈的最大高度：超过后整栈滚动，而不是把正文截断 -->
+    <!-- 待处理弹窗（审批 / 提问）覆盖输入卡：卡片宽度跟内容列，最大高度约等于输入卡的 3 倍，
+         超过后整栈滚动，而不是把正文截断。 -->
     <sys:Double x:Key="Metric.Notification.StackMaxHeight">440</sys:Double>
 
     <!-- 菜单卡片：小面积浮层，用 0.5px 发丝环代替弥散投影 -->
@@ -401,9 +398,11 @@
     <Thickness x:Key="Pad.Bubble">9,12</Thickness>
     <Thickness x:Key="Pad.Chat.Body">10,8</Thickness>
     <Thickness x:Key="Pad.Chat.Reasoning">10,0,0,0</Thickness>
-    <!-- 通知栈底距 = 输入框 132 + 底距 4 + 读数行 22 + 读数行底距 10 + 栈间距 4 -->
-    <Thickness x:Key="Margin.Notification">0,0,16,172</Thickness>
-    <Thickness x:Key="Margin.NotificationCollapsed">0,0,16,18</Thickness>
+    <!-- 审批 / 提问覆盖输入卡：底边贴输入卡底边；读数行可见时抬高一个读数行的高度
+         （读数行 22 + 底距 10），否则卡片会压住读数条。 -->
+    <Thickness x:Key="Margin.PendingPrompt">0,0,0,0</Thickness>
+    <Thickness x:Key="Margin.PendingPromptDocked">0,0,0,32</Thickness>
+    <Thickness x:Key="Pad.NotificationCard">14,12</Thickness>
     <Thickness x:Key="Pad.Code">12,10</Thickness>
     <Thickness x:Key="Margin.H2">0,20,0,8</Thickness>
     <Thickness x:Key="Margin.Focus">-2</Thickness>

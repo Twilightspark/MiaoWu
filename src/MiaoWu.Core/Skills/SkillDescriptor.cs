@@ -62,6 +62,12 @@ namespace MiaoWu.Core.Skills
     /// </summary>
     public sealed class SkillDescriptor
     {
+        /// <summary>
+        /// 程序预设技能的标记文件：出现在技能文件夹里表示这份内容由应用释放并随应用更新，
+        /// 能力市场把它标成「预设」，并在技能详情里说明停用即可、不必删除。
+        /// </summary>
+        public const string PresetMarkerFileName = "preset.json";
+
         public string Name { get; set; }
 
         public string Description { get; set; }
@@ -76,6 +82,12 @@ namespace MiaoWu.Core.Skills
 
         /// <summary>是否为旧式 <c>.miaowu\skills\name.md</c>，而不是文件夹 + SKILL.md。</summary>
         public bool IsLegacy { get; set; }
+
+        /// <summary>
+        /// 是否为程序预设技能（文件夹里有 <see cref="PresetMarkerFileName"/>）。
+        /// 预设技能的来源仍是用户级目录，只是内容由应用释放、会随应用更新覆盖。
+        /// </summary>
+        public bool IsPreset { get; set; }
 
         /// <summary>名称 / 描述齐全且正文是可读 UTF-8 时为 true。</summary>
         public bool IsValid { get; set; }

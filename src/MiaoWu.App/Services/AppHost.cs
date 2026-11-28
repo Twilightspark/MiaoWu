@@ -19,6 +19,7 @@ namespace MiaoWu.App.Services
 
         private readonly AppServices _services;
         private readonly AccessibilityService _accessibility;
+        private readonly SystemNotificationService _systemNotifications;
         private MainWindow _mainWindow;
         private TrayService _tray;
         private bool _hiddenNoticeShown;
@@ -35,6 +36,7 @@ namespace MiaoWu.App.Services
             _services = new AppServices(paths);
             _accessibility = new AccessibilityService();
             _accessibility.Apply();
+            _systemNotifications = new SystemNotificationService(IsMainWindowInForeground);
 
             // 确认浮层与对话框服务共用同一份 ViewModel：删除会话等二次确认
             // 走主窗口内的卡片浮层，而不是系统 MessageBox。
@@ -54,7 +56,8 @@ namespace MiaoWu.App.Services
                 new SystemClipboardService(),
                 null,
                 _services,
-                confirmPrompt);
+                confirmPrompt,
+                _systemNotifications);
 
             MainViewModel.ExitRequested += OnMainViewModelExitRequested;
             MainViewModel.HiddenToTray += OnHiddenToTray;
@@ -243,6 +246,15 @@ namespace MiaoWu.App.Services
             }
         }
 
+        /// <summary>窗口是否在前台：只有不在前台时才发系统通知，避免和应用内可见状态重复。</summary>
+        private bool IsMainWindowInForeground()
+        {
+            return _mainWindow != null
+                && _mainWindow.IsVisible
+                && _mainWindow.WindowState != WindowState.Minimized
+                && _mainWindow.IsActive;
+        }
+
         private void CreateTray()
         {
             if (_tray != null)
@@ -251,6 +263,7 @@ namespace MiaoWu.App.Services
             }
 
             _tray = new TrayService(TrayTooltipRunning);
+            _systemNotifications.Attach(_tray);
             _tray.OpenRequested += (sender, args) => ShowMainWindow();
             _tray.NewSessionRequested += (sender, args) =>
             {

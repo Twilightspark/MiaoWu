@@ -10,8 +10,9 @@ using MiaoWu.Infrastructure.Json;
 namespace MiaoWu.Infrastructure.Tools
 {
     /// <summary>
-    /// ask_user_question：向用户提一道或多道选择题并等待答复。与审批共用右下角通知通道，
+    /// ask_user_question：向用户提一道或多道选择题并等待答复。与审批共用覆盖输入卡的弹窗，
     /// 但语义独立：审批问的是“能不能做”，提问问的是“选哪一个”。
+    /// 选项之外用户始终可以自己写一句，所以没有单独的“允许自由文本”开关。
     /// 一次调用最多 4 道题，逐题询问；用户跳过时本工具以取消结束。
     /// </summary>
     public sealed class AskUserQuestionTool : IAgentTool, IToolAuditRedactor
@@ -39,7 +40,7 @@ namespace MiaoWu.Infrastructure.Tools
             get
             {
                 return "向用户提一道或多道选择题并等待答复；每题 1–6 个选项，"
-                    + "multi_select 决定单选还是多选。";
+                    + "multi_select 决定单选还是多选，用户也可以自己输入答案。";
             }
         }
 
@@ -128,7 +129,6 @@ namespace MiaoWu.Infrastructure.Tools
                     Question = spec.Question,
                     Options = spec.Options,
                     MultiSelect = spec.MultiSelect,
-                    AllowFreeText = spec.AllowFreeText,
                     CreatedAt = context.Now == default(DateTimeOffset) ? DateTimeOffset.Now : context.Now
                 };
 
@@ -244,7 +244,6 @@ namespace MiaoWu.Infrastructure.Tools
 
                 string header = ReadString(item, "header", MaxHeaderLength);
                 bool multiSelect = ReadBool(item, "multi_select");
-                bool allowFreeText = ReadBool(item, "allow_free_text");
                 IReadOnlyList<UserQuestionOption> options = ParseOptions(item.Get("options"), i);
                 if (options.Count == 0)
                 {
@@ -258,7 +257,6 @@ namespace MiaoWu.Infrastructure.Tools
                     Question = question.Trim(),
                     Header = string.IsNullOrWhiteSpace(header) ? null : header.Trim(),
                     MultiSelect = multiSelect,
-                    AllowFreeText = allowFreeText,
                     Options = options
                 });
             }
@@ -355,8 +353,6 @@ namespace MiaoWu.Infrastructure.Tools
             public string Question;
             public string Header;
             public bool MultiSelect;
-
-            public bool AllowFreeText;
             public IReadOnlyList<UserQuestionOption> Options;
         }
     }

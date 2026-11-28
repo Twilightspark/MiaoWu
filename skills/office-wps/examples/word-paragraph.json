@@ -1,0 +1,8 @@
+{
+  "operations": [
+    { "op": "replace_paragraph", "index": 7, "expect": "9f2c1a77", "text": "本季度营收增长 31%，主要由政企客户拉动。" },
+    { "op": "insert_paragraph_after", "index": 7, "text": "毛利率 42%，比上季度提升 3 个百分点。" },
+    { "op": "update_toc" },
+    { "op": "export_pdf", "path": "报告-预览.pdf" }
+  ]
+}

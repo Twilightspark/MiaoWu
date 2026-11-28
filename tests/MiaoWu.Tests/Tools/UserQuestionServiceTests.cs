@@ -143,11 +143,10 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public async Task FreeTextAnswerIsAcceptedWhenAllowed()
+        public async Task FreeTextAnswerIsAcceptedWithoutFlag()
         {
             var service = new UserQuestionService();
             UserQuestionRequest request = Request(false, "甲", "乙");
-            request.AllowFreeText = true;
             Task<UserQuestionAnswer> pending = service.AskAsync(request, CancellationToken.None);
 
             Assert.True(service.TryAnswerText("req-1", "  我自己写一个答案  "));
@@ -159,20 +158,18 @@ namespace MiaoWu.Tests.Tools
         }
 
         [Fact]
-        public async Task FreeTextRejectedWhenNotAllowedOrBlank()
+        public async Task FreeTextRejectedWhenBlankMissingOrTooLong()
         {
             var service = new UserQuestionService();
             Task<UserQuestionAnswer> pending = service.AskAsync(Request(false, "甲"), CancellationToken.None);
 
-            Assert.False(service.TryAnswerText("req-1", "答案"));
             Assert.False(service.TryAnswerText("req-1", "   "));
             Assert.False(service.TryAnswerText("req-missing", "答案"));
             Assert.Equal(1, service.GetPendingCount());
 
-            UserQuestionRequest allowed = Request(false, "甲");
-            allowed.RequestId = "req-2";
-            allowed.AllowFreeText = true;
-            Task<UserQuestionAnswer> second = service.AskAsync(allowed, CancellationToken.None);
+            UserQuestionRequest secondRequest = Request(false, "甲");
+            secondRequest.RequestId = "req-2";
+            Task<UserQuestionAnswer> second = service.AskAsync(secondRequest, CancellationToken.None);
             Assert.False(service.TryAnswerText("req-2", new string('x', UserQuestionRequest.MaxAnswerTextLength + 1)));
             Assert.True(service.TryAnswerText("req-2", "短答案"));
             Assert.Equal("短答案", (await second).Text);

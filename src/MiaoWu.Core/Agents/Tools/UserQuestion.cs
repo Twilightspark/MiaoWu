@@ -48,12 +48,6 @@ namespace MiaoWu.Core.Agents.Tools
         /// <summary>true 时允许多选；false 时必须恰好选一个。</summary>
         public bool MultiSelect { get; set; }
 
-        /// <summary>
-        /// true 时除了点选项，还可以在通知里输入一段自由文本作答。
-        /// 文本答复与选项答复互斥，答案里只会有一个非空。
-        /// </summary>
-        public bool AllowFreeText { get; set; }
-
         public DateTimeOffset CreatedAt { get; set; }
 
         /// <summary>单个提问允许的选项上限。</summary>
@@ -116,7 +110,8 @@ namespace MiaoWu.Core.Agents.Tools
         bool TryAnswer(string requestId, IReadOnlyList<string> optionIds);
 
         /// <summary>
-        /// 用自由文本回答；提问不允许自由文本、文本为空 / 超长、ID 不存在或已处理时返回 false。
+        /// 用自由文本回答；文本为空 / 超长、ID 不存在或已处理时返回 false。
+        /// 选项覆盖不了答案时用户总能自己写一句，所以文字答复与选项答复一样总是可用。
         /// </summary>
         bool TryAnswerText(string requestId, string text);
 
@@ -262,7 +257,7 @@ namespace MiaoWu.Core.Agents.Tools
             PendingQuestion pending;
             lock (_gate)
             {
-                if (!_pending.TryGetValue(requestId, out pending) || !pending.Request.AllowFreeText)
+                if (!_pending.TryGetValue(requestId, out pending))
                 {
                     return false;
                 }
